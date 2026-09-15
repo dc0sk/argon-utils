@@ -1,0 +1,15 @@
+[package]
+name        = "argon-proto"
+description = "Pure, I/O-free codecs for Argon40 Raspberry Pi enclosure and UPS hardware"
+keywords    = ["raspberry-pi", "argon40", "ups", "no-std", "protocol"]
+categories  = ["embedded", "no-std", "parser-implementations"]
+readme      = "README.md"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[lints]
+workspace = true

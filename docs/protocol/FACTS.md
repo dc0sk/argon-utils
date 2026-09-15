@@ -1,0 +1,161 @@
+---
+project: argon-utils
+doc: protocol/FACTS
+status: living
+last_updated: 2026-09-15
+---
+
+# Protocol fact ledger
+
+Every hardware fact `argon-utils` relies on has an entry here with a stable ID and a
+provenance status. Implementation code cites these IDs. See [`CLEANROOM.md`](../../CLEANROOM.md)
+for why this exists.
+
+## Provenance statuses
+
+| Status | Meaning | May back an implementation? | May back a **write**? |
+|---|---|---|---|
+| `documented` | Stated in Argon40's public protocol documentation or a component datasheet | yes | yes |
+| `observed` | Measured by us on hardware we own, with the capture committed as evidence | yes | yes |
+| `inferred` | Derived from reading upstream implementation source | **no** | **no** |
+| `unknown` | Named somewhere, semantics undetermined | **no** | **no** |
+
+`inferred` facts are listed so we know what to go and verify. They must be promoted to
+`observed` — by observing *the device*, never by re-reading the code — before use. An
+`unknown` fact must not be exposed in any public API.
+
+## Sources
+
+- **[DOC-I2C]** [`Argon40Tech/Argon-ONE-i2c-Codes`](https://github.com/Argon40Tech/Argon-ONE-i2c-Codes) — Argon40's published MCU command list.
+- **[DS-SSD1306]** Solomon Systech SSD1306 datasheet rev 1.1.
+- **[DS-PCF8563]** NXP PCF8563 datasheet.
+- **[DS-HIDPD]** USB-IF *Usage Tables for HID Power Devices* rev 1.0.
+- **[OBS-<date>-<topic>]** our own captures, under `docs/protocol/captures/`.
+
+---
+
+## ARGON-MCU-* — ONE-family MCU, I2C bus 1, address 0x1a
+
+| ID | Fact | Status | Source |
+|---|---|---|---|
+| `ARGON-MCU-ADDR` | MCU responds at I2C address `0x1a` | `documented` | [DOC-I2C] |
+| `ARGON-MCU-L-FAN` | Raw `write_byte` of `0x00` stops the fan; `0x01`–`0x64` sets duty cycle as a literal percent | `documented` | [DOC-I2C] |
+| `ARGON-MCU-L-FANMIN` | The fan does not physically start turning below ~10% duty | `documented` | [DOC-I2C] |
+| `ARGON-MCU-L-MODE1` | `0xFD` selects "default mode": a button press is required to power on after shutdown or power loss | `documented` | [DOC-I2C] |
+| `ARGON-MCU-L-MODE2` | `0xFE` selects "always on" mode: power flows to the Pi without a button press | `documented` | [DOC-I2C] |
+| `ARGON-MCU-L-PWRCUT` | `0xFF` arms power-cut; the MCU then monitors UART TX (BCM 14) voltage and cuts power when it goes low. Requires the serial port enabled | `documented` | [DOC-I2C] |
+| `ARGON-MCU-L-IR` | `0xAA` is the IR-code write command | `documented` | [DOC-I2C] |
+| `ARGON-MCU-L-BOOTLOADER` | `0xBB` enters the firmware bootloader | `documented` | [DOC-I2C] |
+| `ARGON-MCU-R-DUTY` | Register `0x80` reads/writes fan duty as a percent | `inferred` | — |
+| `ARGON-MCU-R-IR` | Register `0x82` accepts an IR code as a block write | `inferred` | — |
+| `ARGON-MCU-R-CTRL` | Register `0x86`, written with `1`, signals power off | `inferred` | — |
+| `ARGON-MCU-R-FW` | Register `0x81` — semantics undetermined | `unknown` | — |
+| `ARGON-MCU-R-RESERVED` | Registers `0x83`–`0x85` — undetermined. Do not touch | `unknown` | — |
+| `ARGON-MCU-FAILSAFE` | Whether the MCU reverts to a safe duty if the host stops writing | `unknown` | — |
+| `ARGON-MCU-PERSIST` | Whether duty or power mode persist across power loss | `unknown` | — |
+
+> **`ARGON-MCU-HAZARD` (`documented`, derived from `ARGON-MCU-L-FAN`).** SMBus
+> `read_byte_data(0x1a, reg)` places `reg` on the bus as a write before the repeated start.
+> On firmware implementing only `ARGON-MCU-L-FAN`, reading register `0x80` is therefore
+> indistinguishable from writing fan duty `0x80` = 128, which clamps to 100%.
+> **A register read is as destructive as a register write.** There is no safe software probe
+> for which dialect the MCU speaks. See ADR-002.
+
+## ARGON-GPIO-*
+
+| ID | Fact | Status | Source |
+|---|---|---|---|
+| `ARGON-GPIO-BTN` | The case power button is wired to the MCU on BCM 17; the MCU signals the host on BCM 4 | `documented` | [DOC-I2C] |
+| `ARGON-GPIO-IRRX` | IR receiver on BCM 23 | `documented` | [DOC-I2C] |
+| `ARGON-GPIO-IRTX` | IR transmitter on BCM 22 | `documented` | [DOC-I2C] |
+| `ARGON-GPIO-UARTMON` | The MCU monitors BCM 14 (UART TX) for the `0xFF` power-cut mechanism | `documented` | [DOC-I2C] |
+| `ARGON-GPIO-BTN-WINDOWS` | Pulse widths on BCM 4 encode reboot / shutdown / display-switch | `inferred` | — |
+| `ARGON-GPIO-LID` | ONE UP lid switch on BCM 27, pull-up, 0 = closed | `inferred` | — |
+
+`ARGON-GPIO-BTN-WINDOWS` is deliberately being re-established by our own measurement rather
+than promoted from upstream's numbers: theirs were derived from a `sleep(0.01)` accumulation
+loop that drifts under load, so our measurement is expected to be the better specification.
+
+## ARGON-UPS-* — Argon PWR UPS
+
+### Serial transport (CDC-ACM)
+
+| ID | Fact | Status | Source |
+|---|---|---|---|
+| `ARGON-UPS-SERIAL-PARAMS` | 115200 8N1 on the CDC-ACM interface | `observed` | OBS-2026-09-15-ups-ident |
+| `ARGON-UPS-FRAME` | Frame is `0xFE \| len \| cmd \| payload… \| checksum`, checksum = sum of all preceding frame bytes `& 0xFF` | `inferred` | — |
+| `ARGON-UPS-READSHORT` | A pure read is the 4-byte frame `FE 00 <cmd> <(cmd+0xFE)&0xFF>` | `inferred` | — |
+| `ARGON-UPS-CMD0` | Command 0 returns `[percent, charging]`; `charging == 0` means on mains | `inferred` | — |
+| `ARGON-UPS-CMD2` | Command 2 returns a 16-bit big-endian charge current. **Units undetermined** | `unknown` | — |
+| `ARGON-UPS-CMD3` | Command 3 sets the RTC from 6 BCD bytes `YY MM DD HH MM SS`, UTC | `inferred` | — |
+| `ARGON-UPS-CMD4` | Command 4 returns a 1-byte firmware version | `inferred` | — |
+| `ARGON-UPS-CMD5` | Command 5 returns the RTC as 6 BCD bytes | `inferred` | — |
+| `ARGON-UPS-CMD6` | Command 6 sets an absolute wake schedule from 5 BCD bytes `YY MM DD HH MM`, UTC | `inferred` | — |
+| `ARGON-UPS-CMD7` | Command 7 returns the wake schedule as 5 BCD bytes | `inferred` | — |
+| `ARGON-UPS-CMD8` | Command 8 is device-initiated; the host echoes it back as an acknowledgement | `inferred` | — |
+| `ARGON-UPS-CMD9` | Command 9 resets the battery meter. **Destructive** — discards the meter baseline | `inferred` | — |
+| `ARGON-UPS-CMD-UNMAPPED` | Command IDs above 9 are unmapped. **Never sweep the command space** — 9 is already destructive | `unknown` | — |
+
+### HID transport (USB HID Power Device)
+
+The UPS exposes a HID interface alongside CDC-ACM. The two are independent: reading HID does
+not contend with the serial port.
+
+| ID | Fact | Status | Source |
+|---|---|---|---|
+| `ARGON-UPS-HID-CLASS` | The HID interface is a standard USB HID Power Device: Usage Page `0x84` (Power Device) + `0x85` (Battery System), `Usage(UPS)`. 416 bytes, 198 items, balanced collections | `observed` | OBS-2026-09-15-ups-hid-descriptor |
+| `ARGON-UPS-HID-TABLE` | The full report/usage/size/range/flags table, extracted mechanically from the descriptor | `observed` | same, via `tools/hid-report-table.py` |
+| `ARGON-UPS-HID-SEMANTICS` | The mapping from usage number to meaning (e.g. `0x85:0x66` → RelativeStateOfCharge) | `documented` **pending** | [DS-HIDPD] — **must be re-derived from the USB-IF PDF before code depends on it** |
+| `ARGON-UPS-HID-WRITABLE` | Which Feature items are host-writable (declared `Data`, not `Const`) — see the table below | `observed` | same |
+| `ARGON-UPS-HID-VOLATILE` | Nearly every item, **including the low-battery threshold `0x11`, is declared VOLATILE** | `observed` | same |
+| `ARGON-UPS-HID-NUT` | Whether stock NUT `usbhid-ups` drives this device correctly | `unknown` | — |
+| `ARGON-UPS-USBID` | The UPS enumerates as `1d6b:0104` — the *generic Linux USB gadget* VID:PID. It must be identified by string descriptors (`Argon` / `Argon USB` / serial), never by VID:PID | `observed` | OBS-2026-09-15-ups-ident |
+
+## ARGON-OLED-* / ARGON-RTC-*
+
+| ID | Fact | Status | Source |
+|---|---|---|---|
+| `ARGON-OLED-ADDR` | SSD1306-class panel at I2C `0x3c`, 128×64 | `inferred` | — |
+| `ARGON-OLED-INIT` | Power-on initialisation sequence | `documented` | [DS-SSD1306] |
+| `ARGON-RTC-EON-ADDR` | EON carries a PCF8563 at I2C `0x51` | `inferred` | — |
+| `ARGON-RTC-EON-REGS` | PCF8563 register layout and BCD encoding | `documented` | [DS-PCF8563] |
+
+No EON hardware is available to this project, so every EON fact stays `inferred` and its
+capability ships marked `untested-hardware`.
+
+### ARGON-UPS-HID-TABLE — the writable Feature items
+
+Extracted mechanically by [`tools/hid-report-table.py`](tools/hid-report-table.py) from the
+committed descriptor. Only items declared `Data` (as opposed to `Const`) are host-settable;
+`Const` items are report-only regardless of being Feature items.
+
+| Report | Page | Usage | Size | Range | Volatile? | Likely meaning (**unconfirmed**) |
+|---|---|---|---|---|---|---|
+| `0x08` | 0x85 | `0x2a` | 16 | 120–1380 | yes | RemainingTimeLimit — a second, time-based low-battery threshold |
+| `0x0c` | 0x85 | `0x66` | 8 | 0–100 | no | RelativeStateOfCharge — also an **Input** report |
+| `0x0f` | 0x85 | `0x8c` | 8 | 0–100 | yes | — |
+| `0x10` | 0x85 | `0x8d` | 8 | 0–100 | no | CapacityGranularity1 |
+| `0x11` | 0x85 | `0x29` | 8 | 0–100 | **yes** | **RemainingCapacityLimit — the low-battery threshold** |
+| `0x12` | **0x84** | `0x57` | 16 | i16 | yes | **DANGEROUS — plausibly DelayBeforeShutdown** |
+| `0x13` | **0x84** | `0x55` | 16 | i16 | yes | **DANGEROUS — plausibly DelayBeforeStartup** |
+| `0x14` | 0x84 | `0x5a` | 8 | 1–3 | yes | AudibleAlarmControl (beeper) |
+| `0x16` | 0x85 | `0x2c` | 8 | 0–1 | no | CapacityMode |
+| `0x07` | 0x85 | `0x43` | 1 | 0–1 | yes | BatteryPresent bit |
+| `0x07` | **0x84** | `0x68` | 1 | 0–1 | yes | — |
+
+> **`ARGON-UPS-HID-DANGER` — safety rule.** Reports `0x12` and `0x13` are writable 16-bit
+> items on the **Power Device** page. If the usage numbers mean what they appear to, writing
+> them instructs the UPS to cut or restore its own output after a delay — i.e. they can power
+> the host off. Their semantics are `unknown` until confirmed against the USB-IF
+> specification, and per the provenance rules an `unknown` fact may not back a write.
+> **`argon-utils` does not write reports `0x12` or `0x13` in any version**, and does not
+> expose them in any API. They are documented here so that a future contributor recognises
+> them as hazardous rather than as unclaimed features.
+
+> **`ARGON-UPS-HID-PERSIST`.** Report `0x11` is declared **Volatile**. That means a
+> device-side low-battery threshold survives our daemon crashing, being killed, or never
+> starting — which is still a stronger guarantee than a host-side value — but the descriptor
+> does **not** establish that it survives a UPS power cycle, and the Volatile flag argues
+> against it. Status: `unknown`. The daemon must therefore re-assert the configured value on
+> every startup and on every UPS reconnect, and log any drift it finds. That logging is
+> itself the field experiment that answers the question.

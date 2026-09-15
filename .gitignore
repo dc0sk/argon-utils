@@ -1,0 +1,11 @@
+/target
+**/*.rs.bk
+*.pdb
+
+# lgpio leaves notification FIFOs in the cwd of any process that uses it
+.lgd-nfy*
+
+# fuzzing
+fuzz/target
+fuzz/corpus
+fuzz/artifacts

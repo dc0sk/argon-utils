@@ -1,0 +1,19 @@
+# Identifier spellings that appear in Argon40's unlicensed implementation and should never
+# appear in ours. One per line; blank lines and # comments ignored.
+# This file is excluded from the search (it would otherwise match itself).
+argonsysinfo
+argonregister
+argononed
+argoneond
+argonupsrtcd
+argononeupd
+argononeoled
+argoneonoled
+argonpowerbutton
+argonstatus
+argondashboard
+argonrtc
+argonkeyboard
+checksupport
+oled_flushblock
+pulse2byteNEC
