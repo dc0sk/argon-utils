@@ -108,7 +108,8 @@ not contend with the serial port.
 | `ARGON-UPS-HID-SEMANTICS` | The mapping from usage number to meaning (e.g. `0x85:0x66` → RelativeStateOfCharge) | `documented` **pending** | [DS-HIDPD] — **must be re-derived from the USB-IF PDF before code depends on it** |
 | `ARGON-UPS-HID-WRITABLE` | Which Feature items are host-writable (declared `Data`, not `Const`) — see the table below | `observed` | same |
 | `ARGON-UPS-HID-VOLATILE` | Nearly every item, **including the low-battery threshold `0x11`, is declared VOLATILE** | `observed` | same |
-| `ARGON-UPS-HID-NUT` | Whether stock NUT `usbhid-ups` drives this device correctly | `unknown` | — |
+| `ARGON-UPS-HID-NUT` | Stock NUT 2.8.1 **cannot** drive this UPS: `usbhid-ups` looks for HID on interface 0, the UPS has it on interface 2, and the driver has no interface-selection option | `observed` | OBS-2026-09-15-nut-usbhid-ups |
+| `ARGON-UPS-HID-ACCESS` | HID telemetry must be read via **`hidraw`**, never libusb. A libusb interface claim detaches the kernel driver and breaks `/dev/ttyACM0` until the device is re-enumerated; hidraw does not | `observed` | same |
 | `ARGON-UPS-USBID` | The UPS enumerates as `1d6b:0104` — the *generic Linux USB gadget* VID:PID. It must be identified by string descriptors (`Argon` / `Argon USB` / serial), never by VID:PID | `observed` | OBS-2026-09-15-ups-ident |
 
 ## ARGON-OLED-* / ARGON-RTC-*
