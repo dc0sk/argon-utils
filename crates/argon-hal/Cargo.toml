@@ -17,6 +17,11 @@ gpiocdev    = "0.8"
 # Safe, unsafe-free syscall wrappers. Used for poll(2): hidraw readiness needs a real
 # readiness check, and the alternative is either an unsafe ioctl or a lie.
 rustix      = { version = "1", features = ["event"] }
+# 4.10.0 is yanked; cargo-deny fails the build on yanked deps.
+serialport  = "4.10.1"
+
+[dev-dependencies]
+argon-sim = { path = "../argon-sim" }
 
 [lints]
 workspace = true

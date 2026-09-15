@@ -10,8 +10,10 @@
 //! stay gated until the facts are promoted to `observed` by our own capture.
 
 mod frame;
+mod status;
 
 pub use frame::{Frame, FrameError, FrameReader, MAX_PAYLOAD, START_BYTE, checksum, encode_read};
+pub use status::{BatteryStatus, DecodeError, PowerSource, UpsTime};
 
 /// Command identifiers understood by the UPS (`ARGON-UPS-CMD*`).
 ///

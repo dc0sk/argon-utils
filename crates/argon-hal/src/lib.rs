@@ -13,6 +13,7 @@ pub mod foreign;
 pub mod gpio;
 pub mod hidraw;
 pub mod platform;
+pub mod serial;
 
 use std::io;
 
@@ -21,6 +22,8 @@ use std::io;
 pub enum Error {
     /// A filesystem read failed.
     Io(io::Error),
+    /// An operation did not complete before its deadline.
+    Timeout,
     /// A sysfs value was present but not in the expected form.
     Parse {
         /// What was being read.
@@ -34,6 +37,7 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Io(e) => write!(f, "{e}"),
+            Self::Timeout => f.write_str("timed out"),
             Self::Parse { what, got } => write!(f, "could not parse {what} from {got:?}"),
         }
     }
@@ -43,7 +47,7 @@ impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Io(e) => Some(e),
-            Self::Parse { .. } => None,
+            Self::Timeout | Self::Parse { .. } => None,
         }
     }
 }

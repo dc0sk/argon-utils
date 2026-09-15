@@ -106,17 +106,26 @@ hardware.
 The vendor's `argonupsrtcd` holds `/dev/ttyACM0` continuously, and CDC-ACM has no
 arbitration — two readers corrupt each other. So this needs the vendor daemon stopped:
 
+The tooling is ready, and refuses to run while anything else holds the port — verified
+against the live vendor daemon:
+
 ```sh
 sudo systemctl stop argonupsrtcd
-# ... we capture ...
+sudo ./target/debug/argonctl ups --serial auto
 sudo systemctl start argonupsrtcd
 ```
 
 During the window the UPS is unmonitored, but it keeps working — the battery and charging are
 hardware functions, and nothing we do changes them. Read-only commands only: battery status,
-firmware version, RTC read, schedule read. No writes, no meter reset.
+firmware version, RTC read, schedule read. No writes, and specifically no meter reset, which
+would discard the battery meter's baseline.
 
-**This is an approval, not a task** — say yes and it can be done unattended.
+The whole path is already tested against a simulated UPS over a real PTY, including
+resynchronisation after line noise, rejection of corrupt frames, and deadline behaviour on a
+silent or dribbling device. What hardware adds is confirmation that the *protocol* is what we
+think it is.
+
+**This is an approval, not a task** — say yes and it can be run unattended.
 
 **Result:** _(not yet approved)_
 

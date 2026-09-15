@@ -4,8 +4,9 @@
 //! Read-only. Uses `hidraw` and Input reports only, so it claims no USB interface and
 //! cannot disturb whatever holds the serial port.
 
-use argon_hal::{discovery, hidraw};
+use argon_hal::{discovery, foreign, hidraw, serial};
 use argon_proto::hid::{ItemKind, ReportDescriptor, usage};
+use argon_proto::ups::{BatteryStatus, Command, UpsTime};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
@@ -19,6 +20,14 @@ pub struct Args {
     /// Show every field the descriptor declares, not just the summary.
     #[arg(long)]
     pub all: bool,
+
+    /// Read over the Argon serial protocol instead of HID.
+    ///
+    /// Pass a port path, or `auto` to use the discovered UPS. The vendor's daemon holds the
+    /// port continuously and CDC-ACM has no arbitration, so this refuses to run while
+    /// another process owns it.
+    #[arg(long, value_name = "PATH_OR_AUTO")]
+    pub serial: Option<String>,
 }
 
 /// A decoded telemetry value.
@@ -28,6 +37,9 @@ struct Reading {
 }
 
 pub fn run(args: &Args) -> ExitCode {
+    if let Some(port) = &args.serial {
+        return run_serial(port);
+    }
     let (mut dev, desc, raw_len, serial) = match open_ups() {
         Ok(v) => v,
         Err(code) => return code,
@@ -106,6 +118,108 @@ pub fn run(args: &Args) -> ExitCode {
         }
     }
 
+    ExitCode::SUCCESS
+}
+
+/// Reads telemetry over the Argon serial protocol.
+///
+/// Read-only commands only: battery status, firmware version, clock and wake schedule. No
+/// writes, and in particular no meter reset -- that discards the battery meter's baseline.
+fn run_serial(port: &str) -> ExitCode {
+    let usb = discovery::usb_devices();
+    let path = if port == "auto" {
+        let Some(ups) = discovery::find_argon_ups(&usb) else {
+            eprintln!("argonctl: no Argon UPS found");
+            return ExitCode::FAILURE;
+        };
+        let node = ups.nodes.iter().find(|n| {
+            n.file_name()
+                .is_some_and(|f| f.to_string_lossy().starts_with("ttyACM"))
+        });
+        let Some(node) = node else {
+            eprintln!("argonctl: the UPS exposes no serial node");
+            return ExitCode::FAILURE;
+        };
+        node.clone()
+    } else {
+        std::path::PathBuf::from(port)
+    };
+
+    // CDC-ACM has no arbitration: two readers split the stream and both desynchronise. Check
+    // before opening, and say plainly when the check itself is inconclusive.
+    let owners = foreign::port_owners(&path);
+    if let Some(o) = owners.first() {
+        eprintln!(
+            "argonctl: {} is held by pid {} ({}).\n\n\
+             Two readers on a CDC-ACM port corrupt each other's frames. Stop the owning\n\
+             service first -- for the vendor stack that is:\n\n    \
+             sudo systemctl stop argonupsrtcd\n",
+            path.display(),
+            o.pid,
+            o.comm
+        );
+        return ExitCode::FAILURE;
+    }
+    if !foreign::can_see_all_processes() {
+        eprintln!(
+            "argonctl: note -- not privileged, so the ownership check only saw our own\n\
+             processes. If the vendor daemon is running, this will read corrupt frames.\n"
+        );
+    }
+
+    let mut link = match serial::SerialLink::open(&path) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("argonctl: cannot open {}: {e}", path.display());
+            return ExitCode::FAILURE;
+        }
+    };
+
+    println!("Serial: {}", path.display());
+    println!("--------{}", "-".repeat(path.display().to_string().len()));
+
+    let mut ask = |cmd: Command, label: &str| {
+        let deadline = Instant::now() + Duration::from_secs(3);
+        match link.request(cmd.as_byte(), &[], deadline) {
+            Ok(f) => Some(f),
+            Err(e) => {
+                println!("  {label:<16} unavailable ({e})");
+                None
+            }
+        }
+    };
+
+    if let Some(f) = ask(Command::BatteryStatus, "battery") {
+        match BatteryStatus::decode(f.payload()) {
+            Ok(s) => println!("  {:<16} {s}", "battery"),
+            Err(e) => println!("  {:<16} undecodable ({e})", "battery"),
+        }
+    }
+    if let Some(f) = ask(Command::FirmwareVersion, "firmware") {
+        match f.payload() {
+            [v] => println!("  {:<16} {v}", "firmware"),
+            other => println!("  {:<16} unexpected payload {other:?}", "firmware"),
+        }
+    }
+    if let Some(f) = ask(Command::GetRtc, "clock") {
+        match UpsTime::decode_clock(f.payload()) {
+            Ok(t) if t.is_plausible() => println!("  {:<16} {t}", "clock"),
+            Ok(t) => println!("  {:<16} {t}  (implausible)", "clock"),
+            Err(e) => println!("  {:<16} undecodable ({e})", "clock"),
+        }
+    }
+    if let Some(f) = ask(Command::GetWake, "wake schedule") {
+        match UpsTime::decode_schedule(f.payload()) {
+            Ok(t) if t.is_plausible() => println!("  {:<16} {t}", "wake schedule"),
+            Ok(_) => println!("  {:<16} none set", "wake schedule"),
+            Err(e) => println!("  {:<16} undecodable ({e})", "wake schedule"),
+        }
+    }
+
+    println!(
+        "\nThese decoders are `inferred` in docs/protocol/FACTS.md. A successful read here\n\
+         is what promotes them to `observed` -- see task T4."
+    );
     ExitCode::SUCCESS
 }
 
