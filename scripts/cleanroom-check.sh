@@ -11,7 +11,21 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 PATTERN_FILE=scripts/upstream-identifiers.txt
-SEARCH_PATHS=(crates sim xtask packaging scripts)
+
+# Candidate roots. Not all exist yet -- crates appear as the project grows -- and a
+# nonexistent path makes grep exit non-zero, which would silently disable this check even
+# while violations are present. So filter to what is actually there, and fail loudly if
+# that leaves nothing to search.
+CANDIDATE_PATHS=(crates sim fuzz xtask packaging scripts)
+SEARCH_PATHS=()
+for p in "${CANDIDATE_PATHS[@]}"; do
+  [ -d "$p" ] && SEARCH_PATHS+=("$p")
+done
+if [ ${#SEARCH_PATHS[@]} -eq 0 ]; then
+  echo "cleanroom-check: no source directories found -- refusing to report a vacuous pass"
+  exit 1
+fi
+
 fail=0
 
 while IFS= read -r pat; do

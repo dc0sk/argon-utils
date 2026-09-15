@@ -11,5 +11,10 @@ license.workspace      = true
 repository.workspace   = true
 authors.workspace      = true
 
+[features]
+default = ["alloc"]
+# Descriptor parsing builds a table of fields, which needs a growable collection.
+alloc   = []
+
 [lints]
 workspace = true

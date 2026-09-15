@@ -1,19 +1,39 @@
-# Identifier spellings that appear in Argon40's unlicensed implementation and should never
-# appear in ours. One per line; blank lines and # comments ignored.
-# This file is excluded from the search (it would otherwise match itself).
-argonsysinfo
-argonregister
-argononed
-argoneond
-argonupsrtcd
-argononeupd
-argononeoled
-argoneonoled
-argonpowerbutton
-argonstatus
-argondashboard
-argonrtc
-argonkeyboard
-checksupport
+# Implementation symbols that exist only inside Argon40's unlicensed source. Finding one of
+# these in our tree means code was copied, not merely referenced.
+#
+# One pattern per line; blank lines and # comments ignored. This file is excluded from the
+# search, since it necessarily contains every pattern.
+#
+# WHAT BELONGS HERE: function and symbol names from the vendor's implementation.
+#
+# WHAT DOES NOT: the vendor's product names, systemd unit names, and config file paths.
+# argon-utils has to name those to detect, report on, and migrate from the vendor stack --
+# `argononed.service` in a units table is interoperability, not copying. Adding them here
+# would produce constant false positives, and a check people routinely override is worse
+# than no check at all.
+#
+# Trailing underscores are deliberate: they match the vendor's function-name prefixes
+# without matching a bare daemon or file name.
+
+argonsysinfo_
+argonregister_
+argonpowerbutton_
+argonsysinfo_getcputemp
+argonsysinfo_listcpuusage
+argonsysinfo_listhddusage
+argonsysinfo_getraiddetail
+argonsysinfo_kbstr
+argonregister_checksupport
+argonregister_setfanspeed
+argonregister_signalpoweroff
+argonregister_initializebusobj
 oled_flushblock
+oled_writebyterow
+oled_writetextaligned
+oled_loadbg
 pulse2byteNEC
+numBCDtoDEC
+numDECtoBCD
+getPacketChecksum
+writePacketWord
+readPacketWord

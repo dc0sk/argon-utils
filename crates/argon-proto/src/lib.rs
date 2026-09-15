@@ -24,6 +24,11 @@
 #![no_std]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
+#[cfg(feature = "alloc")]
+extern crate alloc;
+
 pub mod bcd;
 pub mod fan;
+#[cfg(feature = "alloc")]
+pub mod hid;
 pub mod ups;

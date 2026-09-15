@@ -10,6 +10,7 @@
 
 pub mod discovery;
 pub mod foreign;
+pub mod hidraw;
 pub mod platform;
 
 use std::io;

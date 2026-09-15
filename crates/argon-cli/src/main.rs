@@ -4,6 +4,7 @@
 use clap::{Parser, Subcommand};
 
 mod doctor;
+mod ups;
 
 #[derive(Parser)]
 #[command(
@@ -27,11 +28,19 @@ enum Command {
     /// Strictly read-only: reads sysfs, queries systemd, and opens no serial port. Safe to
     /// run with the vendor daemons active.
     Doctor(doctor::Args),
+
+    /// Read UPS telemetry.
+    ///
+    /// Uses hidraw and Input reports only, so it claims no USB interface and cannot
+    /// disturb whatever holds the serial port.
+    #[command(subcommand_negates_reqs = true)]
+    Ups(ups::Args),
 }
 
 fn main() -> std::process::ExitCode {
     let cli = Cli::parse();
     match cli.command {
         Command::Doctor(args) => doctor::run(&args),
+        Command::Ups(args) => ups::run(&args),
     }
 }
