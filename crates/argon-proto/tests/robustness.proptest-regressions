@@ -1,0 +1,10 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc c0ad5a91e433cba482a1694d3de3ab1b1b3e907c70959177f526e519a95e5f33 # shrinks to junk = [254], cmd = 0, payload = []
+cc 01cbc190fcb74987b84e1da9735cf35a6a034ef903ce38a72f62057e1a07d1c5 # shrinks to bytes = [44, 217, 0, 21, 1, 149, 1, 0, 0, 0, 40, 23, 0, 0, 0, 1, 0, 0, 0, 24, 0, 60, 72, 11, 0, 0, 0, 0, 144, 0, 0, 0, 12, 0, 20, 68, 91, 0, 0, 0, 0, 1, 0, 216, 181, 0]
+cc 756c67cf5417e5afcd076dbf47a9d665afbe2d6aa1b01874d4f286e2d1f224e1 # shrinks to bytes = [254, 90]
+cc 0bc3971a56f081f95d097a10ad1ae30838836821c1f21db281011641cfa827fd # shrinks to cmd = 0, payload = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]

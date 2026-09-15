@@ -84,6 +84,7 @@ loop that drifts under load, so our measurement is expected to be the better spe
 |---|---|---|---|
 | `ARGON-UPS-SERIAL-PARAMS` | 115200 8N1 on the CDC-ACM interface | `observed` | OBS-2026-09-15-ups-ident |
 | `ARGON-UPS-FRAME` | Frame is `0xFE \| len \| cmd \| payload… \| checksum`, checksum = sum of all preceding frame bytes `& 0xFF` | `inferred` | — |
+| `ARGON-UPS-FRAME-AMBIGUITY` | **The framing has no escape mechanism.** `0xFE` is legal inside a length field, so a single stray start byte immediately before a frame is read as a length of 254 and swallows up to 259 following bytes | `observed` | property testing, 2026-09-15 |
 | `ARGON-UPS-READSHORT` | A pure read is the 4-byte frame `FE 00 <cmd> <(cmd+0xFE)&0xFF>` | `inferred` | — |
 | `ARGON-UPS-CMD0` | Command 0 returns `[percent, charging]`; `charging == 0` means on mains | `inferred` | — |
 | `ARGON-UPS-CMD2` | Command 2 returns a 16-bit big-endian charge current. **Units undetermined** | `unknown` | — |
@@ -162,3 +163,30 @@ committed descriptor. Only items declared `Data` (as opposed to `Const`) are hos
 > against it. Status: `unknown`. The daemon must therefore re-assert the configured value on
 > every startup and on every UPS reconnect, and log any drift it finds. That logging is
 > itself the field experiment that answers the question.
+
+
+## ARGON-UPS-FRAME-AMBIGUITY — a limitation worth understanding
+
+Found by property testing, from the minimal counterexample `junk = [0xFE]`.
+
+The frame format is `0xFE | len | cmd | payload | checksum` with **no escaping and no
+length-field validation**. `0xFE` is a perfectly legal length. So a spurious start byte
+arriving immediately before a real frame is consumed as the frame's start, and the real
+frame's own `0xFE` becomes a declared length of 254 — which swallows the frame behind it and
+up to 259 subsequent bytes while the decoder waits for a payload that never comes.
+
+This is a property of the protocol, not of any particular decoder. No framing-layer fix is
+available: there is nothing in the byte stream that distinguishes a start byte from a length
+byte that happens to be `0xFE`.
+
+**What bounds it in practice.** `SerialLink::request` resets the decoder before every
+exchange and bounds the whole exchange with an operation deadline. A desync therefore costs
+one request, which times out and is retried, rather than wedging the link. That is the
+guarantee the transport actually relies on, and it is asserted directly by
+`a_reset_always_recovers_the_reader`.
+
+**Consequences for anything built on this protocol.** Do not stream-parse it continuously and
+assume synchronisation is maintained. Reset per exchange. If a future use needs a continuous
+stream — an unsolicited-event listener, say — it needs a resynchronisation strategy of its
+own, and the honest options are a time-based gap heuristic or rewinding past a failed frame's
+start byte. Neither is implemented, because nothing currently needs it.

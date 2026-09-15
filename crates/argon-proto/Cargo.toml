@@ -16,5 +16,8 @@ default = ["alloc"]
 # Descriptor parsing builds a table of fields, which needs a growable collection.
 alloc   = []
 
+[dev-dependencies]
+proptest = "1.11"
+
 [lints]
 workspace = true
