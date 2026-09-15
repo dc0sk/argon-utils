@@ -80,10 +80,12 @@ reported as the other.
 ## Building
 
 ```sh
-cargo test --workspace
-./scripts/cleanroom-check.sh
-./scripts/test-cleanroom-check.sh
+./scripts/gate.sh     # everything CI runs: fmt, clippy, tests, no_std, clean-room canary
 ```
+
+The gate reports each command's real exit status. That is worth stating because a piped
+`cargo clippy | grep error | head` reports the status of `head`, so a failing lint reads as a
+clean run — a mistake made while building this, which is why the script exists.
 
 > **Debian note.** The `rust-clippy` apt package installs `/usr/bin/cargo-clippy`, which
 > shadows rustup's shim and will fail with `can't find crate for core`. Put `~/.cargo/bin`

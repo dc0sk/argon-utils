@@ -14,47 +14,25 @@ env:
   RUSTFLAGS: -D warnings
 
 jobs:
-  test:
-    name: test / lint
+  gate:
+    name: gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Install toolchain
         run: rustup show   # honours rust-toolchain.toml
+      - name: Install bare-metal target
+        # argon-proto must stay I/O-free: the whole test strategy depends on it being
+        # testable without hardware. Building it for a target with no operating system is
+        # the check -- adding a std or I/O dependency fails it.
+        run: rustup target add thumbv7em-none-eabihf
       - uses: Swatinem/rust-cache@82a92a6e8fbeee089604da2575dc567ae9ddeaab # v2.7.5
 
-      - name: Format
-        run: cargo fmt --all --check
-      - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: Test
-        run: cargo test --workspace --locked
-
-  cleanroom:
-    name: clean-room canary
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - name: Canary
-        run: ./scripts/cleanroom-check.sh
-      # The canary is validated against a known-pass AND a known-fail input, so an
-      # accidentally-inert check fails the build instead of silently passing forever.
-      - name: Validate the canary itself
-        run: ./scripts/test-cleanroom-check.sh
-
-  architecture:
-    name: architecture fitness
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - run: rustup show
-      - name: Install bare-metal target
-        run: rustup target add thumbv7em-none-eabihf
-      # argon-proto must stay I/O-free: the entire test strategy depends on it being
-      # fuzzable and Miri-able without hardware. Building it for a target with no operating
-      # system is the check -- if anyone adds a std or I/O dependency, this fails.
-      - name: argon-proto builds for a bare-metal target
-        run: cargo build -p argon-proto --target thumbv7em-none-eabihf
+      # One script, run identically here and locally, so the two cannot drift. It captures
+      # each command's real exit status -- a piped `grep | head` reports head's status, not
+      # the checker's, which is how a failing lint comes to read as a clean run.
+      - name: Gate
+        run: ./scripts/gate.sh
 
   cross:
     name: aarch64 cross-check
