@@ -28,7 +28,18 @@ module_name_repetitions = "allow"
 missing_errors_doc      = "allow"
 
 [profile.release]
-panic     = "abort"
+# Deliberately NOT panic = "abort".
+#
+# This software's worst failure mode is leaving the fan stopped on a machine that is heating
+# up. The mitigation is a Drop guard that restores a safe duty as the daemon unwinds -- and
+# under panic = "abort" a Drop impl simply does not run, which was verified rather than
+# assumed. Choosing abort would leave the guard in the source, passing its unit tests under
+# the test profile, and inert in every build that ships.
+#
+# The systemd ExecStopPost hook is the backstop for SIGKILL, where no in-process mechanism
+# can help. It is not a substitute for unwinding, because it cannot run while the process
+# is still alive and holding the bus.
+panic     = "unwind"
 lto       = true
 codegen-units = 1
 strip     = true

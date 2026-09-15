@@ -6,3 +6,4 @@
 //! handed rather than a rule each driver must remember.
 
 pub mod mcu;
+pub mod safety;
