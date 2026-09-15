@@ -5,6 +5,16 @@
 
 use core::fmt;
 
+#[cfg(feature = "alloc")]
+mod config;
+#[cfg(feature = "alloc")]
+mod curve;
+
+#[cfg(feature = "alloc")]
+pub use config::{ParseError, ParseErrorKind, parse};
+#[cfg(feature = "alloc")]
+pub use curve::{CurveError, CurvePoint, FanController, FanCurve};
+
 /// The duty cycle of the case fan.
 ///
 /// The MCU accepts `0x00` to stop the fan and `0x01`–`0x64` as a literal percentage
