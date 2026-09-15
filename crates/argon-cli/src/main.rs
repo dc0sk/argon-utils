@@ -3,6 +3,7 @@
 
 use clap::{Parser, Subcommand};
 
+mod button;
 mod doctor;
 mod ups;
 
@@ -35,6 +36,12 @@ enum Command {
     /// disturb whatever holds the serial port.
     #[command(subcommand_negates_reqs = true)]
     Ups(ups::Args),
+
+    /// Measure the case button's pulse widths.
+    ///
+    /// The MCU decodes the press and emits a calibrated pulse whose width encodes the
+    /// action. This times those pulses with kernel nanosecond timestamps.
+    Button(button::Args),
 }
 
 fn main() -> std::process::ExitCode {
@@ -42,5 +49,6 @@ fn main() -> std::process::ExitCode {
     match cli.command {
         Command::Doctor(args) => doctor::run(&args),
         Command::Ups(args) => ups::run(&args),
+        Command::Button(args) => button::run(&args),
     }
 }

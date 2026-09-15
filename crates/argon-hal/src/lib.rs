@@ -10,6 +10,7 @@
 
 pub mod discovery;
 pub mod foreign;
+pub mod gpio;
 pub mod hidraw;
 pub mod platform;
 
