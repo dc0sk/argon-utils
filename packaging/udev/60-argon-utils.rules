@@ -1,0 +1,62 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# argon-utils device access and stable names.
+#
+# Install to /etc/udev/rules.d/ and reload:
+#     sudo cp packaging/udev/60-argon-utils.rules /etc/udev/rules.d/
+#     sudo udevadm control --reload && sudo udevadm trigger
+#
+# ---------------------------------------------------------------------------------------
+# Why these rules match the way they do
+#
+# The Argon PWR UPS enumerates as 1d6b:0104 -- the GENERIC Linux Foundation USB gadget
+# identifiers. Those are not unique to Argon and are shared by any Linux device implementing
+# a composite USB gadget. Matching on VID:PID alone would claim unrelated hardware, so these
+# rules match the string descriptors instead.
+#
+# The Industria Zigbee module is a CC2652P behind a CP2102N bridge (10c4:ea60). That part is
+# extremely common, and a machine may well have several -- on the development machine two
+# external CP2102N adapters belong to an amateur radio transceiver. VID:PID therefore cannot
+# identify it either. The discriminator is its unique serial, with the case's internal USB
+# controller as a documented fallback.
+#
+# GROUP="argon" assumes that group exists. Packaging creates it; until then, change it to a
+# group you are in, or drop the GROUP/MODE pair and use sudo.
+# ---------------------------------------------------------------------------------------
+
+# --- Argon PWR UPS: CDC-ACM serial interface -------------------------------------------
+# Gives /dev/argon-ups. Never reference ttyACM* by number: a single USB re-enumeration has
+# been observed to move this device from ttyACM0 to ttyACM1.
+SUBSYSTEM=="tty", SUBSYSTEMS=="usb", ATTRS{manufacturer}=="Argon", ATTRS{product}=="Argon_USB", \
+  SYMLINK+="argon-ups", GROUP="argon", MODE="0660", TAG+="systemd"
+
+# --- Argon PWR UPS: HID interface -------------------------------------------------------
+# hidraw nodes are root:root 0600 by default, so without this the daemon needs root purely to
+# read battery telemetry. Note the interface is dormant on firmware 113 (see
+# docs/protocol/captures/OBS-2026-09-15-ups-hid-is-dormant.md) -- the rule is here so the
+# capability works if later firmware implements it.
+KERNEL=="hidraw*", SUBSYSTEMS=="usb", ATTRS{manufacturer}=="Argon", ATTRS{product}=="Argon_USB", \
+  SYMLINK+="argon-ups-hid", GROUP="argon", MODE="0660"
+
+# --- Argon Industria Zigbee module ------------------------------------------------------
+# Primary match: the module's unique serial. Survives being moved to a different port.
+#
+# Replace the serial below with your own module's if it differs -- read it from
+# `argonctl doctor`, or from ATTRS{serial} in `udevadm info -a -n /dev/ttyUSB0`.
+SUBSYSTEM=="tty", SUBSYSTEMS=="usb", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", \
+  ATTRS{serial}=="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", \
+  SYMLINK+="argon-zigbee", GROUP="dialout", MODE="0660"
+
+# Fallback match: position on the case's internal USB hub, for a replaced module whose serial
+# is unknown. Commented out because it must not be active at the same time as the rule above
+# -- enable one or the other.
+#
+# KERNELS=="1-1.2" is the second port of the hub on the internal dwc2 controller
+# (1000480000.usb), which exists only when `dtoverlay=dwc2,dr_mode=host` is set in config.txt.
+#SUBSYSTEM=="tty", SUBSYSTEMS=="usb", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", \
+#  KERNELS=="1-1.2", SYMLINK+="argon-zigbee", GROUP="dialout", MODE="0660"
+
+# --- I2C and GPIO -----------------------------------------------------------------------
+# Raspberry Pi OS already ships rules giving the i2c and gpio groups access to /dev/i2c-* and
+# /dev/gpiochip*. Nothing is added here: duplicating them would be a second place to keep in
+# sync, and on a distro that does not ship them the right fix is that distro's rules, not ours.
