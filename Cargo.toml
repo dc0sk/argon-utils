@@ -5,6 +5,7 @@ members = [
     "crates/argon-hal",
     "crates/argon-cli",
     "crates/argon-sim",
+    "crates/argon-device",
 ]
 
 [workspace.package]

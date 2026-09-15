@@ -12,6 +12,8 @@ pub mod discovery;
 pub mod foreign;
 pub mod gpio;
 pub mod hidraw;
+pub mod i2c;
+pub mod mode;
 pub mod platform;
 pub mod serial;
 
@@ -24,6 +26,13 @@ pub enum Error {
     Io(io::Error),
     /// An operation did not complete before its deadline.
     Timeout,
+    /// A write was refused by the transport's policy.
+    WriteBlocked {
+        /// What would have been written.
+        what: String,
+        /// Why it was refused.
+        reason: &'static str,
+    },
     /// A sysfs value was present but not in the expected form.
     Parse {
         /// What was being read.
@@ -38,6 +47,7 @@ impl std::fmt::Display for Error {
         match self {
             Self::Io(e) => write!(f, "{e}"),
             Self::Timeout => f.write_str("timed out"),
+            Self::WriteBlocked { what, reason } => write!(f, "refused {what}: {reason}"),
             Self::Parse { what, got } => write!(f, "could not parse {what} from {got:?}"),
         }
     }
@@ -47,7 +57,7 @@ impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Io(e) => Some(e),
-            Self::Timeout | Self::Parse { .. } => None,
+            Self::Timeout | Self::WriteBlocked { .. } | Self::Parse { .. } => None,
         }
     }
 }

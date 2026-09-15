@@ -9,4 +9,5 @@
 //! across read boundaries. A mock that hands over whole frames would pass while the real
 //! transport was broken in exactly the ways serial links break.
 
+pub mod mcu;
 pub mod ups;

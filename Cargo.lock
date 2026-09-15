@@ -62,6 +62,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "argon-device"
+version = "0.1.0"
+dependencies = [
+ "argon-hal",
+ "argon-proto",
+ "argon-sim",
+]
+
+[[package]]
 name = "argon-hal"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,28 @@
+[package]
+name        = "argon-device"
+description = "Device drivers and the capability model for Argon40 hardware"
+keywords    = ["raspberry-pi", "argon40", "hardware", "fan"]
+categories  = ["hardware-support"]
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[features]
+default = []
+# The register protocol is `inferred`, never confirmed on hardware, and addressing legacy
+# firmware with it sets the fan to full. Off in shipped builds: a stock install cannot emit
+# a register transaction even if configured to. See ADR-0002.
+unverified-register = []
+
+[dependencies]
+argon-hal   = { path = "../argon-hal", version = "0.1.0" }
+argon-proto = { path = "../argon-proto", version = "0.1.0" }
+
+[dev-dependencies]
+argon-sim = { path = "../argon-sim" }
+
+[lints]
+workspace = true
