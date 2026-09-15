@@ -1,0 +1,21 @@
+[package]
+name        = "argon-cli"
+description = "Command-line tool for Argon40 Raspberry Pi enclosures and UPS"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[[bin]]
+name = "argonctl"
+path = "src/main.rs"
+
+[dependencies]
+argon-hal   = { path = "../argon-hal", version = "0.1.0" }
+argon-proto = { path = "../argon-proto", version = "0.1.0" }
+clap        = { version = "4", features = ["derive"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,19 @@
+[package]
+name        = "argon-hal"
+description = "Linux transports and read-only hardware discovery for Argon40 devices"
+keywords    = ["raspberry-pi", "argon40", "i2c", "gpio", "hardware"]
+categories  = ["hardware-support", "os::linux-apis"]
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[dependencies]
+argon-proto = { path = "../argon-proto", version = "0.1.0" }
+i2cdev      = "0.6.2"
+gpiocdev    = "0.8"
+
+[lints]
+workspace = true
