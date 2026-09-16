@@ -31,4 +31,5 @@ pub mod bcd;
 pub mod fan;
 #[cfg(feature = "alloc")]
 pub mod hid;
+pub mod oled;
 pub mod ups;
