@@ -6,6 +6,7 @@ members = [
     "crates/argon-cli",
     "crates/argon-sim",
     "crates/argon-device",
+    "crates/argon-daemon",
 ]
 
 [workspace.package]

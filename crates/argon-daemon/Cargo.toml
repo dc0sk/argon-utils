@@ -1,0 +1,25 @@
+[package]
+name        = "argon-daemon"
+description = "The argon-utils daemon"
+publish     = false
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[[bin]]
+name = "argond"
+path = "src/main.rs"
+
+[dependencies]
+argon-device = { path = "../argon-device", version = "0.1.0" }
+argon-hal    = { path = "../argon-hal", version = "0.1.0" }
+argon-proto  = { path = "../argon-proto", version = "0.1.0" }
+clap         = { version = "4", features = ["derive"] }
+sd-notify    = "0.5"
+signal-hook  = "0.4"
+
+[lints]
+workspace = true

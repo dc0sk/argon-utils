@@ -39,6 +39,8 @@ for why this exists.
 | ID | Fact | Status | Source |
 |---|---|---|---|
 | `ARGON-MCU-ADDR` | MCU responds at I2C address `0x1a` | `documented` | [DOC-I2C] |
+| `ARGON-MCU-ABSENT-V5` | **On an Argon ONE V5 with a Pi 5 there is no device at `0x1a` at all.** The fan is on the Pi's own 4-pin header, driven by the kernel `pwm-fan` cooling device | `observed` | OBS-2026-09-16-v5-fan-is-kernel-controlled |
+| `ARGON-OLED-PRESENT-V5` | The OLED does respond at `0x3c` on that machine | `observed` | same |
 | `ARGON-MCU-L-FAN` | Raw `write_byte` of `0x00` stops the fan; `0x01`–`0x64` sets duty cycle as a literal percent | `documented` | [DOC-I2C] |
 | `ARGON-MCU-L-FANMIN` | The fan does not physically start turning below ~10% duty | `documented` | [DOC-I2C] |
 | `ARGON-MCU-L-MODE1` | `0xFD` selects "default mode": a button press is required to power on after shutdown or power loss | `documented` | [DOC-I2C] |

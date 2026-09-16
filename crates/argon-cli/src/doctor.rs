@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! `argonctl doctor` — read-only machine inspection.
 
-use argon_hal::{discovery, foreign, platform};
+use argon_hal::{discovery, fan_hwmon, foreign, platform};
 use std::path::Path;
 use std::process::ExitCode;
 
@@ -54,6 +54,7 @@ pub fn run(args: &Args) -> ExitCode {
     report_platform(&plat, &mut warnings);
     report_i2c(&buses, &mut warnings);
     report_gpio(&chips, &mut warnings);
+    report_fan(&mut warnings);
     let ups = report_usb(&usb);
     let contended = report_contention(&units, ups);
     report_vendor_config();
@@ -145,6 +146,55 @@ fn report_gpio(chips: &[discovery::GpioChip], warnings: &mut Vec<String>) {
         warnings.push(
             "line 4 (power button pulses) has no consumer — no process is listening for \
              button presses on this machine"
+                .into(),
+        );
+    }
+}
+
+/// Reports who is actually driving the fan.
+///
+/// On an Argon ONE V5 with a Pi 5 the answer is the kernel, not an Argon MCU -- there is no
+/// device at 0x1a at all. Saying so here saves the next person the afternoon it cost to find
+/// out. See docs/protocol/captures/OBS-2026-09-16-v5-fan-is-kernel-controlled.md.
+fn report_fan(warnings: &mut Vec<String>) {
+    section("Fan");
+
+    let Some(fan) = fan_hwmon::PwmFan::find() else {
+        println!("  no kernel PWM fan found");
+        println!("  If this case has a fan, it is driven some other way -- on Pi 4-era cases");
+        println!("  that is the Argon MCU over I2C.");
+        return;
+    };
+
+    println!("  kernel PWM fan at {}", fan.path().display());
+    match fan.read() {
+        Some(r) => {
+            let rpm = r
+                .rpm
+                .map_or_else(|| "no tachometer".to_owned(), |v| format!("{v} rpm"));
+            println!("  pwm {} / 255, {rpm}", r.pwm);
+            if r.is_spinning() {
+                println!("  the fan is currently turning");
+            }
+        }
+        None => println!("  (could not read its state)"),
+    }
+
+    let cooling: Vec<_> = fan_hwmon::cooling_devices()
+        .into_iter()
+        .filter(|c| c.kind.contains("fan"))
+        .collect();
+    for c in &cooling {
+        println!(
+            "  thermal governor: {} at state {}/{}",
+            c.kind, c.state, c.max_state
+        );
+    }
+
+    if !cooling.is_empty() {
+        warnings.push(
+            "the kernel thermal governor is driving this fan. argon-utils does not control \
+             it, and nothing needs to be at I2C 0x1a for the fan to work"
                 .into(),
         );
     }

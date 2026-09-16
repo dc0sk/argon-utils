@@ -9,7 +9,7 @@ use argon_device::config::Config;
 use argon_device::fan::{FanTask, Step};
 use argon_device::mcu::{Dialect, Mcu};
 use argon_hal::Result;
-use argon_hal::i2c::{DryRun, I2cBus, ReadOnly};
+use argon_hal::i2c::{DryRun, I2cBus, LinuxI2c, ReadOnly};
 use argon_hal::mode::Mode;
 use argon_hal::thermal::{TemperatureSource, ThermalZone};
 use argon_proto::fan::{FanController, FanCurve, FanDuty};
@@ -45,6 +45,14 @@ pub struct Args {
     /// How many iterations to run with `--watch`. 0 means until interrupted.
     #[arg(long, default_value = "0")]
     pub count: usize,
+
+    /// Write the configured safe duty to the fan and exit.
+    ///
+    /// This is the one path in this subcommand that writes. It exists for the systemd unit's
+    /// `ExecStopPost=`, which runs after the daemon is gone -- including after a `SIGKILL`,
+    /// where no in-process guard can help because the process stopped executing.
+    #[arg(long, conflicts_with = "watch")]
+    pub safe: bool,
 }
 
 pub fn run(args: &Args) -> ExitCode {
@@ -52,6 +60,10 @@ pub fn run(args: &Args) -> ExitCode {
         Ok(v) => v,
         Err(code) => return code,
     };
+    if args.safe {
+        return set_safe(&config, mode);
+    }
+
     report_curve(&config, mode, &curve);
 
     let mut source = match ThermalZone::find_cpu() {
@@ -116,6 +128,65 @@ fn load(args: &Args) -> std::result::Result<(Config, Mode, FanCurve), ExitCode> 
         ExitCode::FAILURE
     })?;
     Ok((config, mode, curve))
+}
+
+/// Writes the configured safe duty to the fan.
+///
+/// Refuses in read-only mode. A safety fallback that ignores the mode gate would be a way to
+/// write to the hardware from a configuration that says not to, and "but it is for safety"
+/// is exactly the argument that erodes such gates.
+fn set_safe(config: &Config, mode: Mode) -> ExitCode {
+    let duty = FanDuty::clamped(config.fan.safe_duty);
+
+    if !mode.allows_writes() {
+        eprintln!(
+            "argonctl: mode is {mode}, so nothing was written.\n\
+             In read-only mode this daemon never drove the fan, so there is nothing to restore."
+        );
+        return ExitCode::SUCCESS;
+    }
+
+    let bus_path = match resolve_bus(config) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("argonctl: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let bus = match LinuxI2c::open(&bus_path, u16::from(argon_device::mcu::ADDR)) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("argonctl: cannot open {bus_path}: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let mut mcu = Mcu::new(bus, Dialect::default());
+    match mcu.set_fan(duty) {
+        Ok(()) => {
+            println!("fan set to {duty} on {bus_path}");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("argonctl: could not set the fan to {duty}: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// Resolves the I2C bus path from configuration, by adapter name rather than by number.
+fn resolve_bus(config: &Config) -> std::result::Result<String, String> {
+    if config.mcu.bus != "auto" {
+        return Ok(config.mcu.bus.clone());
+    }
+    let buses = argon_hal::discovery::i2c_buses().map_err(|e| e.to_string())?;
+    let chosen = buses
+        .iter()
+        .find(|b| b.name.contains("DesignWare") || b.name.contains("bcm2835"))
+        .or_else(|| buses.first())
+        .ok_or_else(|| "no I2C bus found; is dtparam=i2c_arm=on set?".to_owned())?;
+    Ok(chosen.dev.display().to_string())
 }
 
 /// Prints the curve that would be applied.

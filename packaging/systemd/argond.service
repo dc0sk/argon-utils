@@ -1,0 +1,68 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+[Unit]
+Description=Argon40 case fan, button and UPS daemon
+Documentation=https://github.com/dc0sk/argon-utils
+
+# Let systemd enforce mutual exclusion too. The daemon detects the vendor stack itself and
+# degrades to read-only, but that is a runtime check on a race: a unit ordering constraint
+# is the thing that stops both being started in the first place.
+Conflicts=argononed.service argononeupsd.service argonupsrtcd.service argononeupd.service
+
+After=local-fs.target
+
+[Service]
+Type=notify
+NotifyAccess=main
+ExecStart=/usr/bin/argond
+
+# The backstop for SIGKILL, where no in-process mechanism can help because the process has
+# stopped executing. The daemon's signal handler and Drop guard cover every other case.
+# `-` so a failure here does not mask the real stop reason.
+ExecStopPost=-/usr/bin/argonctl fan --safe
+
+Restart=always
+RestartSec=2
+
+# Fed from the control loop itself, not a timer thread: a watchdog pinged by a thread that
+# is not doing the work will happily keep a wedged control loop alive.
+WatchdogSec=30
+
+# The daemon does not need root. Device access comes from group membership, and host power
+# actions go through logind over D-Bus under polkit.
+User=argon
+Group=argon
+SupplementaryGroups=i2c gpio dialout
+
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+PrivateTmp=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+MemoryDenyWriteExecute=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# PrivateDevices would hide the very devices this exists to drive, so it stays off and the
+# allow-list below is the narrowing instead.
+PrivateDevices=no
+DeviceAllow=char-i2c rw
+DeviceAllow=/dev/gpiochip0 rw
+DeviceAllow=char-ttyACM rw
+DeviceAllow=char-hidraw rw
+
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+StateDirectory=argon-utils
+RuntimeDirectory=argon-utils
+ConfigurationDirectory=argon-utils
+
+[Install]
+WantedBy=multi-user.target

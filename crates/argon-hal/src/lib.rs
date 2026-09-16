@@ -9,6 +9,7 @@
 //! to the device.
 
 pub mod discovery;
+pub mod fan_hwmon;
 pub mod foreign;
 pub mod gpio;
 pub mod hidraw;
