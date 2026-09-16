@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Runs the gate before every commit.
+#
+# Exists because a commit was once made with clippy failing: the gate ran, printed its
+# failure, and the commit went ahead anyway because nothing connected the two. Remembering to
+# read the output is not a mechanism.
+#
+# Bypass with `git commit --no-verify` when you genuinely need to, e.g. committing a
+# known-broken state to hand it to someone else.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+if ! ./scripts/gate.sh; then
+  echo
+  echo "pre-commit: the gate failed, so the commit was stopped."
+  echo "Fix the above, or use 'git commit --no-verify' if this is deliberate."
+  exit 1
+fi
