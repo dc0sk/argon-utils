@@ -40,6 +40,7 @@ for why this exists.
 |---|---|---|---|
 | `ARGON-MCU-ADDR` | MCU responds at I2C address `0x1a` | `documented` | [DOC-I2C] |
 | `ARGON-MCU-ABSENT-V5` | **On an Argon ONE V5 with a Pi 5 there is no device at `0x1a` at all.** The fan is on the Pi's own 4-pin header, driven by the kernel `pwm-fan` cooling device | `observed` | OBS-2026-09-16-v5-fan-is-kernel-controlled |
+| `PI5-FAN-TAKEOVER-COST` | Taking manual control of the Pi 5 fan requires disabling `thermal_zone0` entirely, which also disables the 110 °C critical trip. There is no runtime way to detach one cooling device from a zone | `observed` | OBS-2026-09-16-taking-the-pi5-fan |
 | `ARGON-OLED-PRESENT-V5` | The OLED does respond at `0x3c` on that machine | `observed` | same |
 | `ARGON-MCU-L-FAN` | Raw `write_byte` of `0x00` stops the fan; `0x01`–`0x64` sets duty cycle as a literal percent | `documented` | [DOC-I2C] |
 | `ARGON-MCU-L-FANMIN` | The fan does not physically start turning below ~10% duty | `documented` | [DOC-I2C] |
