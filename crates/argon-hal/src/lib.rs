@@ -16,6 +16,7 @@ pub mod i2c;
 pub mod mode;
 pub mod platform;
 pub mod serial;
+pub mod thermal;
 
 use std::io;
 

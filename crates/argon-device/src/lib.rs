@@ -6,5 +6,6 @@
 //! handed rather than a rule each driver must remember.
 
 pub mod config;
+pub mod fan;
 pub mod mcu;
 pub mod safety;
