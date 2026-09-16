@@ -131,11 +131,17 @@ think it is.
 
 ---
 
-## 🟡 T5 — Settle the MCU dialect, once
+## 🟡 T5 — Settle the MCU dialect, once — **on the Pi 4 / ONE V2**
 
-**Unblocks:** whether the ONE V5's MCU speaks the register protocol. Until settled we default
-to the documented legacy protocol, which is functionally complete, so this is a
-nice-to-have rather than a blocker.
+> **Changed 2026-09-16.** This task originally targeted the ONE V5. It has moved, because
+> there is **no MCU at `0x1a` on the V5 at all** — its fan is on the Pi 5's own header under
+> kernel control. See
+> [OBS-2026-09-16-v5-fan-is-kernel-controlled](../protocol/captures/OBS-2026-09-16-v5-fan-is-kernel-controlled.md).
+> The Pi 4-era ONE V2 you own is now the only unit that can answer this.
+
+**Unblocks:** whether an Argon MCU speaks the register protocol. Until settled we default to
+the documented legacy protocol, which is functionally complete, so this is a nice-to-have
+rather than a blocker.
 
 **There is no safe software probe** — an SMBus register *read* puts the register number on the
 bus as a write first, and legacy firmware reads `0x80` as a fan duty of 128. See
@@ -177,6 +183,10 @@ Point the Argon remote at the case and press buttons.
 
 **Unblocks:** the display feature. Your OLED module is installed but `enabled=N`.
 
+**Good news:** the panel is confirmed present. A quick-write scan of `i2c-1` shows a device
+at `0x3c`, which is the SSD1306. It is in fact the *only* thing on that bus besides the audio
+DAC — there is no fan MCU.
+
 Needs a photograph of the panel as evidence, since correct rendering cannot be verified in
 CI. The init sequence will be written from the SSD1306 datasheet — the vendor's code never
 performs a full init, so there is nothing there to copy even if we wanted to.
@@ -216,6 +226,36 @@ produce a machine that halts and cannot be woken by the case button.
 - The recovery runbook gets written **before** the code, not after.
 
 **Result:** _(deferred)_
+
+---
+
+## 📋 T11 — A new decision: should we control the fan at all on this machine?
+
+Raised by the finding above. On your Pi 5 the fan is driven by the kernel thermal governor
+through `pwm-fan`, bound to the CPU thermal zone with active trip points at 50, 60 and
+67.5 °C and a critical one at 110 °C. It works, it is well tested, and it is not ours.
+
+Taking it over is therefore a different proposition from taking over from the vendor's
+daemon. It would mean displacing a working kernel controller, and the honest question is what
+we would offer in exchange:
+
+- **A configurable curve.** The kernel's trip points are set in the device tree. Ours are a
+  config file you can edit without rebuilding an overlay.
+- **Quieter, or louder-but-cooler, than the kernel's four steps.** `pwm-fan` gives four
+  cooling states; direct PWM control gives 256.
+- **One place for everything.** Fan, UPS, OLED and button in one daemon with one config, one
+  metrics endpoint, one status command.
+
+Against it: the governor already handles the thermal emergency correctly, and anything we
+write has to be at least as trustworthy at 110 °C.
+
+There is a middle option worth considering — **report but do not control**: expose the fan's
+state in status and metrics, leave the governor in charge, and put our control effort into
+the UPS, OLED and button, which nothing else manages.
+
+**Your call, and not urgent.** Nothing is blocked on it.
+
+**Result:** _(open)_
 
 ---
 
