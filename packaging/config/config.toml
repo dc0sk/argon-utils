@@ -1,0 +1,92 @@
+# argon-utils configuration
+#
+# Install to /etc/argon-utils/config.toml.
+#
+# Every value below is the default, shown so you can see what you are changing. Unknown keys
+# are an ERROR rather than being ignored -- a misspelled `allow_stop` that silently read as
+# the default is how a safety setting gets lost, so the daemon refuses to start instead.
+
+# How much the daemon may do to the hardware.
+#
+#   read-only  no byte is written to any device. Safe alongside the vendor's daemons, and
+#              still useful: status, metrics and discovery all work.
+#   managed    fan control, display, and button-driven reboot or shutdown.
+#   full       additionally allows the MCU power cut, UPS threshold and RTC writes, and
+#              EEPROM changes. Each of those is gated again individually.
+#
+# Shipped as read-only deliberately: a fresh install cannot change your fan.
+mode = "read-only"
+
+[fan]
+# Temperature thresholds and the duty to run at from each one up to the next. Below the
+# lowest threshold the fan stops -- or falls back to min_duty, if allow_stop is false.
+#
+# Duties are honoured as written. If you ask for 10% you get 10%, not a silently raised
+# value; min_duty below is the one place a floor is applied, and it is explicit.
+curve = [
+    { temp_c = 55, duty = 30 },
+    { temp_c = 60, duty = 55 },
+    { temp_c = 65, duty = 100 },
+]
+
+# How far the temperature must fall BELOW a threshold before the duty steps down.
+#
+# Hysteresis on temperature rather than on time. Delaying a step-down by a fixed period slows
+# oscillation without preventing it: a temperature hovering on a boundary still flips, just
+# more slowly. A margin removes the oscillation itself.
+hysteresis_c = 3
+
+# Floor applied to any non-zero duty. The fan does not physically turn below about 10%, so a
+# lower value would be a stopped fan wearing a different name.
+min_duty = 10
+
+# Duty restored when the daemon stops -- cleanly, on a panic, or on SIGTERM.
+#
+# Not the maximum: a machine that is merely idle should not be left howling indefinitely, and
+# an operator who finds the fan at full has no signal about whether that is the failure or the
+# intent. Must be non-zero; a fallback of "stop the fan" is not a fallback.
+safe_duty = 55
+
+# At or above this temperature, a stopping daemon restores full duty instead of safe_duty.
+hot_threshold_c = 75
+
+# Whether the fan may be stopped entirely.
+#
+# Defaults to false. Stopping a fan is a decision, and the default should not make it for you.
+allow_stop = false
+
+# Seconds between temperature readings.
+poll_interval_s = 5
+
+# Minimum milliseconds between writes to the MCU. A temperature sitting on a curve boundary
+# would otherwise produce a burst of bus traffic, and the MCU is not the only device on that
+# bus.
+min_write_interval_ms = 500
+
+[mcu]
+# Which protocol to speak to the case MCU.
+#
+# There is deliberately no "auto". Detecting the dialect requires an SMBus register read,
+# which puts the register number on the bus as a write first -- so probing register 0x80 on
+# firmware that only implements the documented single-byte protocol sets the fan to full. The
+# read is as destructive as the write. See docs/design/adr/0002.
+#
+# "legacy" is the documented protocol and is functionally complete for everything here.
+dialect = "legacy"
+
+# I2C bus device path, or "auto" to find it by adapter name.
+bus = "auto"
+
+[ups]
+# Where UPS telemetry comes from: "serial", "hid", or "none".
+#
+# "serial" is the Argon-proprietary protocol and is currently the only channel observed to
+# return live data. The HID interface publishes a complete USB HID Power Device descriptor but
+# serves no data on firmware 113 -- see docs/protocol/captures/OBS-2026-09-15-ups-hid-is-dormant.md.
+source = "serial"
+
+# Port path, or "auto". Prefer a stable name: device numbering is not stable, and a single USB
+# re-enumeration has been observed to move this device from ttyACM0 to ttyACM1.
+port = "auto"
+
+poll_interval_s = 10

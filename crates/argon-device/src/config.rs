@@ -1,0 +1,311 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//! Configuration.
+//!
+//! # Unknown keys are errors
+//!
+//! Every struct here denies unknown fields. A misspelled key that is silently ignored is how
+//! a safety setting gets lost: `allow_stop` written as `allow_stops` would read as the
+//! default and nobody would learn otherwise until the fan was off on a hot machine. The cost
+//! is that a typo stops the daemon starting, which is the direction that failure should fall.
+
+use argon_hal::mode::Mode;
+use argon_proto::fan::{CurvePoint, FanCurve, FanDuty};
+use serde::{Deserialize, Serialize};
+use std::fmt;
+use std::path::Path;
+use std::time::Duration;
+
+/// The default location of the configuration file.
+pub const DEFAULT_PATH: &str = "/etc/argon-utils/config.toml";
+
+/// The whole configuration.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Config {
+    /// How much the daemon may do to the hardware.
+    pub mode: String,
+    /// Fan control.
+    pub fan: FanConfig,
+    /// MCU addressing.
+    pub mcu: McuConfig,
+    /// UPS monitoring.
+    pub ups: UpsConfig,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            mode: Mode::ReadOnly.as_str().to_owned(),
+            fan: FanConfig::default(),
+            mcu: McuConfig::default(),
+            ups: UpsConfig::default(),
+        }
+    }
+}
+
+/// Fan control settings.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct FanConfig {
+    /// Curve points, as `{ temp_c, duty }`.
+    pub curve: Vec<CurveEntry>,
+    /// How far the temperature must fall below a threshold before duty steps down.
+    pub hysteresis_c: i32,
+    /// Floor applied to any non-zero duty.
+    pub min_duty: u8,
+    /// Duty restored when the daemon stops.
+    pub safe_duty: u8,
+    /// At or above this temperature, a stopping daemon restores full duty instead.
+    pub hot_threshold_c: i32,
+    /// Whether the fan may be stopped entirely.
+    ///
+    /// Defaults to false. Stopping a fan is a decision, and the default should not make it
+    /// on the operator's behalf.
+    pub allow_stop: bool,
+    /// Seconds between temperature readings.
+    pub poll_interval_s: u64,
+    /// Minimum milliseconds between writes to the MCU.
+    pub min_write_interval_ms: u64,
+}
+
+impl Default for FanConfig {
+    fn default() -> Self {
+        Self {
+            curve: vec![
+                CurveEntry {
+                    temp_c: 55,
+                    duty: 30,
+                },
+                CurveEntry {
+                    temp_c: 60,
+                    duty: 55,
+                },
+                CurveEntry {
+                    temp_c: 65,
+                    duty: 100,
+                },
+            ],
+            hysteresis_c: 3,
+            min_duty: 10,
+            safe_duty: 55,
+            hot_threshold_c: 75,
+            allow_stop: false,
+            poll_interval_s: 5,
+            min_write_interval_ms: 500,
+        }
+    }
+}
+
+/// One curve point in configuration form.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CurveEntry {
+    /// Temperature threshold in whole degrees Celsius.
+    pub temp_c: i32,
+    /// Duty as a percentage.
+    pub duty: u8,
+}
+
+/// MCU addressing.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct McuConfig {
+    /// Which protocol to speak.
+    ///
+    /// There is deliberately no `"auto"`: detection requires a transaction that sets the fan
+    /// to full on legacy firmware. See ADR-0002.
+    pub dialect: String,
+    /// I2C bus device path, or `auto` to discover it.
+    pub bus: String,
+}
+
+impl Default for McuConfig {
+    fn default() -> Self {
+        Self {
+            dialect: "legacy".to_owned(),
+            bus: "auto".to_owned(),
+        }
+    }
+}
+
+/// UPS monitoring.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct UpsConfig {
+    /// Where telemetry comes from: `serial`, `hid`, or `none`.
+    pub source: String,
+    /// Port path, or `auto`.
+    pub port: String,
+    /// Seconds between polls.
+    pub poll_interval_s: u64,
+}
+
+impl Default for UpsConfig {
+    fn default() -> Self {
+        Self {
+            source: "serial".to_owned(),
+            port: "auto".to_owned(),
+            poll_interval_s: 10,
+        }
+    }
+}
+
+impl Config {
+    /// Parses configuration from TOML.
+    ///
+    /// # Errors
+    ///
+    /// Fails on malformed TOML, an unknown key, or a setting that does not make sense.
+    pub fn from_toml(text: &str) -> Result<Self, ConfigError> {
+        let config: Self = toml::from_str(text).map_err(|e| ConfigError::Toml(e.to_string()))?;
+        config.validate()?;
+        Ok(config)
+    }
+
+    /// Loads configuration from a file.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the file cannot be read or does not validate.
+    pub fn load(path: impl AsRef<Path>) -> Result<Self, ConfigError> {
+        let path = path.as_ref();
+        let text = std::fs::read_to_string(path)
+            .map_err(|e| ConfigError::Io(format!("{}: {e}", path.display())))?;
+        Self::from_toml(&text)
+    }
+
+    /// Serialises back to TOML.
+    ///
+    /// # Errors
+    ///
+    /// Fails only if the configuration cannot be represented, which should not happen.
+    pub fn to_toml(&self) -> Result<String, ConfigError> {
+        toml::to_string_pretty(self).map_err(|e| ConfigError::Toml(e.to_string()))
+    }
+
+    /// The parsed operating mode.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the mode name is not recognised.
+    pub fn mode(&self) -> Result<Mode, ConfigError> {
+        Mode::parse(&self.mode).ok_or_else(|| ConfigError::BadValue {
+            key: "mode",
+            got: self.mode.clone(),
+            expected: "read-only, managed or full",
+        })
+    }
+
+    /// The fan curve, validated.
+    ///
+    /// # Errors
+    ///
+    /// Fails if any duty is out of range or the curve itself is invalid.
+    pub fn fan_curve(&self) -> Result<FanCurve, ConfigError> {
+        let mut points = Vec::with_capacity(self.fan.curve.len());
+        for e in &self.fan.curve {
+            let duty = FanDuty::new(e.duty).map_err(|_| ConfigError::BadValue {
+                key: "fan.curve.duty",
+                got: e.duty.to_string(),
+                expected: "0..=100",
+            })?;
+            points.push(CurvePoint::from_celsius(e.temp_c, duty));
+        }
+        FanCurve::new(points).map_err(|e| ConfigError::Curve(e.to_string()))
+    }
+
+    /// How often to read the temperature.
+    #[must_use]
+    pub const fn fan_poll_interval(&self) -> Duration {
+        Duration::from_secs(self.fan.poll_interval_s)
+    }
+
+    /// Minimum interval between MCU writes.
+    #[must_use]
+    pub const fn min_write_interval(&self) -> Duration {
+        Duration::from_millis(self.fan.min_write_interval_ms)
+    }
+
+    /// Checks settings that parsing alone cannot.
+    fn validate(&self) -> Result<(), ConfigError> {
+        self.mode()?;
+        self.fan_curve()?;
+
+        if self.mcu.dialect != "legacy" {
+            // "auto" is rejected explicitly rather than falling into the generic message,
+            // because an operator writing it has a specific wrong idea worth correcting.
+            let expected = if self.mcu.dialect == "auto" {
+                "legacy (there is no auto: detection is unsafe, see ADR-0002)"
+            } else {
+                "legacy (register support requires a build with the unverified-register feature)"
+            };
+            return Err(ConfigError::BadValue {
+                key: "mcu.dialect",
+                got: self.mcu.dialect.clone(),
+                expected,
+            });
+        }
+
+        if !matches!(self.ups.source.as_str(), "serial" | "hid" | "none") {
+            return Err(ConfigError::BadValue {
+                key: "ups.source",
+                got: self.ups.source.clone(),
+                expected: "serial, hid or none",
+            });
+        }
+
+        if self.fan.safe_duty == 0 {
+            return Err(ConfigError::BadValue {
+                key: "fan.safe_duty",
+                got: "0".to_owned(),
+                expected: "a duty that actually spins the fan; 0 would make the safety \
+                           fallback a stopped fan",
+            });
+        }
+
+        if self.fan.poll_interval_s == 0 {
+            return Err(ConfigError::BadValue {
+                key: "fan.poll_interval_s",
+                got: "0".to_owned(),
+                expected: "at least 1 second; zero is a busy loop",
+            });
+        }
+
+        Ok(())
+    }
+}
+
+/// Why a configuration was rejected.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConfigError {
+    /// The file could not be read.
+    Io(String),
+    /// The TOML was malformed, or contained an unknown key.
+    Toml(String),
+    /// A setting had an unusable value.
+    BadValue {
+        /// Which key.
+        key: &'static str,
+        /// What was written.
+        got: String,
+        /// What was expected.
+        expected: &'static str,
+    },
+    /// The fan curve was invalid.
+    Curve(String),
+}
+
+impl fmt::Display for ConfigError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            // Both already carry a fully-formed message from below.
+            Self::Io(e) | Self::Toml(e) => write!(f, "{e}"),
+            Self::BadValue { key, got, expected } => {
+                write!(f, "{key}: {got:?} is not valid; expected {expected}")
+            }
+            Self::Curve(e) => write!(f, "fan curve: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for ConfigError {}
