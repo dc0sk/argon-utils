@@ -336,46 +336,87 @@ produce a machine that halts and cannot be woken by the case button.
 this first:
 
 - **Save your work.** If the cancellation fails, the machine powers off cleanly 5 minutes
-  after you unplug mains.
+  after you unplug mains, and that ends any session running on it, including a Claude Code
+  session.
 - **Two ways to cancel:** plug mains back in, or run `shutdown -c`.
 - **Do not stop `argond` before you see the cancellation.** A shutdown that is still pending
   when `argond` exits is deliberately left in place.
+- **Run the terminals on the Pi's own desktop, not over SSH.** Polkit allows poweroff without
+  a prompt only from an active local session; over SSH it would stop and ask for a password.
 - logind will print a broadcast message in your open terminals. That's expected.
 - **Not covered by the test:** the polkit rule. `argond` runs in your own desktop session here,
   where polkit allows poweroff without a rule. The packaged daemon runs as the `argon` user
   and needs `packaging/polkit/50-argon-utils.rules`; that part is untested until installed.
 
+**Everything is logged to `~/argon-t12/`.** If the machine does power off, nothing else
+survives: `/tmp` is tmpfs, and Raspberry Pi OS sets the journal to `Storage=volatile`. The
+home directory is on persistent storage.
+
 The config in [`t12-ups-shutdown.toml`](t12-ups-shutdown.toml) uses absurd thresholds so any
 reading on battery counts as critical, which triggers the path in seconds rather than hours.
 
+### Steps
+
 ```sh
-cd ~/git/argon-utils
-sudo systemctl stop argonupsrtcd argononeupsd     # free the port, and stop their shutdown logic
-
-# terminal A: desktop notifications
-./target/debug/argonctl notify-agent --state /tmp/argon-t12.state
-
-# terminal B: the daemon
-./target/debug/argond --config docs/testing/t12-ups-shutdown.toml
+mkdir -p ~/argon-t12
+sudo systemctl stop argonupsrtcd argononeupsd
 ```
 
-1. Wait for terminal B to show `ups: unknown -> on mains`.
-2. **Unplug mains.** Within about 10 seconds you should see:
-   - terminal B: `ups: ... -> battery critical` and `poweroff SCHEDULED`
-   - a **critical panel notification**: "Battery critical ... powering off at HH:MM"
-   - `shutdown --show` in a third terminal: the pending poweroff
-3. **Plug mains back in** (well within 5 minutes). You should see:
-   - terminal B: `poweroff cancelled`
-   - a notification: "Mains power restored ... shutdown cancelled"
+**Terminal A** (notifications):
+```sh
+cd ~/git/argon-utils && ./target/debug/argonctl notify-agent --state /tmp/argon-t12.state 2>&1 | tee -a ~/argon-t12/agent.log
+```
+
+**Terminal B** (the daemon):
+```sh
+cd ~/git/argon-utils && ./target/debug/argond --config docs/testing/t12-ups-shutdown.toml 2>&1 | tee -a ~/argon-t12/argond.log
+```
+
+**Terminal C** (timeline recorder in the background; the terminal stays usable for `shutdown -c`):
+```sh
+cd ~/git/argon-utils && docs/testing/t12-record.sh &
+```
+
+1. Terminal B must show `ups: shutdown ENABLED` and `ups: unknown -> on mains`. A warning
+   about `argononed` still running is expected. **If it says `shutdown in dry run`, stop**: a
+   vendor UPS daemon is still running.
+2. **Unplug mains.** Within about 10–15 seconds:
+   - terminal B: `on mains -> battery low`, then `battery low -> battery critical`
+   - terminal B: `poweroff SCHEDULED for …`
+   - a **critical** notification: "Battery critical … powering off at HH:MM"
+   - `shutdown --show` in terminal C: a pending poweroff about 5 minutes out
+3. **Plug mains back in**, well within the 5 minutes:
+   - terminal B: `battery critical -> on mains`, then `poweroff cancelled`
+   - a notification: "Mains power restored … shutdown cancelled."
    - `shutdown --show`: nothing pending
-4. Only now stop both with Ctrl-C, then:
+4. **Only after nothing is pending:** Ctrl-C in A and B, `kill %1` in C, then:
 
 ```sh
 sudo systemctl start argonupsrtcd argononeupsd
 ```
 
-**Report:** whether each of the six expectations above happened, and paste terminal B's
-output.
+**Report:** which of the seven checks happened, and the contents of `~/argon-t12/`.
+
+### If the machine shuts down
+
+That happens either because the cancellation did not work, or because you let the 5 minutes
+run out on purpose to see the real poweroff. Either way it produces useful evidence.
+
+**Nothing needs restoring after it boots.** The vendor UPS daemons were stopped, not disabled,
+so they start again at boot. A scheduled shutdown does not survive a reboot. The T12 status
+file in `/tmp` is gone, which is expected.
+
+Look at what was recorded:
+
+```sh
+tail -30 ~/argon-t12/argond.log                   # the daemon's view, up to the shutdown
+grep -v 'shutdown=none' ~/argon-t12/timeline.log  # the seconds a shutdown was pending
+tail -5  ~/argon-t12/timeline.log                 # the last seconds before power went off
+```
+
+Then start a new Claude Code session in `~/git/argon-utils` and say that **T12 ended with the
+machine shutting down, logs in `~/argon-t12/`**, and whether mains was plugged back in before
+it did.
 
 **Result:** _(not yet done)_
 
