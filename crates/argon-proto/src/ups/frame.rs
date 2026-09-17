@@ -384,19 +384,63 @@ mod tests {
     }
 
     #[test]
-    fn synthetic_firmware_version_exchange() {
-        // NOT a capture. These bytes are constructed from the framing rules, not recorded
-        // from hardware -- the live UPS's serial port is held by the vendor daemon, so no
-        // real tape exists yet. Replace this with a recorded exchange in M3, at which point
-        // ARGON-UPS-FRAME can be promoted from `inferred` to `observed`.
-        assert_eq!(encode_read(4), [0xFE, 0x00, 0x04, 0x02]);
+    fn real_exchanges_captured_from_hardware() {
+        // Recorded from an Argon PWR UPS, firmware 113, on 2026-09-17. See
+        // crates/argon-proto/tests/tapes/ups-reads.json for provenance. This is what
+        // promoted ARGON-UPS-FRAME from `inferred` to `observed`.
+        //
+        // Worth noting: the firmware-version exchange below was written as a *synthetic*
+        // test before any hardware capture existed, predicted purely from the framing rules
+        // -- and the device produced those bytes exactly.
+        for (cmd, payload, wire) in [
+            (
+                0u8,
+                &[0x5Bu8, 0x00][..],
+                &[0xFE, 0x02, 0x00, 0x5B, 0x00, 0x5B][..],
+            ),
+            (4, &[113][..], &[0xFE, 0x01, 0x04, 113, 0x74][..]),
+            (
+                5,
+                &[0x26, 0x09, 0x17, 0x13, 0x29, 0x15][..],
+                &[0xFE, 0x06, 0x05, 0x26, 0x09, 0x17, 0x13, 0x29, 0x15, 0xA0][..],
+            ),
+            // No wake schedule set: a well-formed frame with an empty payload.
+            (7, &[][..], &[0xFE, 0x00, 0x07, 0x05][..]),
+            (
+                2,
+                &[0x03, 0x52][..],
+                &[0xFE, 0x02, 0x02, 0x03, 0x52, 0x57][..],
+            ),
+        ] {
+            // Our encoder must produce exactly what the device sent.
+            let frame = Frame::new(cmd, payload).unwrap();
+            let mut buf = [0u8; MAX_FRAME];
+            let n = frame.encode_into(&mut buf).unwrap();
+            assert_eq!(
+                &buf[..n],
+                wire,
+                "encoding cmd {cmd} diverged from the captured wire"
+            );
 
-        // A plausible reply carrying the firmware version the device reports (113).
-        let reply = Frame::new(4, &[113]).unwrap();
-        let mut buf = [0u8; MAX_FRAME];
-        let n = reply.encode_into(&mut buf).unwrap();
-        // 0xFE + 0x01 + 0x04 + 113 = 372; 372 & 0xFF = 116 = 0x74.
-        assert_eq!(&buf[..n], &[0xFE, 0x01, 0x04, 113, 0x74]);
-        assert_eq!(checksum(&[0xFE, 0x01, 0x04, 113]), 0x74);
+            // And our decoder must read the device's bytes back.
+            let (frames, errs) = decode_all(wire);
+            assert!(errs.is_empty(), "cmd {cmd}: {errs:?}");
+            assert_eq!(frames.len(), 1, "cmd {cmd}");
+            assert_eq!(frames[0].cmd(), cmd);
+            assert_eq!(frames[0].payload(), payload);
+        }
+    }
+
+    #[test]
+    fn the_read_requests_match_what_was_sent_to_hardware() {
+        for (cmd, wire) in [
+            (0u8, [0xFE, 0x00, 0x00, 0xFE]),
+            (2, [0xFE, 0x00, 0x02, 0x00]),
+            (4, [0xFE, 0x00, 0x04, 0x02]),
+            (5, [0xFE, 0x00, 0x05, 0x03]),
+            (7, [0xFE, 0x00, 0x07, 0x05]),
+        ] {
+            assert_eq!(encode_read(cmd), wire, "read request for cmd {cmd}");
+        }
     }
 }

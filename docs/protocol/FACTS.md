@@ -86,16 +86,17 @@ loop that drifts under load, so our measurement is expected to be the better spe
 | ID | Fact | Status | Source |
 |---|---|---|---|
 | `ARGON-UPS-SERIAL-PARAMS` | 115200 8N1 on the CDC-ACM interface | `observed` | OBS-2026-09-15-ups-ident |
-| `ARGON-UPS-FRAME` | Frame is `0xFE \| len \| cmd \| payload… \| checksum`, checksum = sum of all preceding frame bytes `& 0xFF` | `inferred` | — |
+| `ARGON-UPS-FRAME` | Frame is `0xFE \| len \| cmd \| payload… \| checksum`, checksum = sum of all preceding frame bytes `& 0xFF` | `observed` | OBS-2026-09-17-ups-serial-capture |
 | `ARGON-UPS-FRAME-AMBIGUITY` | **The framing has no escape mechanism.** `0xFE` is legal inside a length field, so a single stray start byte immediately before a frame is read as a length of 254 and swallows up to 259 following bytes | `observed` | property testing, 2026-09-15 |
-| `ARGON-UPS-READSHORT` | A pure read is the 4-byte frame `FE 00 <cmd> <(cmd+0xFE)&0xFF>` | `inferred` | — |
-| `ARGON-UPS-CMD0` | Command 0 returns `[percent, charging]`; `charging == 0` means on mains | `inferred` | — |
-| `ARGON-UPS-CMD2` | Command 2 returns a 16-bit big-endian charge current. **Units undetermined** | `unknown` | — |
+| `ARGON-UPS-READSHORT` | A pure read is the 4-byte frame `FE 00 <cmd> <(cmd+0xFE)&0xFF>` | `observed` | same |
+| `ARGON-UPS-CMD0` | Command 0 returns `[percent, charging]`; `charging == 0` means on mains | `observed` | same — read 91% / on-mains, matching the vendor daemon |
+| `ARGON-UPS-CMD2` | Command 2 returns a 16-bit big-endian value; read 850 while charging at 91%. **Units still undetermined** | `observed` (framing) / `unknown` (units) | same |
 | `ARGON-UPS-CMD3` | Command 3 sets the RTC from 6 BCD bytes `YY MM DD HH MM SS`, UTC | `inferred` | — |
-| `ARGON-UPS-CMD4` | Command 4 returns a 1-byte firmware version | `inferred` | — |
-| `ARGON-UPS-CMD5` | Command 5 returns the RTC as 6 BCD bytes | `inferred` | — |
+| `ARGON-UPS-CMD4` | Command 4 returns a 1-byte firmware version | `observed` | same — read 113 |
+| `ARGON-UPS-CMD5` | Command 5 returns the RTC as 6 BCD bytes, UTC | `observed` | same — read 2026-09-17 13:29:15 UTC |
 | `ARGON-UPS-CMD6` | Command 6 sets an absolute wake schedule from 5 BCD bytes `YY MM DD HH MM`, UTC | `inferred` | — |
-| `ARGON-UPS-CMD7` | Command 7 returns the wake schedule as 5 BCD bytes | `inferred` | — |
+| `ARGON-UPS-CMD7` | Command 7 returns the wake schedule as 5 BCD bytes | `observed` | same |
+| `ARGON-UPS-CMD7-EMPTY` | **With no schedule set, command 7 answers with an EMPTY payload** (`FE 00 07 05`), not five zero bytes | `observed` | same |
 | `ARGON-UPS-CMD8` | Command 8 is device-initiated; the host echoes it back as an acknowledgement | `inferred` | — |
 | `ARGON-UPS-CMD9` | Command 9 resets the battery meter. **Destructive** — discards the meter baseline | `inferred` | — |
 | `ARGON-UPS-CMD-UNMAPPED` | Command IDs above 9 are unmapped. **Never sweep the command space** — 9 is already destructive | `unknown` | — |

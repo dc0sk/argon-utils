@@ -113,7 +113,20 @@ sudo systemctl stop argononed      # optional; `sudo systemctl start argononed` 
 
 ---
 
-## 🟡 T4 — Let us use the UPS serial port for an hour
+## ✅ T4 — Let us use the UPS serial port for an hour — **DONE 2026-09-17**
+
+> Approved and run. The serial protocol works: framing, checksum and commands 0, 2, 4, 5 and
+> 7 are now `observed`, with wire captures committed as test fixtures. Battery and firmware
+> readings match the vendor daemon independently. The vendor daemon was stopped for the
+> duration and restarted afterwards; read-only commands only.
+>
+> It found a real bug: with no wake schedule set the device answers with an **empty payload**,
+> not five zero bytes, and our decoder reported that as a failure on a healthy device. Fixed.
+>
+> See [OBS-2026-09-17-ups-serial-capture](../protocol/captures/OBS-2026-09-17-ups-serial-capture.md).
+
+<details><summary>Original task</summary>
+
 
 **Unblocks:** promoting the entire UPS serial protocol from `inferred` to `observed`, and
 recording replay tapes so the protocol has permanent regression tests that run in CI without
@@ -141,9 +154,9 @@ resynchronisation after line noise, rejection of corrupt frames, and deadline be
 silent or dribbling device. What hardware adds is confirmation that the *protocol* is what we
 think it is.
 
-**This is an approval, not a task** — say yes and it can be run unattended.
+</details>
 
-**Result:** _(not yet approved)_
+**Result: the protocol works. Facts promoted to `observed`; tapes committed.**
 
 ---
 

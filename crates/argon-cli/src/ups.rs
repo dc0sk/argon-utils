@@ -209,16 +209,19 @@ fn run_serial(port: &str) -> ExitCode {
         }
     }
     if let Some(f) = ask(Command::GetWake, "wake schedule") {
-        match UpsTime::decode_schedule(f.payload()) {
-            Ok(t) if t.is_plausible() => println!("  {:<16} {t}", "wake schedule"),
-            Ok(_) => println!("  {:<16} none set", "wake schedule"),
+        // With nothing scheduled the device answers with an empty payload, not five zero
+        // bytes -- so "none set" is a successful decode rather than a length error.
+        match UpsTime::decode_optional_schedule(f.payload()) {
+            Ok(None) => println!("  {:<16} none set", "wake schedule"),
+            Ok(Some(t)) if t.is_plausible() => println!("  {:<16} {t}", "wake schedule"),
+            Ok(Some(t)) => println!("  {:<16} {t}  (implausible)", "wake schedule"),
             Err(e) => println!("  {:<16} undecodable ({e})", "wake schedule"),
         }
     }
 
     println!(
-        "\nThese decoders are `inferred` in docs/protocol/FACTS.md. A successful read here\n\
-         is what promotes them to `observed` -- see task T4."
+        "\nFraming and these commands are `observed` in docs/protocol/FACTS.md, captured from\n\
+         hardware on 2026-09-17. See crates/argon-proto/tests/tapes/ups-reads.json."
     );
     ExitCode::SUCCESS
 }

@@ -117,6 +117,19 @@ impl UpsTime {
         })
     }
 
+    /// Decodes a wake-schedule response, where no schedule set is a valid answer.
+    ///
+    /// `ARGON-UPS-CMD7-EMPTY`, `observed`: with nothing scheduled the device replies
+    /// `FE 00 07 05` — a well-formed frame carrying no payload at all. An earlier
+    /// implementation guessed five zero bytes, which would have been reported to the user as
+    /// a decode failure on a perfectly healthy device.
+    pub fn decode_optional_schedule(payload: &[u8]) -> Result<Option<Self>, DecodeError> {
+        if payload.is_empty() {
+            return Ok(None);
+        }
+        Self::decode_schedule(payload).map(Some)
+    }
+
     /// Encodes as a six-byte RTC payload.
     pub fn encode_clock(&self) -> Result<[u8; 6], DecodeError> {
         Ok([

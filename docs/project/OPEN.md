@@ -75,7 +75,7 @@ Hardware currently in reach, and what each would need:
 | Hardware | State | Needs |
 |---|---|---|
 | ONE V5 + Pi 5 | primary target, working | nothing |
-| PWR UPS | serial protocol coded, untested on hardware | T4 |
+| PWR UPS | **serial protocol confirmed on hardware** | nothing — ready to build on |
 | OLED | confirmed present at `0x3c`, driver written | T7 |
 | ONE V2 + Pi 4 | untouched | a session with that machine |
 | Zigbee module | detected; health probe not built | a decision on how far to go |
@@ -91,17 +91,16 @@ unblock rather than by effort:
 
 | | Task | Unblocks | Effort |
 |---|---|---|---|
-| **T4** | One hour with the UPS serial port | **the entire UPS feature**, and battery metrics | approval only; unattended after |
 | **T2** | Press the case button | whether we are fixing a vendor bug or matching behaviour | seconds |
 | **T3** | 30 button presses | real pulse thresholds, replacing values we do not trust | five minutes |
 | **T7** | OLED bring-up + photo | the display feature | ten minutes |
 | **T6** | IR remote test | whether IR exists on the V5 at all | five minutes |
 | **T9** | `0xFF` power-cut | power-cut arming | 🔴 deferred; Pi 4 first, never over SSH |
 
-**T4 is now the only route to the UPS feature**, not one of two. T1 closed the alternative on
-2026-09-17: the HID channel emitted nothing across a real mains-removal transition, so the
-serial protocol is the only thing that returns battery state. Everything about the UPS — the
-feature with the clearest reason to exist — waits behind that one approval.
+**T4 is done (2026-09-17) and the UPS is unblocked.** The serial protocol is confirmed on
+hardware, its facts are `observed`, and wire captures are committed as test fixtures. What
+remains for the UPS feature is implementation rather than discovery: a poll loop, low-battery
+policy, the RTC and scheduled wake, and battery metrics for the (deferred) exporter.
 
-T8 was retired at the same time; it asked whether a writable HID threshold persists, which
+T8 was retired alongside T1; it asked whether a writable HID threshold persists, which
 presupposed being able to read it back.

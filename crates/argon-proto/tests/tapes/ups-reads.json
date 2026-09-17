@@ -1,0 +1,17 @@
+{
+  "_provenance": {
+    "device": "Argon PWR UPS, firmware 113, serial XXXXXXXXXXXXXXXX",
+    "host": "Raspberry Pi 5 Model B Rev 1.1, Debian 13 trixie, kernel 6.18.39+rpt-rpi-2712",
+    "captured": "2026-09-17",
+    "state_at_capture": "on mains, charging, 91%",
+    "method": "read-only commands only over /dev/ttyACM0 at 115200 8N1, with the vendor daemon stopped for the duration and restarted afterwards",
+    "note": "Every response's trailing checksum was verified against an independent hand computation before these were committed."
+  },
+  "exchanges": [
+    { "cmd": 0, "name": "battery status",  "tx": "fe0000fe", "rx": "fe02005b005b", "expect": { "percent": 91, "on_mains": true } },
+    { "cmd": 4, "name": "firmware",        "tx": "fe000402", "rx": "fe01047174",     "expect": { "firmware": 113 } },
+    { "cmd": 5, "name": "rtc",             "tx": "fe000503", "rx": "fe0605260917132915a0", "expect": { "utc": "2026-09-17T13:29:15" } },
+    { "cmd": 7, "name": "wake schedule",   "tx": "fe000705", "rx": "fe000705",       "expect": { "schedule": null } },
+    { "cmd": 2, "name": "charge current",  "tx": "fe000200", "rx": "fe0202035257",   "expect": { "raw_be16": 850, "units": "unknown" } }
+  ]
+}
