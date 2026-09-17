@@ -328,6 +328,59 @@ produce a machine that halts and cannot be woken by the case button.
 
 ---
 
+## 🔴 T12 — Low-battery shutdown, end to end
+
+**Unblocks:** trusting the automatic shutdown with the real UPS, logind and the Pi desktop.
+
+**This schedules a real poweroff.** Everything below is arranged so it is cancelled, but read
+this first:
+
+- **Save your work.** If the cancellation fails, the machine powers off cleanly 5 minutes
+  after you unplug mains.
+- **Two ways to cancel:** plug mains back in, or run `shutdown -c`.
+- **Do not stop `argond` before you see the cancellation.** A shutdown that is still pending
+  when `argond` exits is deliberately left in place.
+- logind will print a broadcast message in your open terminals. That's expected.
+- **Not covered by the test:** the polkit rule. `argond` runs in your own desktop session here,
+  where polkit allows poweroff without a rule. The packaged daemon runs as the `argon` user
+  and needs `packaging/polkit/50-argon-utils.rules`; that part is untested until installed.
+
+The config in [`t12-ups-shutdown.toml`](t12-ups-shutdown.toml) uses absurd thresholds so any
+reading on battery counts as critical, which triggers the path in seconds rather than hours.
+
+```sh
+cd ~/git/argon-utils
+sudo systemctl stop argonupsrtcd argononeupsd     # free the port, and stop their shutdown logic
+
+# terminal A: desktop notifications
+./target/debug/argonctl notify-agent --state /tmp/argon-t12.state
+
+# terminal B: the daemon
+./target/debug/argond --config docs/testing/t12-ups-shutdown.toml
+```
+
+1. Wait for terminal B to show `ups: unknown -> on mains`.
+2. **Unplug mains.** Within about 10 seconds you should see:
+   - terminal B: `ups: ... -> battery critical` and `poweroff SCHEDULED`
+   - a **critical panel notification**: "Battery critical ... powering off at HH:MM"
+   - `shutdown --show` in a third terminal: the pending poweroff
+3. **Plug mains back in** (well within 5 minutes). You should see:
+   - terminal B: `poweroff cancelled`
+   - a notification: "Mains power restored ... shutdown cancelled"
+   - `shutdown --show`: nothing pending
+4. Only now stop both with Ctrl-C, then:
+
+```sh
+sudo systemctl start argonupsrtcd argononeupsd
+```
+
+**Report:** whether each of the six expectations above happened, and paste terminal B's
+output.
+
+**Result:** _(not yet done)_
+
+---
+
 ## 📋 T11 — A new decision: should we control the fan at all on this machine?
 
 Raised by the finding above. On your Pi 5 the fan is driven by the kernel thermal governor

@@ -1,0 +1,15 @@
+# Configuration for task T12 ONLY. Do not install this as /etc/argon-utils/config.toml.
+#
+# The thresholds are deliberately absurd so that unplugging mains triggers the shutdown path
+# within seconds instead of after hours of draining: with the battery near full, any reading
+# on battery counts as critical.
+
+mode = "full"
+
+[ups]
+poll_interval_s = 5
+low_percent = 99
+critical_percent = 98
+confirmations = 2
+shutdown_delay_min = 5
+state_file = "/tmp/argon-t12.state"

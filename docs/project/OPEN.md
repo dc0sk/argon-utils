@@ -54,9 +54,18 @@ opened with, and that is worth deciding rather than drifting into.
 | **D2** | A settings deny rule on `/etc/argon/**` | nothing; reduces clean-room risk | yes |
 | **T11** | Fan on Pi 5: control it, or report it | the shape of the fan feature | yes |
 | **S1** | Scope: which hardware do we commit to? | what "supported" means in the README | yes |
-| **D3** | What to do when the battery policy advises shutdown | automatic low-battery shutdown | yes |
+| ~~**D3**~~ | ~~What to do when the battery policy advises shutdown~~ — **decided 2026-09-17** | — | — |
 
-### D3 — acting on low-battery shutdown advice
+### D3 — acting on low-battery shutdown advice — **DECIDED 2026-09-17: implemented**
+
+The user chose the recommendation: a delayed, cancellable shutdown, `full` mode only, with a
+notification first. Implemented in `argond` with a desktop notification agent and a polkit
+rule; verified on hardware in dry run. What remains is the end-to-end test with a real
+scheduled poweroff, task **T12**, and actually retiring the vendor's UPS daemons, which is a
+change to the machine and not done without asking.
+
+<details><summary>The decision as it was put</summary>
+
 
 UPS monitoring works on hardware as of 2026-09-17: `argonctl ups --serial auto --watch`
 polls the battery and runs the battery policy, which is level-triggered, needs two
@@ -76,6 +85,8 @@ powers the machine off:
 - **Notice:** a desktop notification or wall message before acting.
 
 My recommendation: a delayed, cancellable shutdown, `full` mode only, with a notification.
+
+</details>
 
 
 

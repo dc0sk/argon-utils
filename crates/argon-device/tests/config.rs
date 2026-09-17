@@ -227,3 +227,13 @@ fn the_default_ups_settings_match_the_policy_defaults() {
         argon_proto::ups::policy::PolicyConfig::default()
     );
 }
+
+#[test]
+fn the_t12_test_config_is_valid() {
+    // The hardware test's instructions point at this file; a typo there would only show up
+    // mid-test, with mains already unplugged.
+    let c = Config::from_toml(include_str!("../../../docs/testing/t12-ups-shutdown.toml"))
+        .expect("docs/testing/t12-ups-shutdown.toml must parse");
+    assert_eq!(c.mode().unwrap(), argon_hal::mode::Mode::Full);
+    assert_eq!(c.ups.shutdown_delay_min, 5);
+}
