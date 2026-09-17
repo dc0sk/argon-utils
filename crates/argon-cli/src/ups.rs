@@ -4,9 +4,12 @@
 //! Read-only. Uses `hidraw` and Input reports only, so it claims no USB interface and
 //! cannot disturb whatever holds the serial port.
 
-use argon_hal::{discovery, foreign, hidraw, serial};
+use argon_device::config::Config;
+use argon_device::ups::{QueryOnly, Ups, UpsMonitor};
+use argon_hal::{discovery, foreign, hidraw, platform, serial};
 use argon_proto::hid::{ItemKind, ReportDescriptor, usage};
-use argon_proto::ups::{BatteryStatus, Command, UpsTime};
+use argon_proto::ups::PowerSource;
+use argon_proto::ups::policy::{Advice, BatteryPolicy};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
@@ -20,6 +23,22 @@ pub struct Args {
     /// Show every field the descriptor declares, not just the summary.
     #[arg(long)]
     pub all: bool,
+
+    /// Keep polling over the serial protocol, showing the battery policy's decisions.
+    ///
+    /// Monitoring only: when the policy advises shutdown this prints what it would do and
+    /// does nothing. Requires `--serial`.
+    #[arg(long, requires = "serial")]
+    pub watch: bool,
+
+    /// With `--watch`, stop after this many polls. 0 means until interrupted.
+    #[arg(long, default_value = "0")]
+    pub count: u64,
+
+    /// Configuration file for the poll interval and battery thresholds. Defaults are used if
+    /// it does not exist.
+    #[arg(long, value_name = "PATH")]
+    pub config: Option<std::path::PathBuf>,
 
     /// Read over the Argon serial protocol instead of HID.
     ///
@@ -38,7 +57,7 @@ struct Reading {
 
 pub fn run(args: &Args) -> ExitCode {
     if let Some(port) = &args.serial {
-        return run_serial(port);
+        return run_serial(port, args);
     }
     let (mut dev, desc, raw_len, serial) = match open_ups() {
         Ok(v) => v,
@@ -121,109 +140,201 @@ pub fn run(args: &Args) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// Reads telemetry over the Argon serial protocol.
+/// Reads the UPS over the Argon serial protocol, once or continuously.
 ///
-/// Read-only commands only: battery status, firmware version, clock and wake schedule. No
-/// writes, and in particular no meter reset -- that discards the battery meter's baseline.
-fn run_serial(port: &str) -> ExitCode {
-    let usb = discovery::usb_devices();
+/// Every request goes through `QueryOnly`, so nothing that changes the UPS's state can be
+/// sent from here, whatever this function does.
+fn run_serial(port: &str, args: &Args) -> ExitCode {
     let path = if port == "auto" {
-        let Some(ups) = discovery::find_argon_ups(&usb) else {
-            eprintln!("argonctl: no Argon UPS found");
+        let Some(p) = discovery::argon_ups_serial_path() else {
+            eprintln!("argonctl: no Argon UPS serial port found");
             return ExitCode::FAILURE;
         };
-        let node = ups.nodes.iter().find(|n| {
-            n.file_name()
-                .is_some_and(|f| f.to_string_lossy().starts_with("ttyACM"))
-        });
-        let Some(node) = node else {
-            eprintln!("argonctl: the UPS exposes no serial node");
-            return ExitCode::FAILURE;
-        };
-        node.clone()
+        p
     } else {
         std::path::PathBuf::from(port)
     };
 
-    // CDC-ACM has no arbitration: two readers split the stream and both desynchronise. Check
-    // before opening, and say plainly when the check itself is inconclusive.
-    let owners = foreign::port_owners(&path);
-    if let Some(o) = owners.first() {
+    // CDC-ACM has no arbitration: two readers split the byte stream and both desynchronise.
+    // The vendor daemon runs as root, so an unprivileged /proc scan cannot see it holding the
+    // port -- check the unit as well, which works for anyone.
+    if foreign::vendor_units()
+        .iter()
+        .any(|u| u.unit == "argonupsrtcd.service" && u.is_active())
+    {
         eprintln!(
-            "argonctl: {} is held by pid {} ({}).\n\n\
-             Two readers on a CDC-ACM port corrupt each other's frames. Stop the owning\n\
-             service first -- for the vendor stack that is:\n\n    \
-             sudo systemctl stop argonupsrtcd\n",
+            "argonctl: argonupsrtcd is running and holds the UPS serial port.\n\
+             Two readers on a CDC-ACM port corrupt each other's frames. Stop it first:\n\n    \
+             sudo systemctl stop argonupsrtcd\n\n\
+             and start it again when you are done."
+        );
+        return ExitCode::FAILURE;
+    }
+    if let Some(o) = foreign::port_owners(&path).first() {
+        eprintln!(
+            "argonctl: {} is held by pid {} ({}). Two readers corrupt each other's frames.",
             path.display(),
             o.pid,
             o.comm
         );
         return ExitCode::FAILURE;
     }
-    if !foreign::can_see_all_processes() {
-        eprintln!(
-            "argonctl: note -- not privileged, so the ownership check only saw our own\n\
-             processes. If the vendor daemon is running, this will read corrupt frames.\n"
-        );
-    }
 
-    let mut link = match serial::SerialLink::open(&path) {
+    let config = match load_config(args.config.as_deref()) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    let policy = match BatteryPolicy::new(config.ups.policy()) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("argonctl: battery policy: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let link = match serial::SerialLink::open(&path) {
         Ok(l) => l,
         Err(e) => {
             eprintln!("argonctl: cannot open {}: {e}", path.display());
             return ExitCode::FAILURE;
         }
     };
+    let mut monitor = UpsMonitor::new(Ups::new(QueryOnly(link)), policy);
 
     println!("Serial: {}", path.display());
-    println!("--------{}", "-".repeat(path.display().to_string().len()));
+    report_identity(monitor.ups_mut());
 
-    let mut ask = |cmd: Command, label: &str| {
-        let deadline = Instant::now() + Duration::from_secs(3);
-        match link.request(cmd.as_byte(), &[], deadline) {
-            Ok(f) => Some(f),
-            Err(e) => {
-                println!("  {label:<16} unavailable ({e})");
-                None
-            }
+    if !args.watch {
+        let poll = monitor.poll(uptime());
+        match poll.battery {
+            Some(b) => println!("  {:<14} {b}", "battery"),
+            None => println!(
+                "  {:<14} unavailable ({})",
+                "battery",
+                poll.error.map_or_else(String::new, |e| e.to_string())
+            ),
         }
-    };
-
-    if let Some(f) = ask(Command::BatteryStatus, "battery") {
-        match BatteryStatus::decode(f.payload()) {
-            Ok(s) => println!("  {:<16} {s}", "battery"),
-            Err(e) => println!("  {:<16} undecodable ({e})", "battery"),
-        }
-    }
-    if let Some(f) = ask(Command::FirmwareVersion, "firmware") {
-        match f.payload() {
-            [v] => println!("  {:<16} {v}", "firmware"),
-            other => println!("  {:<16} unexpected payload {other:?}", "firmware"),
-        }
-    }
-    if let Some(f) = ask(Command::GetRtc, "clock") {
-        match UpsTime::decode_clock(f.payload()) {
-            Ok(t) if t.is_plausible() => println!("  {:<16} {t}", "clock"),
-            Ok(t) => println!("  {:<16} {t}  (implausible)", "clock"),
-            Err(e) => println!("  {:<16} undecodable ({e})", "clock"),
-        }
-    }
-    if let Some(f) = ask(Command::GetWake, "wake schedule") {
-        // With nothing scheduled the device answers with an empty payload, not five zero
-        // bytes -- so "none set" is a successful decode rather than a length error.
-        match UpsTime::decode_optional_schedule(f.payload()) {
-            Ok(None) => println!("  {:<16} none set", "wake schedule"),
-            Ok(Some(t)) if t.is_plausible() => println!("  {:<16} {t}", "wake schedule"),
-            Ok(Some(t)) => println!("  {:<16} {t}  (implausible)", "wake schedule"),
-            Err(e) => println!("  {:<16} undecodable ({e})", "wake schedule"),
-        }
+        return ExitCode::SUCCESS;
     }
 
-    println!(
-        "\nFraming and these commands are `observed` in docs/protocol/FACTS.md, captured from\n\
-         hardware on 2026-09-17. See crates/argon-proto/tests/tapes/ups-reads.json."
-    );
+    watch(&mut monitor, &config, args.count);
+    let discarded = monitor.ups_mut().link().0.discarded_frames();
+    if discarded > 0 {
+        println!(
+            "\nNote: {discarded} unsolicited or rejected frame(s) were discarded while waiting \
+             for replies."
+        );
+    }
     ExitCode::SUCCESS
+}
+
+/// Firmware, clock and wake schedule: read once, not every poll.
+fn report_identity<L: argon_device::ups::UpsLink>(ups: &mut Ups<L>) {
+    match ups.firmware() {
+        Ok(v) => println!("  {:<14} {v}", "firmware"),
+        Err(e) => println!("  {:<14} unavailable ({e})", "firmware"),
+    }
+    match ups.clock() {
+        Ok(t) if t.is_plausible() => println!("  {:<14} {t}", "clock"),
+        Ok(t) => println!("  {:<14} {t}  (implausible)", "clock"),
+        Err(e) => println!("  {:<14} unavailable ({e})", "clock"),
+    }
+    match ups.wake() {
+        Ok(None) => println!("  {:<14} none set", "wake schedule"),
+        Ok(Some(t)) => println!("  {:<14} {t}", "wake schedule"),
+        Err(e) => println!("  {:<14} unavailable ({e})", "wake schedule"),
+    }
+}
+
+/// Polls until interrupted or `count` polls have run.
+fn watch<L: argon_device::ups::UpsLink>(monitor: &mut UpsMonitor<L>, config: &Config, count: u64) {
+    let interval = Duration::from_secs(config.ups.poll_interval_s.max(1));
+    let u = &config.ups;
+    println!(
+        "\nPolicy: low {}%, critical {}% (confirmed {}x), margin {}%, no advice before {}s uptime",
+        u.low_percent, u.critical_percent, u.confirmations, u.recover_margin, u.min_uptime_s
+    );
+    println!(
+        "Watching every {}s. Monitoring only: nothing is shut down. Ctrl-C to stop.\n",
+        interval.as_secs()
+    );
+    println!(
+        "  {:<8}  {:>4}  {:<11}  {:<16}  advice",
+        "time", "pct", "source", "level"
+    );
+
+    let mut polls = 0u64;
+    loop {
+        let poll = monitor.poll(uptime());
+        let time = clock_hms();
+        let (pct, source) = poll.battery.map_or_else(
+            || ("-".to_owned(), "-".to_owned()),
+            |b| {
+                let src = match b.source {
+                    PowerSource::Mains => "mains",
+                    PowerSource::Battery => "battery",
+                };
+                (format!("{}%", b.percent), src.to_owned())
+            },
+        );
+        let advice = match poll.decision.advice {
+            Advice::None => String::new(),
+            Advice::Shutdown => "WOULD SHUT DOWN (not enabled)".to_owned(),
+            Advice::HeldForUptime { remaining } => {
+                format!("critical, held {}s after boot", remaining.as_secs())
+            }
+        };
+        let change = poll
+            .decision
+            .changed_from
+            .map_or_else(String::new, |from| format!("   <- was {from}"));
+        println!(
+            "  {time:<8}  {pct:>4}  {source:<11}  {:<16}  {advice}{change}",
+            poll.decision.level.to_string()
+        );
+        if let Some(e) = &poll.error {
+            println!(
+                "            read failed ({} in a row): {e}",
+                poll.consecutive_failures
+            );
+        }
+
+        polls += 1;
+        if count > 0 && polls >= count {
+            break;
+        }
+        std::thread::sleep(interval);
+    }
+}
+
+fn load_config(path: Option<&std::path::Path>) -> Result<Config, ExitCode> {
+    let path = path.map_or_else(
+        || std::path::PathBuf::from(argon_device::config::DEFAULT_PATH),
+        std::path::Path::to_path_buf,
+    );
+    if !path.exists() {
+        return Ok(Config::default());
+    }
+    Config::load(&path).map_err(|e| {
+        eprintln!("argonctl: {}: {e}", path.display());
+        ExitCode::FAILURE
+    })
+}
+
+fn uptime() -> Duration {
+    // If uptime cannot be read, report zero: that holds any shutdown advice rather than
+    // releasing it early, which is the safe direction to be wrong in.
+    platform::uptime().unwrap_or(Duration::ZERO)
+}
+
+/// Local wall-clock time as HH:MM:SS, without pulling in a date library for one column.
+fn clock_hms() -> String {
+    std::process::Command::new("date")
+        .arg("+%H:%M:%S")
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map_or_else(|| "?".to_owned(), |s| s.trim().to_owned())
 }
 
 /// Finds the UPS, opens its hidraw node and parses its report descriptor.

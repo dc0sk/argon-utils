@@ -54,8 +54,30 @@ opened with, and that is worth deciding rather than drifting into.
 | **D2** | A settings deny rule on `/etc/argon/**` | nothing; reduces clean-room risk | yes |
 | **T11** | Fan on Pi 5: control it, or report it | the shape of the fan feature | yes |
 | **S1** | Scope: which hardware do we commit to? | what "supported" means in the README | yes |
+| **D3** | What to do when the battery policy advises shutdown | automatic low-battery shutdown | yes |
 
-### D1 — the library licence
+### D3 — acting on low-battery shutdown advice
+
+UPS monitoring works on hardware as of 2026-09-17: `argonctl ups --serial auto --watch`
+polls the battery and runs the battery policy, which is level-triggered, needs two
+consecutive critical readings, never acts on a failed read, and holds off for two minutes after
+boot. Defaults: low at 20%, critical at 10%.
+
+**Nothing acts on its advice yet.** When it says shutdown, the tool prints `WOULD SHUT DOWN (not
+enabled)`. Turning that into an action is a decision, because it is the one feature here that
+powers the machine off:
+
+- **How:** a clean `systemctl poweroff` through logind, or a delayed `shutdown +N` that can be
+  cancelled if mains returns. The delayed form gives a window to cancel; the policy already
+  cancels its own advice the moment mains returns.
+- **Gating:** only in `full` mode, as the mode docs already say for power actions.
+- **Where:** in `argond`, which means `argond` must own the UPS serial port — so the vendor's
+  `argonupsrtcd` has to be retired on that machine, not merely stopped for a test.
+- **Notice:** a desktop notification or wall message before acting.
+
+My recommendation: a delayed, cancellable shutdown, `full` mode only, with a notification.
+
+
 
 GPLv3 on a *library* prevents any permissively-licensed Rust project depending on it. If
 `argon-proto` is meant to be the community's Argon protocol crate, that materially limits it.

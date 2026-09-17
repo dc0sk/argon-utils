@@ -92,6 +92,26 @@ port = "auto"
 
 poll_interval_s = 10
 
+# Battery policy. These classify readings and decide when shutdown is ADVISED; nothing acts on
+# the advice yet.
+#
+# Deliberately higher than the vendor's 5%: a fuel gauge's estimate is least trustworthy near
+# empty, which is exactly where a shutdown threshold sits.
+low_percent = 20
+critical_percent = 10
+
+# While still on battery, a reading must rise this far above a threshold before the level
+# steps back up, so a reading bouncing between 9% and 10% does not flap.
+recover_margin = 5
+
+# Consecutive critical readings before "critical". One corrupt byte on a serial link must not
+# be able to power the machine off. Minimum 1.
+confirmations = 2
+
+# No shutdown is advised in the first two minutes after boot: shutting down straight after
+# booting on a near-empty battery loops if power is flapping.
+min_uptime_s = 120
+
 [telemetry]
 # Serve Prometheus metrics at http://<listen>/metrics.
 enabled = false

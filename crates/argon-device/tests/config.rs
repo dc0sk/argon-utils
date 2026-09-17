@@ -204,3 +204,26 @@ fn the_shipped_example_config_is_valid() {
         "the example must ship in read-only mode"
     );
 }
+
+#[test]
+fn battery_policy_thresholds_are_validated() {
+    // critical at or above low would make "low" unreachable.
+    let err = Config::from_toml("[ups]\nlow_percent = 10\ncritical_percent = 15\n").unwrap_err();
+    assert!(
+        format!("{err}").contains("critical_percent below low_percent"),
+        "{err}"
+    );
+
+    // Zero confirmations would act on a single glitched reading.
+    let err = Config::from_toml("[ups]\nconfirmations = 0\n").unwrap_err();
+    assert!(format!("{err}").contains("single reading"), "{err}");
+}
+
+#[test]
+fn the_default_ups_settings_match_the_policy_defaults() {
+    // Two sources of defaults that must not drift apart.
+    assert_eq!(
+        Config::default().ups.policy(),
+        argon_proto::ups::policy::PolicyConfig::default()
+    );
+}

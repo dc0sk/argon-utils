@@ -164,14 +164,44 @@ pub struct UpsConfig {
     pub port: String,
     /// Seconds between polls.
     pub poll_interval_s: u64,
+    /// At or below this percentage on battery, the level is "low".
+    pub low_percent: u8,
+    /// At or below this percentage on battery, the level becomes "critical" once confirmed.
+    pub critical_percent: u8,
+    /// How far a reading must rise above a threshold, still on battery, to step back up.
+    pub recover_margin: u8,
+    /// Consecutive critical readings required before "critical".
+    pub confirmations: u8,
+    /// No shutdown is advised until the machine has been up this many seconds.
+    pub min_uptime_s: u64,
 }
 
 impl Default for UpsConfig {
     fn default() -> Self {
+        let p = argon_proto::ups::policy::PolicyConfig::default();
         Self {
             source: "serial".to_owned(),
             port: "auto".to_owned(),
             poll_interval_s: 10,
+            low_percent: p.low_percent,
+            critical_percent: p.critical_percent,
+            recover_margin: p.recover_margin,
+            confirmations: p.confirmations,
+            min_uptime_s: p.min_uptime.as_secs(),
+        }
+    }
+}
+
+impl UpsConfig {
+    /// The battery policy configuration these settings describe.
+    #[must_use]
+    pub const fn policy(&self) -> argon_proto::ups::policy::PolicyConfig {
+        argon_proto::ups::policy::PolicyConfig {
+            low_percent: self.low_percent,
+            critical_percent: self.critical_percent,
+            recover_margin: self.recover_margin,
+            confirmations: self.confirmations,
+            min_uptime: std::time::Duration::from_secs(self.min_uptime_s),
         }
     }
 }
@@ -272,6 +302,20 @@ impl Config {
             });
         }
 
+        if let Err(e) = self.ups.policy().validate() {
+            return Err(ConfigError::BadValue {
+                key: "ups",
+                got: format!(
+                    "low_percent={}, critical_percent={}, recover_margin={}, confirmations={}",
+                    self.ups.low_percent,
+                    self.ups.critical_percent,
+                    self.ups.recover_margin,
+                    self.ups.confirmations
+                ),
+                expected: policy_expectation(e),
+            });
+        }
+
         if !matches!(self.ups.source.as_str(), "serial" | "hid" | "none") {
             return Err(ConfigError::BadValue {
                 key: "ups.source",
@@ -312,6 +356,19 @@ impl Config {
         }
 
         Ok(())
+    }
+}
+
+/// What a rejected battery policy needed instead, for the error message.
+const fn policy_expectation(e: argon_proto::ups::policy::PolicyError) -> &'static str {
+    use argon_proto::ups::policy::PolicyError;
+    match e {
+        PolicyError::CriticalNotBelowLow => "critical_percent below low_percent",
+        PolicyError::OutOfRange => "percentages within 0..=100",
+        PolicyError::NoConfirmations => {
+            "confirmations of at least 1; 0 would act on a single reading"
+        }
+        PolicyError::NoMargin => "recover_margin of at least 1; 0 lets a reading flap",
     }
 }
 
