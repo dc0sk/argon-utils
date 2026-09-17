@@ -1,0 +1,59 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+set -e
+
+RECORD=/var/lib/argon-utils/retired-units
+
+#DEBHELPER#
+
+case "$1" in
+remove|purge)
+    # A poweroff argond scheduled outlives argond on purpose: a critical battery does not
+    # stop being critical because the daemon stopped. Removing the package is exactly when
+    # nobody is watching for it, so say so loudly rather than cancelling it silently --
+    # cancelling on the operator's behalf could be the thing that powers off a machine with
+    # an empty battery and no clean shutdown.
+    pending="$(busctl get-property org.freedesktop.login1 /org/freedesktop/login1 \
+        org.freedesktop.login1.Manager ScheduledShutdown 2>/dev/null || true)"
+    case "$pending" in
+    *poweroff*)
+        echo "argon-utils: WARNING: a poweroff is still scheduled: $pending" >&2
+        echo "argon-utils: cancel it with 'shutdown -c' if that is not what you want." >&2
+        ;;
+    esac
+
+    # Put the vendor's UPS daemons back the way they were found at install time. A unit that
+    # was already disabled before argon-utils arrived stays disabled.
+    if [ -f "$RECORD" ]; then
+        while read -r unit state active; do
+            [ -n "${unit:-}" ] || continue
+            if [ "$state" = enabled ]; then
+                systemctl enable "$unit" >/dev/null 2>&1 || true
+            fi
+            if [ "$active" = active ]; then
+                echo "argon-utils: restoring $unit"
+                deb-systemd-invoke start "$unit" >/dev/null 2>&1 || true
+            fi
+        done < "$RECORD"
+        rm -f "$RECORD"
+    fi
+
+    rm -rf /run/argon-utils
+    rmdir /var/lib/argon-utils 2>/dev/null || true
+    ;;
+esac
+
+case "$1" in
+purge)
+    rm -f /etc/argon-utils/config.toml
+    rmdir /etc/argon-utils 2>/dev/null || true
+    if getent passwd argon >/dev/null; then
+        deluser --system --quiet argon >/dev/null 2>&1 || true
+    fi
+    if getent group argon >/dev/null; then
+        delgroup --system --quiet argon >/dev/null 2>&1 || true
+    fi
+    ;;
+esac
+
+exit 0

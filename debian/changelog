@@ -1,0 +1,10 @@
+argon-utils (0.1.0) unstable; urgency=medium
+
+  * Initial package: the argond system service, argonctl, the UPS udev
+    rules and polkit rule, and the notification agent's autostart entry.
+  * Ships mode = "read-only" deliberately: installing must not arm the
+    low-battery poweroff. Set mode = "full" in /etc/argon-utils/config.toml.
+  * Records and disables the vendor's UPS daemons, which cannot share the
+    UPS serial port, and restores them on removal.
+
+ -- Simon Keimer <dc0sk@mailbox.org>  Thu, 17 Sep 2026 20:30:08 +0200

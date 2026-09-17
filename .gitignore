@@ -9,3 +9,12 @@
 fuzz/target
 fuzz/corpus
 fuzz/artifacts
+
+# Debian package build artifacts. The source package (debian/control, rules, maintainer
+# scripts) is tracked; everything dpkg-buildpackage generates underneath it is not.
+/debian/.debhelper/
+/debian/argon-utils/
+/debian/files
+/debian/debhelper-build-stamp
+/debian/*.substvars
+/debian/*.debhelper

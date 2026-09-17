@@ -1,0 +1,46 @@
+#!/usr/bin/make -f
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Prefer a rustup toolchain if the builder has one. rust-toolchain.toml pins 1.95.0, but only
+# rustup's shims honour it: Debian's /usr/bin/cargo ignores the file entirely. Putting
+# ~/.cargo/bin first also sidesteps Debian's rust-clippy package, whose /usr/bin/cargo-clippy
+# shadows rustup's shim and then fails with "can't find crate for core".
+export PATH := $(HOME)/.cargo/bin:$(PATH)
+
+# --locked so the package is built from the committed Cargo.lock, and --offline so a package
+# build cannot quietly pull a different dependency version off the network.
+CARGO_FLAGS = --release --locked --offline
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	cargo build $(CARGO_FLAGS) -p argon-daemon -p argon-cli
+
+# Skipped automatically when DEB_BUILD_OPTIONS contains nocheck.
+override_dh_auto_test:
+	cargo test --locked --offline --workspace
+
+override_dh_auto_clean:
+	rm -rf debian/argon-utils
+
+override_dh_auto_install:
+	install -D -m 0755 target/release/argond    debian/argon-utils/usr/bin/argond
+	install -D -m 0755 target/release/argonctl  debian/argon-utils/usr/bin/argonctl
+
+	install -D -m 0644 packaging/systemd/argond.service \
+		debian/argon-utils/usr/lib/systemd/system/argond.service
+
+# Package-provided rules belong under /usr, leaving /etc free for the administrator to
+# override without fighting dpkg over a conffile.
+	install -D -m 0644 packaging/udev/60-argon-utils.rules \
+		debian/argon-utils/usr/lib/udev/rules.d/60-argon-utils.rules
+	install -D -m 0644 packaging/polkit/50-argon-utils.rules \
+		debian/argon-utils/usr/share/polkit-1/rules.d/50-argon-utils.rules
+
+# These two are conffiles on purpose: the config carries the operator's thresholds and mode,
+# and the autostart entry is the kind of thing a desktop user disables locally.
+	install -D -m 0644 packaging/config/config.toml \
+		debian/argon-utils/etc/argon-utils/config.toml
+	install -D -m 0644 packaging/xdg/argon-notify-agent.desktop \
+		debian/argon-utils/etc/xdg/autostart/argon-notify-agent.desktop

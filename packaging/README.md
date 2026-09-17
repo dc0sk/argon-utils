@@ -2,7 +2,7 @@
 project: argon-utils
 doc: packaging/README
 status: living
-last_updated: 2026-09-15
+last_updated: 2026-09-17
 ---
 
 # Packaging
@@ -76,3 +76,73 @@ The daemon only powers the machine off with `mode = "full"`, and only when the v
 daemons (`argonupsrtcd`, `argononeupsd`) are not running; otherwise it logs what it would
 do. The Raspberry Pi desktop's labwc session runs `lxsession-xdg-autostart`, which is what
 starts the agent (checked on the development machine).
+
+
+## Building and installing the Debian package
+
+The repo carries a native Debian source package in [`debian/`](../debian), so the normal
+tooling applies:
+
+```sh
+dpkg-buildpackage -b -us -uc          # runs the test suite as part of the build
+sudo apt install ../argon-utils_0.1.0_arm64.deb
+```
+
+`apt install` on a local file rather than `dpkg -i` so dependencies are resolved. The build
+uses `--locked --offline`, so it builds from the committed `Cargo.lock` and cannot quietly pull
+a different dependency version off the network, and it prefers a rustup toolchain because
+`rust-toolchain.toml` pins 1.95.0 and Debian's `/usr/bin/cargo` ignores that file.
+
+Where things land, and why:
+
+| Path | Contents |
+|---|---|
+| `/usr/bin/argond`, `/usr/bin/argonctl` | the daemon and the CLI |
+| `/usr/lib/systemd/system/argond.service` | the unit, enabled and started by dpkg |
+| `/usr/lib/udev/rules.d/60-argon-utils.rules` | package-provided rules; `/etc/udev/rules.d` stays free for your overrides |
+| `/usr/share/polkit-1/rules.d/50-argon-utils.rules` | likewise: `/etc/polkit-1/rules.d` takes precedence if you need to change it |
+| `/etc/argon-utils/config.toml` | **conffile** -- your edits survive upgrades |
+| `/etc/xdg/autostart/argon-notify-agent.desktop` | **conffile** -- the notification agent, from your next login |
+
+### Installing does not arm anything
+
+The package ships `mode = "read-only"`, and `postinst` says so. In that mode `argond`
+monitors the UPS, publishes `/run/argon-utils/ups.state` and logs what it *would* do, but it
+changes no device state and will **not** power the machine off on a critical battery.
+
+To arm the low-battery poweroff:
+
+```sh
+sudo sed -i 's/^mode = "read-only"/mode = "full"/' /etc/argon-utils/config.toml
+sudo systemctl restart argond
+journalctl -u argond -n 20 --no-pager     # expect: ups: shutdown ENABLED
+```
+
+Because the config is a conffile, that edit survives package upgrades -- and dpkg will ask
+before touching it.
+
+### What installation changes on the machine
+
+Two things beyond dropping files in place, both in `postinst`:
+
+- **It creates the `argon` system user** (no home, no shell). The daemon runs as that user and
+  gets its device access from the `i2c`, `gpio` and `dialout` groups named in the unit. If any
+  of those groups are missing, `postinst` warns rather than leaving you to decode a systemd
+  failure.
+- **It disables the vendor's UPS daemons** `argononeupsd` and `argonupsrtcd`, because two
+  readers on one CDC-ACM port split the byte stream and both desynchronise mid-frame. This
+  cannot be a dpkg `Conflicts`: the vendor stack is not a dpkg package, it is a curl-to-shell
+  installer that writes into `/etc/argon`. Their enabled/active state is recorded in
+  `/var/lib/argon-utils/retired-units` first, and `postrm` restores exactly that.
+
+### Removing it
+
+```sh
+sudo apt remove argon-utils     # restores the vendor UPS daemons, keeps your config
+sudo apt purge  argon-utils     # also removes the config, the argon user and the group
+```
+
+`postrm` warns if a poweroff is still scheduled when the package goes away. That is deliberate:
+`argond` leaves a pending shutdown in place when it stops, because a critical battery does not
+stop being critical, and cancelling it on your behalf could be the thing that lets the UPS cut
+power without a clean shutdown.

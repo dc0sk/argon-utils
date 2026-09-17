@@ -1,0 +1,30 @@
+Source: argon-utils
+Section: admin
+Priority: optional
+Maintainer: Simon Keimer <dc0sk@mailbox.org>
+Build-Depends: debhelper-compat (= 13),
+               cargo,
+               rustc
+Standards-Version: 4.7.0
+Homepage: https://github.com/dc0sk/argon-utils
+Rules-Requires-Root: no
+
+Package: argon-utils
+Architecture: any
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         adduser,
+         udev
+Recommends: polkitd | policykit-1
+Description: fan, button and UPS daemon for Argon40 Raspberry Pi cases
+ argon-utils replaces the vendor's Python stack for Argon40 enclosures and
+ the Argon PWR UPS with a Rust implementation: a daemon (argond), a command
+ line tool (argonctl) and a desktop notification agent.
+ .
+ The daemon monitors the UPS over its USB serial link and, when the battery is
+ confirmed critical, schedules a delayed poweroff that restoring mains cancels.
+ It also drives the case fan on models that have an Argon MCU, and reports the
+ kernel-controlled fan on models that do not, such as the ONE V5 with a Pi 5.
+ .
+ Nothing that changes device state happens until the operator sets a mode other
+ than read-only in /etc/argon-utils/config.toml.

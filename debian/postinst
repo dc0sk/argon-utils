@@ -1,0 +1,84 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+set -e
+
+VENDOR_UPS_UNITS="argononeupsd.service argonupsrtcd.service"
+RECORD=/var/lib/argon-utils/retired-units
+
+case "$1" in
+configure)
+    # --- the service account ---------------------------------------------------------
+    # A system user with no home and no login: the daemon's device access comes from the
+    # supplementary groups named in argond.service, and it needs nothing else.
+    if ! getent passwd argon >/dev/null; then
+        adduser --system --group --home /nonexistent --no-create-home \
+            --shell /usr/sbin/nologin --quiet argon
+    fi
+
+    # The unit names i2c, gpio and dialout as supplementary groups. systemd refuses to
+    # start a service whose supplementary group does not exist, and the failure message
+    # does not explain why, so say it here where it can be understood.
+    missing=
+    for g in i2c gpio dialout; do
+        getent group "$g" >/dev/null || missing="$missing $g"
+    done
+    if [ -n "$missing" ]; then
+        echo "argon-utils: WARNING: these groups do not exist on this system:$missing" >&2
+        echo "argon-utils: argond will fail to start until they exist, or until you edit" >&2
+        echo "argon-utils: SupplementaryGroups= in /usr/lib/systemd/system/argond.service." >&2
+    fi
+
+    # --- retire the vendor's UPS daemons ---------------------------------------------
+    # Not a dpkg Conflicts, because the vendor stack is not a dpkg package: it is installed
+    # by a curl-to-shell script into /etc/argon. So it is handled here instead.
+    #
+    # This is necessary rather than tidy-minded: two readers on one CDC-ACM port split the
+    # byte stream and both desynchronise mid-frame, silently. What is disabled is recorded
+    # so removal can put back exactly what was there, not a guess.
+    mkdir -p /var/lib/argon-utils
+    if [ ! -f "$RECORD" ]; then
+        : > "$RECORD"
+        for u in $VENDOR_UPS_UNITS; do
+            systemctl list-unit-files "$u" >/dev/null 2>&1 || continue
+            state="$(systemctl is-enabled "$u" 2>/dev/null || true)"
+            active="$(systemctl is-active "$u" 2>/dev/null || true)"
+            printf '%s %s %s\n' "$u" "${state:-unknown}" "${active:-unknown}" >> "$RECORD"
+            if [ "$state" = enabled ] || [ "$active" = active ]; then
+                echo "argon-utils: disabling $u (was ${state:-unknown}/${active:-unknown});" \
+                     "it cannot share the UPS serial port with argond"
+                deb-systemd-invoke stop "$u" >/dev/null 2>&1 || true
+                systemctl disable "$u" >/dev/null 2>&1 || true
+            fi
+        done
+    fi
+
+    # --- udev ---------------------------------------------------------------------------
+    # Reloaded here, after the argon group exists: the rules use GROUP="argon", and a rule
+    # naming a group that does not exist yet leaves the device owned by root.
+    if command -v udevadm >/dev/null 2>&1; then
+        udevadm control --reload >/dev/null 2>&1 || true
+        udevadm trigger --subsystem-match=tty --subsystem-match=hidraw >/dev/null 2>&1 || true
+    fi
+
+    # --- what the operator still has to decide ----------------------------------------
+    mode="$(sed -n 's/^mode *= *"\(.*\)"/\1/p' /etc/argon-utils/config.toml 2>/dev/null | head -1)"
+    if [ "$mode" = "read-only" ]; then
+        echo "argon-utils: installed in read-only mode: it monitors and publishes status,"
+        echo "argon-utils: and logs what it would do, but changes nothing and will NOT power"
+        echo "argon-utils: the machine off on a critical battery."
+        echo "argon-utils: to arm that, set mode = \"full\" in /etc/argon-utils/config.toml"
+        echo "argon-utils: and run: systemctl restart argond"
+    fi
+    ;;
+
+abort-upgrade|abort-remove|abort-deconfigure) ;;
+
+*)
+    echo "postinst called with unknown argument '$1'" >&2
+    exit 1
+    ;;
+esac
+
+#DEBHELPER#
+
+exit 0

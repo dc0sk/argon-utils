@@ -2,7 +2,9 @@
 //
 // Lets argond schedule and cancel a poweroff when the UPS battery is critical.
 //
-// Install to /etc/polkit-1/rules.d/.
+// The Debian package installs this to /usr/share/polkit-1/rules.d/, which is where a
+// package's rules belong; /etc/polkit-1/rules.d/ is for local overrides and takes precedence.
+// Installing by hand, use /etc/polkit-1/rules.d/.
 //
 // Why a rule is needed: argond runs as the unprivileged "argon" system user, outside any
 // login session. On Debian 13 polkit lets an active session power off without asking, but

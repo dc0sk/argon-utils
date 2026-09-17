@@ -1,0 +1,16 @@
+# The vendor's UPS daemons are NOT dpkg-managed: the Argon40 installer is a curl-to-shell
+# script that drops systemd units and Python into /etc/argon. deb-systemd-helper and
+# deb-systemd-invoke maintain dpkg's enablement state for units shipped BY A PACKAGE, so they
+# are the wrong tool for units no package owns -- and a dpkg Conflicts cannot express this
+# either. Querying and disabling them with systemctl is the only correct mechanism, and what
+# was disabled is recorded in /var/lib/argon-utils/retired-units so removal restores it.
+#
+# Two readers on one CDC-ACM port split the byte stream and both desynchronise mid-frame, so
+# this is a correctness requirement, not tidiness.
+argon-utils: maintainer-script-calls-systemctl [postinst:*]
+argon-utils: maintainer-script-calls-systemctl [postrm:*]
+
+# Not yet written. Both binaries have complete --help output, and the operator-facing
+# documentation is in /usr/share/doc/argon-utils. Tracked in docs/project/OPEN.md.
+argon-utils: no-manual-page [usr/bin/argond]
+argon-utils: no-manual-page [usr/bin/argonctl]
