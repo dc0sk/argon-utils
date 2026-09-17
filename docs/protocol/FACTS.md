@@ -124,8 +124,8 @@ not contend with the serial port.
 
 | ID | Fact | Status | Source |
 |---|---|---|---|
-| `ARGON-OLED-ADDR` | SSD1306-class panel at I2C `0x3c`, 128×64 | `inferred` | — |
-| `ARGON-OLED-INIT` | Power-on initialisation sequence | `documented` | [DS-SSD1306] |
+| `ARGON-OLED-ADDR` | SSD1306 panel at I2C `0x3c`, 128×64, normal orientation | `observed` | OBS-2026-09-17-oled-bring-up |
+| `ARGON-OLED-INIT` | Power-on initialisation sequence | `documented` [DS-SSD1306], confirmed working on hardware | OBS-2026-09-17-oled-bring-up |
 | `ARGON-RTC-EON-ADDR` | EON carries a PCF8563 at I2C `0x51` | `inferred` | — |
 | `ARGON-RTC-EON-REGS` | PCF8563 register layout and BCD encoding | `documented` | [DS-PCF8563] |
 

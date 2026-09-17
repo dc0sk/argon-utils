@@ -78,7 +78,7 @@ Hardware currently in reach, and what each would need:
 |---|---|---|
 | ONE V5 + Pi 5 | primary target, working | nothing |
 | PWR UPS | **serial protocol confirmed on hardware** | nothing — ready to build on |
-| OLED | confirmed present at `0x3c`, driver written | T7 |
+| OLED | **working on hardware** (T7, 2026-09-17) | nothing — ready to build on |
 | ONE V2 + Pi 4 | untouched | a session with that machine |
 | Zigbee module | detected; health probe not built | a decision on how far to go |
 | EON, ONE UP, NEO 5, Fan HAT | no hardware | would ship untested, or not at all |
@@ -94,7 +94,6 @@ unblock rather than by effort:
 | | Task | Unblocks | Effort |
 |---|---|---|---|
 | **T3** | 30 button presses — **on the Pi 4 / ONE V2** | real pulse thresholds; the V5 has none | five minutes |
-| **T7** | OLED bring-up + photo | the display feature | ten minutes |
 | **T6** | IR remote test | whether IR exists on the V5 at all | five minutes |
 | **T9** | `0xFF` power-cut | power-cut arming | 🔴 deferred; Pi 4 first, never over SSH |
 

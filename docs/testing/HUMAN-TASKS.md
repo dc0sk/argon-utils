@@ -236,7 +236,16 @@ Point the Argon remote at the case and press buttons.
 
 ---
 
-## 🟡 T7 — OLED bring-up
+## ✅ T7 — OLED bring-up — **DONE 2026-09-17**
+
+> The panel showed the test pattern correctly: normal orientation (no `--flip`), the full
+> border, and no SH1106 shift. So it is a 128x64 SSD1306 at `0x3c`, and the init sequence
+> written from the datasheet works. The evidence is the user's visual check; no photo was
+> committed. See
+> [OBS-2026-09-17-oled-bring-up](../protocol/captures/OBS-2026-09-17-oled-bring-up.md).
+
+<details><summary>Original task</summary>
+
 
 **Unblocks:** the display feature.
 
@@ -270,7 +279,9 @@ sudo systemctl start argononed
 **Photo:** any quality that shows the text and the corner box. Drop it in
 `docs/protocol/captures/` (for example `oled-t7.jpg`), or tell me where it is.
 
-**Result:** _(not yet done)_
+</details>
+
+**Result: works. SSD1306 128x64 at `0x3c`, normal orientation.**
 
 ---
 
