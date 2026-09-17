@@ -63,12 +63,34 @@ The descriptor parser is kept: it is correct, validated, and costs nothing to re
 use is gated behind actually receiving data, so if a later firmware activates the interface
 the capability appears without further work.
 
-## The one test not yet done
+## The state-change test — done 2026-09-17, and it confirms the finding
 
-HID Power Devices commonly send Input reports **on state change** rather than on a timer.
-Every probe above was taken while the UPS sat stable on mains at 93%. Removing mains power
-would force a state transition, and is the decisive test of whether the interface is truly
-dormant or merely quiet.
+HID Power Devices commonly send Input reports **on state change** rather than on a timer, so
+every probe above being taken with the UPS stable on mains left one way out: that the
+interface works and simply had nothing to say.
 
-That needs someone at the machine. Until it is done, this document's conclusion is
-"dormant while idle", not "dormant unconditionally".
+Mains was physically disconnected while `argonctl ups --wait 60` listened, with the vendor's
+serial daemon watched in parallel as an independent check that the transition really happened.
+
+| Channel | Observation |
+|---|---|
+| Serial (vendor daemon) | `Power:Battery 93%` — the transition was seen immediately and held for the full window |
+| HID Input reports | **none, across 60 s spanning the transition** |
+| HID Feature reads, while on battery | still 1 byte, the echoed report ID, no data |
+
+The transition demonstrably occurred, and the HID interface said nothing about it. That was
+the last scenario in which the interface could have been working.
+
+**Conclusion, now unconditional: on firmware 113 the Argon PWR UPS publishes a complete and
+valid USB HID Power Device descriptor and serves no data through it whatsoever.**
+
+### Consequences
+
+- The Argon-proprietary **serial protocol is the only UPS channel**. Task T4 is therefore not
+  an alternative route to the UPS feature; it is the only one.
+- Task **T8 is retired**. It asked whether the writable `RemainingCapacityLimit` survives a
+  UPS power cycle, which presupposed being able to read it back. There is nothing to
+  configure.
+- The HID reader stays, gated behind actually receiving data, so a later firmware that
+  implements the interface activates it with no further work. It cost little, and writing it
+  produced an independent validation of the descriptor parser against the kernel's.

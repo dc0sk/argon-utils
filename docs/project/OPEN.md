@@ -35,8 +35,9 @@ The project was planned around fan control. Two findings moved its centre of gra
 - On the ONE V5 with a Pi 5, **the fan is not ours** — there is no MCU at `0x1a`, and the
   kernel thermal governor drives the fan competently through `pwm-fan`. Taking it over costs
   the 110 °C critical trip.
-- The UPS's **HID interface is dormant** on firmware 113, so the Argon-proprietary serial
-  protocol is the only channel that returns live data.
+- The UPS's **HID interface is dormant** on firmware 113 — confirmed 2026-09-17 across a real
+  mains-removal transition — so the Argon-proprietary serial protocol is the only channel
+  that returns live data at all.
 
 What is left that nothing else does: the **UPS** (battery state, RTC, scheduled wake), the
 **OLED**, the **power button**, and **IR**. That is a coherent product, and arguably a more
@@ -92,12 +93,15 @@ unblock rather than by effort:
 |---|---|---|---|
 | **T4** | One hour with the UPS serial port | **the entire UPS feature**, and battery metrics | approval only; unattended after |
 | **T2** | Press the case button | whether we are fixing a vendor bug or matching behaviour | seconds |
-| **T1** | Unplug mains while listening | whether the HID channel is dormant or merely quiet | a minute |
 | **T3** | 30 button presses | real pulse thresholds, replacing values we do not trust | five minutes |
 | **T7** | OLED bring-up + photo | the display feature | ten minutes |
 | **T6** | IR remote test | whether IR exists on the V5 at all | five minutes |
-| **T8** | UPS threshold persistence | device-side low-battery threshold | blocked on T1 |
 | **T9** | `0xFF` power-cut | power-cut arming | 🔴 deferred; Pi 4 first, never over SSH |
 
-**T4 is the one that matters most.** It is an approval rather than a task, and everything
-about the UPS — the feature with the clearest reason to exist — waits behind it.
+**T4 is now the only route to the UPS feature**, not one of two. T1 closed the alternative on
+2026-09-17: the HID channel emitted nothing across a real mains-removal transition, so the
+serial protocol is the only thing that returns battery state. Everything about the UPS — the
+feature with the clearest reason to exist — waits behind that one approval.
+
+T8 was retired at the same time; it asked whether a writable HID threshold persists, which
+presupposed being able to read it back.

@@ -29,7 +29,18 @@ several conclusions in this project came from negative results.
 
 ---
 
-## 🟢 T1 — Does the UPS emit a HID report on state change?
+## ✅ T1 — Does the UPS emit a HID report on state change? — **DONE 2026-09-17: no**
+
+> Mains was disconnected while the HID listener ran, with the vendor's serial daemon watched
+> in parallel to confirm the transition really happened. Serial reported `Power:Battery 93%`
+> immediately; HID emitted **nothing** across 60 s, and feature reads still returned only the
+> echoed report ID. The HID interface is dormant unconditionally.
+>
+> **Consequence: the serial protocol is the only UPS channel, so T4 is now the only route to
+> the UPS feature rather than one of two.**
+
+<details><summary>Original task</summary>
+
 
 **Unblocks:** whether the HID interface is truly dormant, or merely quiet while idle. This is
 the last open question about `ARGON-UPS-HID-LIVE`.
@@ -48,7 +59,9 @@ sudo ./target/debug/argonctl ups --wait 45   # sudo IS needed here: /dev/hidraw0
 - Nothing appears → the interface is decorative on firmware 113. Confirms current findings
   and we stay on the serial protocol.
 
-**Result:** _(not yet done)_
+</details>
+
+**Result: no reports. HID confirmed dormant.**
 
 ---
 
@@ -198,7 +211,14 @@ performs a full init, so there is nothing there to copy even if we wanted to.
 
 ---
 
-## 🔴 T8 — Does the UPS low-battery threshold survive a power cycle?
+## ~~🔴 T8 — Does the UPS low-battery threshold survive a power cycle?~~ — **RETIRED**
+
+> Retired 2026-09-17. The question presupposed being able to read the writable HID
+> `RemainingCapacityLimit` back, and T1 established that the HID interface serves no data at
+> all. There is nothing to configure.
+
+<details><summary>Original task</summary>
+
 
 **Unblocks:** whether a device-side low-battery threshold is a real safety guarantee or only
 survives our daemon crashing.
@@ -210,7 +230,9 @@ T1 shows the interface works, this becomes important.
 Write a non-default value, fully depower the UPS, re-read. Rated 🔴 because fully depowering
 a UPS means the Pi loses power unless it is on separate mains.
 
-**Result:** _(blocked on T1)_
+</details>
+
+**Result: retired — the premise did not survive T1.**
 
 ---
 
