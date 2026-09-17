@@ -105,6 +105,21 @@ const LAST_PAGE: u8 = 7;
 const _: () = assert!(LAST_COLUMN as usize == WIDTH - 1);
 const _: () = assert!(LAST_PAGE as usize == PAGES - 1);
 
+/// Segment re-map and COM scan direction for normal or 180-degree-rotated mounting.
+///
+/// The init sequence assumes the common orientation (`0xA1`, `0xC8`). A module mounted the
+/// other way up needs `0xA0`, `0xC0`. Send this **before** flushing a frame: per §10.1.6 the
+/// segment re-map only affects data written after it, so sending it afterwards leaves the
+/// current image half-transformed until the next flush.
+#[must_use]
+pub const fn orientation(rotated_180: bool) -> [u8; 2] {
+    if rotated_180 {
+        [0xA0, 0xC0]
+    } else {
+        [0xA1, 0xC8]
+    }
+}
+
 /// Turns the display on or off without losing its contents (§10.1.12).
 #[must_use]
 pub const fn power(on: bool) -> u8 {

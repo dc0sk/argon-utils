@@ -180,13 +180,9 @@ fn resolve_bus(config: &Config) -> std::result::Result<String, String> {
     if config.mcu.bus != "auto" {
         return Ok(config.mcu.bus.clone());
     }
-    let buses = argon_hal::discovery::i2c_buses().map_err(|e| e.to_string())?;
-    let chosen = buses
-        .iter()
-        .find(|b| b.name.contains("DesignWare") || b.name.contains("bcm2835"))
-        .or_else(|| buses.first())
-        .ok_or_else(|| "no I2C bus found; is dtparam=i2c_arm=on set?".to_owned())?;
-    Ok(chosen.dev.display().to_string())
+    argon_hal::discovery::header_i2c_bus()
+        .map(|p| p.display().to_string())
+        .ok_or_else(|| "no I2C bus found; is dtparam=i2c_arm=on set?".to_owned())
 }
 
 /// Prints the curve that would be applied.

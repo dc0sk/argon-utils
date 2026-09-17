@@ -238,15 +238,37 @@ Point the Argon remote at the case and press buttons.
 
 ## 🟡 T7 — OLED bring-up
 
-**Unblocks:** the display feature. Your OLED module is installed but `enabled=N`.
+**Unblocks:** the display feature.
 
-**Good news:** the panel is confirmed present. A quick-write scan of `i2c-1` shows a device
-at `0x3c`, which is the SSD1306. It is in fact the *only* thing on that bus besides the audio
-DAC — there is no fan MCU.
+**What this touches, verified before writing these steps:** only I2C address `0x3c`. The
+transport is bound to that address and refuses a write to anything else. It stops
+`argononed` for the duration, which has no stop hook and, on a ONE V5 with a Pi 5, no hardware
+to drive. **Nothing here involves power or the button, so it cannot shut the machine down.**
 
-Needs a photograph of the panel as evidence, since correct rendering cannot be verified in
-CI. The init sequence will be written from the SSD1306 datasheet — the vendor's code never
-performs a full init, so there is nothing there to copy even if we wanted to.
+```sh
+cd ~/git/argon-utils
+./target/debug/argonctl oled              # optional: the pattern, drawn in the terminal
+sudo systemctl stop argononed
+./target/debug/argonctl oled --write      # no sudo: you are in the i2c group
+#   ... look at the panel, take the photo ...
+./target/debug/argonctl oled --off        # blank it; a static image burns an OLED in
+sudo systemctl start argononed
+```
+
+**What you should see:** "argon-utils T7" and three more lines of text, a solid box in the
+**top-left** corner, a one-pixel border round the whole edge, and a bar about 60% full.
+
+| What the panel shows | What it means | Next |
+|---|---|---|
+| Exactly the above | Working | Photo, then `--off` |
+| Upside down, box bottom-right | Mounted rotated | `--write --flip`, say which looked right |
+| Text mirrored, box top-right | One axis flipped | Tell me; needs a single-axis remap |
+| Shifted ~2 px, junk along one edge | An SH1106, not an SSD1306 | Tell me; different memory layout |
+| Border missing on an edge | Not a 128x64 panel | Tell me what's cut off |
+| Nothing at all | Init or wiring problem | Paste the command's output; check `argonctl doctor` still lists `0x3c` |
+
+**Photo:** any quality that shows the text and the corner box. Drop it in
+`docs/protocol/captures/` (for example `oled-t7.jpg`), or tell me where it is.
 
 **Result:** _(not yet done)_
 

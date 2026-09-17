@@ -113,20 +113,14 @@ fn run(cli: &Cli) -> Result<ExitCode, Box<dyn std::error::Error>> {
     }
 }
 
-/// Resolves the I2C bus path from configuration.
+/// Resolves the I2C bus path from configuration, by adapter name rather than by number.
 fn resolve_bus(config: &Config) -> Result<String, Box<dyn std::error::Error>> {
     if config.mcu.bus != "auto" {
         return Ok(config.mcu.bus.clone());
     }
-    // Resolve by adapter name, not by number: numbering depends on probe order and on which
-    // overlays are loaded.
-    let buses = argon_hal::discovery::i2c_buses()?;
-    let chosen = buses
-        .iter()
-        .find(|b| b.name.contains("DesignWare") || b.name.contains("bcm2835"))
-        .or_else(|| buses.first())
-        .ok_or("no I2C bus found; is dtparam=i2c_arm=on set in config.txt?")?;
-    Ok(chosen.dev.display().to_string())
+    argon_hal::discovery::header_i2c_bus()
+        .map(|p| p.display().to_string())
+        .ok_or_else(|| "no I2C bus found; is dtparam=i2c_arm=on set in config.txt?".into())
 }
 
 /// A bus that accepts writes and discards them, for read-only mode.

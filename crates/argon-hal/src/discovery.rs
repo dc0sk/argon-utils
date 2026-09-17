@@ -310,3 +310,18 @@ pub fn pi_power_button() -> Option<PathBuf> {
     }
     None
 }
+
+/// The I2C bus wired to the 40-pin header, found by adapter name rather than by number.
+///
+/// Bus numbering depends on probe order and on which overlays are loaded. On a Pi 5 the
+/// header bus is the RP1's `Synopsys DesignWare I2C adapter`; on earlier Pis it is
+/// `bcm2835`. Falls back to the first bus found.
+#[must_use]
+pub fn header_i2c_bus() -> Option<PathBuf> {
+    let buses = i2c_buses().ok()?;
+    buses
+        .iter()
+        .find(|b| b.name.contains("DesignWare") || b.name.contains("bcm2835"))
+        .or_else(|| buses.first())
+        .map(|b| b.dev.clone())
+}
