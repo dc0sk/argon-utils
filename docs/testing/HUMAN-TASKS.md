@@ -445,6 +445,55 @@ it did.
 
 ---
 
+## 🟡 T13 — Does the polkit rule work for the packaged daemon?
+
+**Unblocks:** trusting the low-battery poweroff when `argond` runs as the `argon` system user
+rather than inside your desktop session.
+
+T12 did **not** cover this. It ran `argond` as your own user inside an active login session,
+where polkit allows a poweroff with no rule at all. The packaged service runs as `argon`,
+outside any session, and needs `packaging/polkit/50-argon-utils.rules`. Which actions are
+involved was verified with `pkaction --verbose` (scheduling with other sessions present checks
+`power-off-multiple-sessions`; with none, `power-off`); what is untested is whether the rule
+matches for a system-bus caller that is not in a session.
+
+### Step 1 — ask polkit, without scheduling anything
+
+```sh
+sudo -u argon pkcheck --action-id org.freedesktop.login1.power-off --process $$
+echo "power-off: $?"
+sudo -u argon pkcheck --action-id org.freedesktop.login1.power-off-multiple-sessions --process $$
+echo "power-off-multiple-sessions: $?"
+```
+
+Exit status `0` means authorised. This asks the question without arming anything, so it is
+safe to run at any time.
+
+### Step 2 — the real thing, cheaply
+
+Only worth doing if step 1 says yes and you want the end-to-end proof:
+
+```sh
+sudo -u argon shutdown --poweroff +60 "argon-utils polkit test"
+busctl get-property org.freedesktop.login1 /org/freedesktop/login1 \
+    org.freedesktop.login1.Manager ScheduledShutdown     # expect: poweroff, ~60 min out
+sudo -u argon shutdown -c                                # the cancel path, as the argon user
+busctl get-property org.freedesktop.login1 /org/freedesktop/login1 \
+    org.freedesktop.login1.Manager ScheduledShutdown     # expect: "" 18446744073709551615
+```
+
+**If the last command still shows a poweroff, cancel it as root: `sudo shutdown -c`.** An hour
+is deliberately long so there is no time pressure.
+
+### Step 3 — the whole chain, packaged
+
+Repeat T12 against the installed service instead of a hand-started binary. Two differences
+matter: the config must be under `/etc/argon-utils/` (the unit sets `ProtectHome=yes`, so a
+config in `$HOME` is invisible to it), and the daemon must be in `mode = "full"`.
+
+**Report:** the two exit statuses from step 1, and whether step 2's cancellation worked as the
+`argon` user.
+
 ## 📋 T11 — A new decision: should we control the fan at all on this machine?
 
 Raised by the finding above. On your Pi 5 the fan is driven by the kernel thermal governor
