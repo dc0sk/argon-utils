@@ -7,6 +7,9 @@ last_updated: 2026-09-15
 
 # Tasks that need a human at the machine
 
+> See [`../project/OPEN.md`](../project/OPEN.md) for the open decisions and for what each of
+> these unblocks. The Prometheus exporter is **deferred** — built and working, but parked.
+
 Everything here needs physical presence, a physical action, or a decision. Nothing else in
 this project is blocked on them — each is listed with what it unblocks, so they can be done
 in any order, whenever convenient.
