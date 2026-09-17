@@ -38,6 +38,22 @@ impl UnitState {
     pub fn is_active(&self) -> bool {
         self.state == "active" || self.state == "activating"
     }
+
+    /// Whether the state could not be determined.
+    ///
+    /// `systemctl` failing to run is not evidence that the vendor daemon is absent. Callers
+    /// that gate a write or a poweroff on contention must treat this like contention: the
+    /// safe answer to "is something else driving this hardware?" is "assume yes".
+    #[must_use]
+    pub fn is_unknown(&self) -> bool {
+        self.state == "unknown"
+    }
+
+    /// Whether this unit must be assumed to contend with us.
+    #[must_use]
+    pub fn contends(&self) -> bool {
+        self.is_active() || self.is_unknown()
+    }
 }
 
 /// Queries the vendor units' states.

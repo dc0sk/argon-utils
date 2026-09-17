@@ -3,6 +3,9 @@ Type=Application
 Name=argon-utils UPS notifications
 Comment=Shows desktop notifications when the UPS runs on battery or schedules a shutdown
 Exec=argonctl notify-agent
+# So the entry skips itself if the package was removed without purging: this file is a
+# conffile and survives `apt remove`, and lxsession-xdg-autostart honours TryExec.
+TryExec=/usr/bin/argonctl
 Terminal=false
 NoDisplay=true
 X-GNOME-Autostart-enabled=true

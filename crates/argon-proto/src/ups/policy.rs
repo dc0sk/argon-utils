@@ -14,6 +14,13 @@
 //!   should not be able to power the machine off.
 //! - **No advice without a fresh reading.** A failed or missing read is `Unknown`, and
 //!   `Unknown` never recommends shutdown, whatever the battery said before.
+//! - **A mains blip does not undo a confirmation.** The level follows the reading honestly --
+//!   a mains reading is reported as `OnMains` at once -- but the critical streak survives
+//!   until mains is confirmed by as many consecutive readings as the battery needed. A supply
+//!   flapping faster than the poll interval (a failing PSU, a bad socket, a generator) would
+//!   otherwise reset the streak on every blip, and the battery would empty into a hard power
+//!   cut with nothing ever confirmed. `Decision::confirmed_recovery` says which kind of mains
+//!   reading this is, so a caller can hold a placed poweroff until the recovery is real.
 //! - **Higher default thresholds.** The vendor shuts down at 5%. A percentage from a fuel
 //!   gauge is least trustworthy exactly there, so the defaults leave more margin.
 
@@ -81,6 +88,11 @@ pub struct Decision {
     pub changed_from: Option<Level>,
     /// What to do about it.
     pub advice: Advice,
+    /// Mains is present and has been for `confirmations` consecutive readings.
+    ///
+    /// Only this justifies undoing something done because the battery was critical. A single
+    /// mains reading is not enough: on a flapping supply it is followed by another outage.
+    pub confirmed_recovery: bool,
 }
 
 /// Thresholds and timings.
@@ -170,6 +182,9 @@ pub struct BatteryPolicy {
     known: Level,
     /// Consecutive readings at or below the critical threshold, on battery.
     critical_streak: u8,
+    /// Consecutive readings showing mains. Confirms a recovery the way `critical_streak`
+    /// confirms a critical battery.
+    mains_streak: u8,
     /// What was last reported, including `Unknown`.
     reported: Level,
 }
@@ -186,6 +201,7 @@ impl BatteryPolicy {
                 config,
                 known: Level::Unknown,
                 critical_streak: 0,
+                mains_streak: 0,
                 reported: Level::Unknown,
             }),
             Err(e) => Err(e),
@@ -209,6 +225,7 @@ impl BatteryPolicy {
                 // without consulting the streak; so a critical state steps down to Low and has
                 // to be confirmed again.
                 self.critical_streak = 0;
+                self.mains_streak = 0;
                 if self.known == Level::Critical {
                     self.known = Level::Low;
                 }
@@ -235,6 +252,8 @@ impl BatteryPolicy {
             level,
             changed_from: (level != previous).then_some(previous),
             advice,
+            confirmed_recovery: level == Level::OnMains
+                && self.mains_streak >= self.config.confirmations,
         }
     }
 
@@ -243,9 +262,17 @@ impl BatteryPolicy {
         let percent = o.percent.min(100);
 
         if o.source == PowerSource::Mains {
-            self.critical_streak = 0;
+            self.mains_streak = self.mains_streak.saturating_add(1);
+            // The streak is kept until mains is confirmed, so that one blip in a flapping
+            // supply does not send the confirmation count back to zero. The level itself is
+            // reported honestly: claiming Critical while mains is present would advise a
+            // shutdown at the moment power came back.
+            if self.mains_streak >= c.confirmations {
+                self.critical_streak = 0;
+            }
             return Level::OnMains;
         }
+        self.mains_streak = 0;
 
         if percent <= c.critical_percent {
             self.critical_streak = self.critical_streak.saturating_add(1);

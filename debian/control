@@ -14,6 +14,7 @@ Architecture: any
 Depends: ${shlibs:Depends},
          ${misc:Depends},
          adduser,
+         systemd-sysv | systemd,
          udev
 Recommends: polkitd | policykit-1
 Description: fan, button and UPS daemon for Argon40 Raspberry Pi cases

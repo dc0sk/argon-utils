@@ -163,6 +163,24 @@ fn set_safe(config: &Config, mode: Mode) -> ExitCode {
     };
 
     let mut mcu = Mcu::new(bus, Dialect::default());
+
+    // Probe before writing, exactly as argond does. This runs as the unit's ExecStopPost on
+    // every stop, and on a ONE V5 there is no MCU at 0x1a at all: without this it puts an
+    // unsolicited write on the header bus each time. ADR-0002 is explicit that a write to the
+    // wrong firmware at that address is destructive, so "nothing answered" must mean "write
+    // nothing", not "write anyway and log the error".
+    match mcu.is_present() {
+        Ok(true) => {}
+        Ok(false) => {
+            println!("no Argon MCU answers at 0x1a on {bus_path}; nothing to restore");
+            return ExitCode::SUCCESS;
+        }
+        Err(e) => {
+            eprintln!("argonctl: cannot probe {bus_path}: {e}");
+            return ExitCode::FAILURE;
+        }
+    }
+
     match mcu.set_fan(duty) {
         Ok(()) => {
             println!("fan set to {duty} on {bus_path}");

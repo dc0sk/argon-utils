@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 set -e
 
-RECORD=/var/lib/argon-utils/retired-units
+RECORD=/var/lib/argon-utils-retired/units
 
 #DEBHELPER#
 
@@ -27,25 +27,45 @@ remove|purge)
     if [ -f "$RECORD" ]; then
         while read -r unit state active; do
             [ -n "${unit:-}" ] || continue
+            # Only ever the units this package retires. The record is a file on disk, and a
+            # root script must not start whatever it happens to contain.
+            case "$unit" in
+            argononeupsd.service | argonupsrtcd.service) ;;
+            *)
+                echo "argon-utils: ignoring unexpected unit in $RECORD: $unit" >&2
+                continue
+                ;;
+            esac
+            # `disable` was used, not `mask`, so `enable` is the exact inverse.
             if [ "$state" = enabled ]; then
                 systemctl enable "$unit" >/dev/null 2>&1 || true
             fi
             if [ "$active" = active ]; then
                 echo "argon-utils: restoring $unit"
-                deb-systemd-invoke start "$unit" >/dev/null 2>&1 || true
+                systemctl start "$unit" >/dev/null 2>&1 || true
             fi
         done < "$RECORD"
         rm -f "$RECORD"
     fi
 
     rm -rf /run/argon-utils
-    rmdir /var/lib/argon-utils 2>/dev/null || true
+    rmdir /var/lib/argon-utils-retired 2>/dev/null || true
+
+    # Undo the udev rules' effect now rather than at the next reboot: without this,
+    # /dev/ttyACM0 keeps GROUP="argon" and the /dev/argon-* symlinks persist -- and after a
+    # purge that group no longer exists, leaving a numeric gid nobody is in.
+    if command -v udevadm >/dev/null 2>&1; then
+        udevadm control --reload >/dev/null 2>&1 || true
+        udevadm trigger --subsystem-match=tty --subsystem-match=hidraw >/dev/null 2>&1 || true
+    fi
     ;;
 esac
 
 case "$1" in
 purge)
-    rm -f /etc/argon-utils/config.toml
+    # dpkg removes the conffiles themselves (config.toml and the autostart entry); only the
+    # directory and the kill-switch file are ours to clean up.
+    rm -f /etc/argon-utils/disabled
     rmdir /etc/argon-utils 2>/dev/null || true
     if getent passwd argon >/dev/null; then
         deluser --system --quiet argon >/dev/null 2>&1 || true

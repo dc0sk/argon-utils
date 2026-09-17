@@ -46,7 +46,7 @@ pub fn step<L: UpsLink, P: PowerControl>(
     now: SystemTime,
 ) -> Cycle {
     let poll = monitor.poll(uptime);
-    let action = coordinator.on_advice(poll.decision.advice);
+    let action = coordinator.on_decision(&poll.decision);
     let status = UpsStatus {
         updated: now,
         level: level_name(poll.decision.level).to_owned(),

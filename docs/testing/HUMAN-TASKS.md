@@ -359,9 +359,13 @@ this first:
   where polkit allows poweroff without a rule. The packaged daemon runs as the `argon` user
   and needs `packaging/polkit/50-argon-utils.rules`; that part is untested until installed.
 
-**Everything is logged to `~/argon-t12/`.** If the machine does power off, nothing else
-survives: `/tmp` is tmpfs, and Raspberry Pi OS sets the journal to `Storage=volatile`. The
-home directory is on persistent storage.
+**Everything is logged to `~/argon-t12/`.** `/tmp` is tmpfs, so anything written there is
+gone after a poweroff, and the home directory is on persistent storage.
+
+(An earlier version of this claimed the journal is `Storage=volatile` on Raspberry Pi OS. That
+is wrong on this machine: `/var/log/journal` exists and `journald.conf` leaves `Storage=auto`,
+so the journal *is* persistent and `journalctl -b -1` works after a poweroff. The logging to
+`$HOME` is belt-and-braces, not the only record.)
 
 The config in [`t12-ups-shutdown.toml`](t12-ups-shutdown.toml) uses absurd thresholds so any
 reading on battery counts as critical, which triggers the path in seconds rather than hours.

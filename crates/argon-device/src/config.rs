@@ -18,6 +18,9 @@ use std::time::Duration;
 /// The default location of the configuration file.
 pub const DEFAULT_PATH: &str = "/etc/argon-utils/config.toml";
 
+/// Upper bound on the fan poll interval, which is also the watchdog ping period.
+const MAX_FAN_POLL_INTERVAL_S: u64 = 15;
+
 /// The whole configuration.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
@@ -368,6 +371,18 @@ impl Config {
                 key: "fan.poll_interval_s",
                 got: "0".to_owned(),
                 expected: "at least 1 second; zero is a busy loop",
+            });
+        }
+
+        // systemd's watchdog is fed once per control-loop iteration, so this interval is also
+        // the watchdog period. The shipped unit sets WatchdogSec=30; an interval at or above
+        // it makes systemd kill and restart a perfectly healthy daemon, which looks exactly
+        // like a crash loop and is very hard to diagnose from the outside.
+        if self.fan.poll_interval_s >= MAX_FAN_POLL_INTERVAL_S {
+            return Err(ConfigError::BadValue {
+                key: "fan.poll_interval_s",
+                got: self.fan.poll_interval_s.to_string(),
+                expected: "below 15 seconds: it is also the systemd watchdog ping period                            (WatchdogSec=30 in the shipped unit)",
             });
         }
 

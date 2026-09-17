@@ -3,12 +3,25 @@
 Description=Argon40 case fan, button and UPS daemon
 Documentation=https://github.com/dc0sk/argon-utils
 
-# Let systemd enforce mutual exclusion too. The daemon detects the vendor stack itself and
-# degrades to read-only, but that is a runtime check on a race: a unit ordering constraint
-# is the thing that stops both being started in the first place.
-Conflicts=argononed.service argononeupsd.service argonupsrtcd.service argononeupd.service
+# Let systemd enforce mutual exclusion for the UPS: two readers on one CDC-ACM port split the
+# byte stream and both desynchronise, and argononeupsd runs its own shutdown logic besides.
+#
+# argononed (the vendor's FAN daemon) is deliberately NOT listed. Conflicts= on a unit we do
+# not own and will not restore is a one-way door: on a Pi 4-era case, installing this package
+# would stop the vendor's fan daemon as a side effect of starting, with nothing recorded and
+# nothing to put it back -- and in the shipped read-only mode argond would not drive the fan
+# either, leaving it at whatever duty was last written. MCU contention is handled at runtime
+# instead, by degrading to read-only (see startup::decide).
+Conflicts=argononeupsd.service argonupsrtcd.service argononeupd.service
 
-After=local-fs.target
+# The poweroff path goes through logind over the system bus, under polkit. Without this
+# ordering the contention and shutdown checks can run before the bus is there.
+After=local-fs.target dbus.service systemd-logind.service
+Wants=dbus.service
+
+# A kill switch that does not require editing TOML from a rescue shell: if the daemon ever
+# misbehaves at boot, `touch /etc/argon-utils/disabled` keeps it from starting.
+ConditionPathExists=!/etc/argon-utils/disabled
 
 [Service]
 Type=notify
@@ -56,14 +69,19 @@ SystemCallErrorNumber=EPERM
 # allow-list below is the narrowing instead.
 PrivateDevices=no
 DeviceAllow=char-i2c rw
-DeviceAllow=/dev/gpiochip0 rw
 DeviceAllow=char-ttyACM rw
 DeviceAllow=char-hidraw rw
 
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 
-StateDirectory=argon-utils
+# No StateDirectory=: nothing here keeps state across boots, and systemd would recursively
+# chown the directory to the daemon -- which is where the package's own rollback record lives,
+# so the daemon would end up owning a file that root acts on at removal time.
+#
+# RuntimeDirectoryPreserve=restart so a restart does not delete the published status file: the
+# desktop agent would otherwise lose a pending poweroff across a package upgrade.
 RuntimeDirectory=argon-utils
+RuntimeDirectoryPreserve=restart
 ConfigurationDirectory=argon-utils
 
 [Install]

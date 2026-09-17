@@ -98,14 +98,43 @@ fn critical_advice_repeats_on_every_observation() {
 }
 
 #[test]
-fn mains_returning_cancels_immediately() {
+fn mains_returning_reports_on_mains_at_once_but_confirms_the_recovery() {
     let mut p = policy();
     p.observe(obs(8, Battery), UP);
     assert_eq!(p.observe(obs(8, Battery), UP).advice, Advice::Shutdown);
+
+    // The level is honest immediately -- anything else would advise a shutdown at the moment
+    // power came back -- but the recovery is not confirmed by one reading.
     let d = p.observe(obs(8, Mains), UP);
     assert_eq!(d.level, Level::OnMains);
     assert_eq!(d.advice, Advice::None);
     assert_eq!(d.changed_from, Some(Level::Critical));
+    assert!(
+        !d.confirmed_recovery,
+        "one mains reading confirmed a recovery"
+    );
+
+    let d = p.observe(obs(8, Mains), UP);
+    assert!(
+        d.confirmed_recovery,
+        "two mains readings did not confirm it"
+    );
+}
+
+#[test]
+fn a_mains_blip_does_not_reset_the_confirmation_streak() {
+    // A supply flapping faster than the poll interval used to reset the streak on every blip,
+    // so `Critical` was never confirmed and the battery emptied into a hard power cut.
+    let mut p = policy();
+    assert_eq!(p.observe(obs(8, Battery), UP).level, Level::Low); // one confirmation so far
+    assert_eq!(p.observe(obs(8, Mains), UP).level, Level::OnMains); // blip
+    let d = p.observe(obs(8, Battery), UP);
+    assert_eq!(
+        d.level,
+        Level::Critical,
+        "the blip threw away the first confirmation"
+    );
+    assert_eq!(d.advice, Advice::Shutdown);
 }
 
 #[test]
@@ -220,12 +249,15 @@ fn may_advise_shutdown(history: &[Option<(u8, bool)>], cfg: &PolicyConfig) -> bo
     {
         return false;
     }
-    // Walk back over the current uninterrupted run of battery readings. Somewhere in it there
-    // must be `confirmations` consecutive readings at or below critical.
+    // Walk back and count readings at or below critical. A failed read ends the walk: a gap
+    // means the streak must be earned again. Mains readings do not, unless there are
+    // `confirmations` of them in a row -- a confirmed recovery, which does reset the count.
     let mut streak = 0u8;
+    let mut mains_run = 0u8;
     for entry in history.iter().rev() {
         match entry {
             Some((p, true)) => {
+                mains_run = 0;
                 if *p <= cfg.critical_percent {
                     streak += 1;
                     if streak >= cfg.confirmations {
@@ -235,7 +267,13 @@ fn may_advise_shutdown(history: &[Option<(u8, bool)>], cfg: &PolicyConfig) -> bo
                     streak = 0;
                 }
             }
-            _ => return false,
+            Some((_, false)) => {
+                mains_run += 1;
+                if mains_run >= cfg.confirmations {
+                    return false;
+                }
+            }
+            None => return false,
         }
     }
     false

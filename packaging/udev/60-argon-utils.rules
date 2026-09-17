@@ -39,13 +39,23 @@ KERNEL=="hidraw*", SUBSYSTEMS=="usb", ATTRS{manufacturer}=="Argon", ATTRS{produc
   SYMLINK+="argon-ups-hid", GROUP="argon", MODE="0660"
 
 # --- Argon Industria Zigbee module ------------------------------------------------------
-# Primary match: the module's unique serial. Survives being moved to a different port.
+# Deliberately NOT active in the package.
 #
-# Replace the serial below with your own module's if it differs -- read it from
-# `argonctl doctor`, or from ATTRS{serial} in `udevadm info -a -n /dev/ttyUSB0`.
-SUBSYSTEM=="tty", SUBSYSTEMS=="usb", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", \
-  ATTRS{serial}=="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", \
-  SYMLINK+="argon-zigbee", GROUP="dialout", MODE="0660"
+# The only reliable identifier for this module is its own serial, and a serial belongs to one
+# physical module -- shipping one machine's serial in a package would be meaningless on every
+# other machine. This file is installed under /usr/lib/udev/rules.d/ and is not a conffile, so
+# an edit here would be reverted on the next upgrade.
+#
+# To name your module, read its serial from `argonctl doctor` (or ATTRS{serial} in
+# `udevadm info -a -n /dev/ttyUSB0`) and put your own copy in /etc/udev/rules.d/, which is
+# where local rules belong and where dpkg will not touch it:
+#
+#   SUBSYSTEM=="tty", SUBSYSTEMS=="usb", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", \
+#     ATTRS{serial}=="<your serial>", \
+#     SYMLINK+="argon-zigbee", GROUP="dialout", MODE="0660"
+#
+# The group is unchanged from the default either way: CP210x nodes are already root:dialout,
+# so this only adds the stable name.
 
 # Fallback match: position on the case's internal USB hub, for a replaced module whose serial
 # is unknown. Commented out because it must not be active at the same time as the rule above

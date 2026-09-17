@@ -3,7 +3,20 @@
 set -e
 
 VENDOR_UPS_UNITS="argononeupsd.service argonupsrtcd.service"
-RECORD=/var/lib/argon-utils/retired-units
+# Deliberately NOT under /var/lib/argon-utils: the unit used to declare
+# StateDirectory=argon-utils, which makes systemd chown that directory to the daemon -- and
+# root acts on this file at package removal, so the daemon must not be able to write it.
+RECORD=/var/lib/argon-utils-retired/units
+
+# The vendor's units belong to no package: its installer is a curl-to-shell script that
+# writes into /etc/argon. deb-systemd-invoke and deb-systemd-helper maintain dpkg's own
+# enablement state for units a package ships, so they are the wrong tools here -- and
+# deb-systemd-invoke consults policy-rc.d, which in a chroot or container would refuse the
+# stop while `systemctl disable` still succeeded, leaving a second reader on the UPS serial
+# port while recorded as retired. So: plain systemctl, for foreign units only.
+foreign_systemctl() {
+    systemctl "$@" >/dev/null 2>&1 || true
+}
 
 case "$1" in
 configure)
@@ -35,19 +48,30 @@ configure)
     # This is necessary rather than tidy-minded: two readers on one CDC-ACM port split the
     # byte stream and both desynchronise mid-frame, silently. What is disabled is recorded
     # so removal can put back exactly what was there, not a guess.
-    mkdir -p /var/lib/argon-utils
-    if [ ! -f "$RECORD" ]; then
-        : > "$RECORD"
+    if [ ! -d /run/systemd/system ]; then
+        echo "argon-utils: systemd is not running; skipping vendor unit retirement." >&2
+        echo "argon-utils: run 'dpkg-reconfigure argon-utils' on the real system." >&2
+    else
+        mkdir -p "$(dirname "$RECORD")"
         for u in $VENDOR_UPS_UNITS; do
             systemctl list-unit-files "$u" >/dev/null 2>&1 || continue
             state="$(systemctl is-enabled "$u" 2>/dev/null || true)"
             active="$(systemctl is-active "$u" 2>/dev/null || true)"
-            printf '%s %s %s\n' "$u" "${state:-unknown}" "${active:-unknown}" >> "$RECORD"
+
+            # Record the FIRST state ever seen, so an upgrade cannot overwrite the original
+            # with the disabled/inactive state this script itself produced.
+            if ! grep -q "^$u " "$RECORD" 2>/dev/null; then
+                printf '%s %s %s\n' "$u" "${state:-unknown}" "${active:-unknown}" >> "$RECORD"
+            fi
+
+            # Enforced on EVERY configure, not only the first. The operator may have
+            # re-enabled it, or re-run the vendor's installer, and an upgrade is the one path
+            # nobody watches -- two readers on the port desynchronise silently.
             if [ "$state" = enabled ] || [ "$active" = active ]; then
                 echo "argon-utils: disabling $u (was ${state:-unknown}/${active:-unknown});" \
                      "it cannot share the UPS serial port with argond"
-                deb-systemd-invoke stop "$u" >/dev/null 2>&1 || true
-                systemctl disable "$u" >/dev/null 2>&1 || true
+                foreign_systemctl stop "$u"
+                foreign_systemctl disable "$u"
             fi
         done
     fi
@@ -57,7 +81,11 @@ configure)
     # naming a group that does not exist yet leaves the device owned by root.
     if command -v udevadm >/dev/null 2>&1; then
         udevadm control --reload >/dev/null 2>&1 || true
-        udevadm trigger --subsystem-match=tty --subsystem-match=hidraw >/dev/null 2>&1 || true
+        # --settle, because the daemon is started a few milliseconds later by the
+        # dh_installsystemd snippet below: without waiting, its first open can hit EACCES on a
+        # node that is still root:dialout.
+        udevadm trigger --settle --subsystem-match=tty --subsystem-match=hidraw \
+            >/dev/null 2>&1 || true
     fi
 
     # --- what the operator still has to decide ----------------------------------------
@@ -80,5 +108,14 @@ abort-upgrade|abort-remove|abort-deconfigure) ;;
 esac
 
 #DEBHELPER#
+
+# The generated snippet above starts the service with `|| true` and prints nothing, so a
+# service that never came up would leave no trace in the install output.
+if [ "$1" = configure ] && [ -d /run/systemd/system ]; then
+    if ! systemctl is-active --quiet argond.service; then
+        echo "argon-utils: argond is not running. See: systemctl status argond" >&2
+        echo "argon-utils: (this is expected if /etc/argon-utils/disabled exists)" >&2
+    fi
+fi
 
 exit 0

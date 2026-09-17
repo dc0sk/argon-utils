@@ -8,12 +8,19 @@ use argon_device::ups_service::{contention, step};
 use argon_hal::mode::Mode;
 use argon_hal::serial::SerialLink;
 use argon_hal::{discovery, platform};
-use argon_proto::ups::policy::BatteryPolicy;
+use argon_proto::ups::policy::{Advice, BatteryPolicy};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::thread::JoinHandle;
 use std::time::{Duration, SystemTime};
+
+/// How many poll intervals may pass with no heartbeat before the thread counts as stalled.
+///
+/// A thread that has panicked, or wedged inside a device read, stops updating its heartbeat.
+/// Nothing else notices: the service stays `active`, the fan loop keeps feeding the watchdog,
+/// and the machine simply has no battery protection any more.
+pub const STALL_INTERVALS: u32 = 4;
 
 /// Consecutive failed reads before the port is closed and reopened.
 ///
@@ -29,6 +36,7 @@ pub fn spawn(
     config: &Config,
     active_units: &[String],
     stopping: Arc<AtomicBool>,
+    heartbeat: Arc<AtomicU64>,
 ) -> Option<JoinHandle<()>> {
     if config.ups.source != "serial" {
         eprintln!(
@@ -93,10 +101,15 @@ pub fn spawn(
             !enforce,
             &state_file,
             &stopping,
+            &heartbeat,
         );
     }))
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one thread body; bundling these into a struct would only move the list"
+)]
 fn run(
     port: Option<&std::path::Path>,
     policy: &BatteryPolicy,
@@ -105,35 +118,72 @@ fn run(
     dry_run: bool,
     state_file: &std::path::Path,
     stopping: &AtomicBool,
+    heartbeat: &AtomicU64,
 ) {
     let mut coordinator = ShutdownCoordinator::new(Logind, delay, dry_run);
     let mut monitor: Option<UpsMonitor<QueryOnly<SerialLink>>> = None;
     let mut state_error_logged = false;
+    let mut uptime_error_logged = false;
+    let mut open_error_logged = false;
+    let mut held_logged = false;
 
     while !stopping.load(Ordering::Relaxed) {
+        // Before the work, so a stall inside the work below is what the watcher sees.
+        heartbeat.store(unix_now(), Ordering::Relaxed);
+
         if monitor.is_none() {
-            let path = port
-                .map(std::path::Path::to_path_buf)
-                .or_else(discovery::argon_ups_serial_path);
-            match path.as_ref().map(SerialLink::open) {
-                Some(Ok(link)) => {
-                    eprintln!(
-                        "argond: ups: reading {}",
-                        path.as_ref()
-                            .map_or_else(String::new, |p| p.display().to_string())
-                    );
+            match open_link(port, &mut open_error_logged) {
+                Ok(Some(link)) => {
                     // A fresh policy on reconnect: readings after a gap must confirm critical
                     // again, which is the conservative direction.
                     monitor = Some(UpsMonitor::new(Ups::new(QueryOnly(link)), policy.clone()));
+                    open_error_logged = false;
                 }
-                Some(Err(e)) => eprintln!("argond: ups: cannot open port: {e}"),
-                None => eprintln!("argond: ups: no UPS serial port found"),
+                Ok(None) => {}
+                // Held by someone else: wait rather than fighting over the port.
+                Err(()) => {
+                    sleep_unless_stopping(interval, stopping);
+                    continue;
+                }
             }
         }
 
         if let Some(m) = monitor.as_mut() {
-            let uptime = platform::uptime().unwrap_or(Duration::ZERO);
+            // A failed uptime read reads as "just booted", which holds the shutdown back.
+            // That is the safe direction, but it is indistinguishable from a healthy daemon
+            // unless it is said out loud.
+            let uptime = match platform::uptime() {
+                Ok(u) => {
+                    uptime_error_logged = false;
+                    u
+                }
+                Err(e) => {
+                    if !uptime_error_logged {
+                        eprintln!(
+                            "argond: ups: cannot read uptime ({e}); treating the machine as \
+                             just booted, which holds any shutdown back"
+                        );
+                        uptime_error_logged = true;
+                    }
+                    Duration::ZERO
+                }
+            };
             let cycle = step(m, &mut coordinator, uptime, SystemTime::now());
+
+            // Logged once per episode: a daemon permanently holding a shutdown must not look
+            // like a daemon with nothing to do.
+            if let Advice::HeldForUptime { remaining } = cycle.poll.decision.advice {
+                if !held_logged {
+                    eprintln!(
+                        "argond: ups: battery critical, but holding the shutdown for another \
+                         {}s after boot",
+                        remaining.as_secs()
+                    );
+                    held_logged = true;
+                }
+            } else {
+                held_logged = false;
+            }
 
             if let Some(from) = cycle.poll.decision.changed_from {
                 let pct = cycle
@@ -170,7 +220,7 @@ fn run(
         sleep_unless_stopping(interval, stopping);
     }
 
-    if coordinator.scheduled_at().is_some() {
+    if !dry_run && coordinator.scheduled_at().is_some() {
         // The battery is still critical; stopping this daemon does not change that.
         eprintln!("argond: ups: stopping with a poweroff scheduled; leaving it in place");
     }
@@ -195,6 +245,12 @@ fn log_action(action: &Action) {
                 left % 60
             );
         }
+        Action::Adopted { at } => eprintln!(
+            "argond: ups: took back over a poweroff we scheduled before restarting (unix time \
+             {})",
+            at.duration_since(SystemTime::UNIX_EPOCH)
+                .map_or(0, |d| d.as_secs())
+        ),
         Action::AlreadyPending { .. } => {
             eprintln!("argond: ups: a shutdown is already pending; leaving it alone");
         }
@@ -206,6 +262,67 @@ fn log_action(action: &Action) {
         Action::WouldCancel => eprintln!("argond: ups: would cancel the poweroff (dry run)"),
         Action::Failed(e) => eprintln!("argond: ups: shutdown action failed, will retry: {e}"),
     }
+}
+
+/// Finds and opens the UPS port.
+///
+/// `Err(())` means another process holds it, which the caller answers by waiting.
+/// `Ok(None)` means there was nothing to open, or opening failed; either way the reason is
+/// logged once rather than on every poll, because on an Argon case with no PWR UPS that
+/// message would otherwise be thousands of journal lines a day.
+fn open_link(
+    port: Option<&std::path::Path>,
+    error_logged: &mut bool,
+) -> Result<Option<SerialLink>, ()> {
+    let Some(path) = port
+        .map(std::path::Path::to_path_buf)
+        .or_else(discovery::argon_ups_serial_path)
+    else {
+        if !*error_logged {
+            eprintln!(
+                "argond: ups: no UPS serial port found; will keep looking once per poll \
+                 without repeating this"
+            );
+            *error_logged = true;
+        }
+        return Ok(None);
+    };
+
+    // serial.rs promises an ownership check before every open, and the daemon was not keeping
+    // it: the vendor-unit check happens once at spawn, from a snapshot, and says nothing
+    // about a hand-started process or a CLI watch holding the port. Two readers on CDC-ACM
+    // split the byte stream and both desynchronise.
+    if let Some(o) = argon_hal::foreign::port_owners(&path).into_iter().next() {
+        eprintln!(
+            "argond: ups: {} is held by pid {} ({}); not opening it. Two readers corrupt \
+             each other's frames.",
+            path.display(),
+            o.pid,
+            o.comm
+        );
+        return Err(());
+    }
+
+    match SerialLink::open(&path) {
+        Ok(link) => {
+            eprintln!("argond: ups: reading {}", path.display());
+            Ok(Some(link))
+        }
+        Err(e) => {
+            if !*error_logged {
+                eprintln!("argond: ups: cannot open {}: {e}", path.display());
+                *error_logged = true;
+            }
+            Ok(None)
+        }
+    }
+}
+
+/// Seconds since the unix epoch, or 0 if the clock is before it.
+fn unix_now() -> u64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
 }
 
 /// Sleeps in short slices so a stop request is honoured promptly.

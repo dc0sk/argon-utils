@@ -26,8 +26,10 @@ use clap::Parser;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, PoisonError};
+use std::thread::JoinHandle;
+use std::time::{Duration, SystemTime};
 
 mod exporter;
 mod startup;
@@ -81,8 +83,83 @@ fn run(cli: &Cli) -> Result<ExitCode, Box<dyn std::error::Error>> {
             None
         }
     };
-    let mcu_answers = bus_path.as_deref().is_some_and(mcu_answers);
-    let fan = startup::fan_plan(mcu_answers, argon_hal::fan_hwmon::PwmFan::find().is_some());
+    let fan = describe_fan_plan(bus_path.as_deref());
+    let decision = announce_mode(&config, fan);
+
+    // UPS monitoring starts before anything to do with the fan. Fan setup can fail for
+    // reasons the UPS does not care about -- a renamed thermal zone, one transient sensor
+    // read error, an unopenable bus -- and each of those used to be a `?` that exited the
+    // process, taking battery protection with it and leaving Restart=always to loop on it.
+    let stopping = Arc::new(AtomicBool::new(false));
+    let heartbeat = Arc::new(AtomicU64::new(unix_now()));
+    let ups_thread = if cli.once {
+        None
+    } else {
+        ups::spawn(
+            &config,
+            &startup::active_vendor_units(),
+            Arc::clone(&stopping),
+            Arc::clone(&heartbeat),
+        )
+    };
+    let watch = UpsWatch::new(ups_thread, heartbeat, &config);
+
+    let (curve, source) = match prepare_fan(&config) {
+        Ok(pair) => pair,
+        Err(e) => {
+            eprintln!("argond: fan control unavailable: {e}");
+            eprintln!("argond: continuing without it; UPS monitoring is unaffected");
+            return ups_only_loop(cli, &stopping, watch);
+        }
+    };
+
+    if let (true, startup::FanPlan::Mcu, Some(bus_path)) =
+        (decision.mode.allows_writes(), fan, bus_path)
+    {
+        eprintln!("argond: bus {bus_path}");
+        match LinuxI2c::open(&bus_path, u16::from(argon_device::mcu::ADDR)) {
+            Ok(dev) => {
+                let bus = RateLimited::new(dev, config.min_write_interval());
+                control_loop(
+                    cli,
+                    &config,
+                    (curve, source),
+                    bus,
+                    decision.mode,
+                    true,
+                    &stopping,
+                    watch,
+                )
+            }
+            Err(e) => {
+                eprintln!("argond: cannot open {bus_path}: {e}");
+                eprintln!("argond: continuing without fan control");
+                ups_only_loop(cli, &stopping, watch)
+            }
+        }
+    } else {
+        // A null-write transport: the fan is observed, never driven. Constructed here rather
+        // than branched on later, so no code path below can write by accident.
+        let bus = DryRun::new(ReadOnly(NullBus));
+        control_loop(
+            cli,
+            &config,
+            (curve, source),
+            bus,
+            decision.mode,
+            false,
+            &stopping,
+            watch,
+        )
+    }
+}
+
+/// Works out what drives the fan, and says so.
+fn describe_fan_plan(bus_path: Option<&str>) -> startup::FanPlan {
+    let fan = startup::fan_plan(
+        bus_path.is_some_and(mcu_answers),
+        argon_hal::fan_hwmon::PwmFan::find().is_some(),
+    );
     eprintln!(
         "argond: fan: {}",
         match fan {
@@ -92,8 +169,12 @@ fn run(cli: &Cli) -> Result<ExitCode, Box<dyn std::error::Error>> {
             startup::FanPlan::NoFan => "no Argon MCU and no kernel fan; nothing to drive",
         }
     );
+    fan
+}
 
-    let decision = startup::decide(&config, &startup::active_vendor_units(), fan);
+/// Decides the mode, and reports it plus any refusal.
+fn announce_mode(config: &Config, fan: startup::FanPlan) -> startup::Startup {
+    let decision = startup::decide(config, &startup::active_vendor_units(), fan);
     if let Some(refusal) = &decision.refusal {
         // WARN, not an error: this is a supported state, and the daemon keeps running.
         eprintln!("argond: {refusal}\n");
@@ -109,28 +190,105 @@ fn run(cli: &Cli) -> Result<ExitCode, Box<dyn std::error::Error>> {
             ""
         }
     );
+    decision
+}
 
-    let curve = config.fan_curve()?;
-    let mut source = ThermalZone::find_cpu()?;
+/// Builds the fan curve and opens the temperature sensor.
+///
+/// Every failure here is reported as a string rather than propagated: none of them is a
+/// reason to stop monitoring the battery, which is what returning `?` from the caller used
+/// to do.
+fn prepare_fan(config: &Config) -> Result<(argon_proto::fan::FanCurve, ThermalZone), String> {
+    let curve = config.fan_curve().map_err(|e| format!("fan curve: {e}"))?;
+    let mut source = ThermalZone::find_cpu().map_err(|e| format!("sensor: {e}"))?;
+    let first = source
+        .read_decicelsius()
+        .map_err(|e| format!("sensor read: {e}"))?;
     eprintln!("argond: sensor {}", source.describe());
-    let first = source.read_decicelsius()?;
     eprintln!("argond: {}C at startup", first / 10);
+    Ok((curve, source))
+}
 
-    if let (true, startup::FanPlan::Mcu, Some(bus_path)) =
-        (decision.mode.allows_writes(), fan, bus_path)
-    {
-        eprintln!("argond: bus {bus_path}");
-        let bus = RateLimited::new(
-            LinuxI2c::open(&bus_path, u16::from(argon_device::mcu::ADDR))?,
-            config.min_write_interval(),
-        );
-        control_loop(cli, &config, curve, source, bus, decision.mode, true)
-    } else {
-        // A null-write transport: the fan is observed, never driven. Constructed here rather
-        // than branched on later, so no code path below can write by accident.
-        let bus = DryRun::new(ReadOnly(NullBus));
-        control_loop(cli, &config, curve, source, bus, decision.mode, false)
+/// Seconds since the unix epoch, or 0 if the clock is before it.
+fn unix_now() -> u64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+}
+
+/// Watches the UPS thread's liveness.
+///
+/// The fan loop feeds systemd's watchdog, so a UPS thread that panicked or wedged inside a
+/// device read would leave the service `active` and apparently healthy with no battery
+/// protection at all. This makes that state loud and fatal instead.
+struct UpsWatch {
+    thread: Option<JoinHandle<()>>,
+    heartbeat: Arc<AtomicU64>,
+    stale_after: Duration,
+}
+
+impl UpsWatch {
+    fn new(thread: Option<JoinHandle<()>>, heartbeat: Arc<AtomicU64>, config: &Config) -> Self {
+        // Several poll intervals, and never less than a minute: a reopen after a device
+        // re-enumeration legitimately takes a while.
+        let interval = config.ups.poll_interval_s.max(1) * u64::from(ups::STALL_INTERVALS);
+        Self {
+            thread,
+            heartbeat,
+            stale_after: Duration::from_secs(interval.max(60)),
+        }
     }
+
+    /// How long since the UPS thread last started a poll, if it has gone quiet.
+    fn stalled_for(&self) -> Option<Duration> {
+        self.thread.as_ref()?;
+        let since =
+            Duration::from_secs(unix_now().saturating_sub(self.heartbeat.load(Ordering::Relaxed)));
+        (since > self.stale_after).then_some(since)
+    }
+
+    fn join(self) {
+        if let Some(t) = self.thread {
+            let _ = t.join();
+        }
+    }
+}
+
+/// Runs until stopped, with no fan control: UPS monitoring only.
+fn ups_only_loop(
+    cli: &Cli,
+    stopping: &Arc<AtomicBool>,
+    watch: UpsWatch,
+) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    install_signal_handlers(stopping, || ())?;
+    let _ = sd_notify::notify(&[sd_notify::NotifyState::Ready]);
+
+    let mut code = ExitCode::SUCCESS;
+    while !stopping.load(Ordering::Relaxed) && !cli.once {
+        let _ = sd_notify::notify(&[sd_notify::NotifyState::Watchdog]);
+        if let Some(since) = watch.stalled_for() {
+            report_stalled_ups(since);
+            code = ExitCode::FAILURE;
+            break;
+        }
+        std::thread::sleep(Duration::from_secs(1));
+    }
+
+    stopping.store(true, Ordering::Relaxed);
+    watch.join();
+    eprintln!("argond: stopping");
+    let _ = sd_notify::notify(&[sd_notify::NotifyState::Stopping]);
+    Ok(code)
+}
+
+/// Says a stalled UPS thread out loud, in the terms an operator needs.
+fn report_stalled_ups(since: Duration) {
+    eprintln!(
+        "argond: ups: the monitoring thread has not polled for {}s. Exiting so systemd \
+         restarts us: a daemon that looks healthy while nothing watches the battery is worse \
+         than one that is visibly down.",
+        since.as_secs()
+    );
 }
 
 /// Whether an Argon MCU acknowledges its address.
@@ -168,15 +326,21 @@ impl I2cBus for NullBus {
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the daemon's one control loop; a parameter struct would only move the list"
+)]
 fn control_loop<B: I2cBus + Send + 'static, T: TemperatureSource>(
     cli: &Cli,
     config: &Config,
-    curve: argon_proto::fan::FanCurve,
-    source: T,
+    fan_stack: (argon_proto::fan::FanCurve, T),
     bus: B,
     mode: Mode,
     drive_fan: bool,
+    stopping: &Arc<AtomicBool>,
+    watch: UpsWatch,
 ) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let (curve, source) = fan_stack;
     let mcu = Arc::new(Mutex::new(Mcu::new(bus, Dialect::default())));
     let controller = FanController::new(
         curve,
@@ -190,21 +354,13 @@ fn control_loop<B: I2cBus + Send + 'static, T: TemperatureSource>(
     // Armed for the whole loop. Its Drop restores a running duty on any unwind.
     let guard = Arc::new(FanSafeGuard::new(Arc::clone(&mcu), safe_duty));
 
-    let stopping = Arc::new(AtomicBool::new(false));
-    install_signal_handlers(&stopping, &guard)?;
-
-    // UPS monitoring runs on its own thread with its own interval, and decides its own
-    // contention: it only needs the vendor's UPS daemons out of the way, not the fan daemon.
-    // Started before any fan I/O, so nothing the fan does can keep it from running.
-    let ups_thread = if cli.once {
-        None
-    } else {
-        ups::spawn(
-            config,
-            &startup::active_vendor_units(),
-            Arc::clone(&stopping),
-        )
-    };
+    {
+        // Restores a running duty on the usual termination signals, before the loop unwinds.
+        let guard = Arc::clone(&guard);
+        install_signal_handlers(stopping, move || {
+            let _ = guard.restore_now();
+        })?;
+    }
 
     if drive_fan {
         // Assert a known duty before anything else. If a previous instance died leaving the
@@ -231,6 +387,7 @@ fn control_loop<B: I2cBus + Send + 'static, T: TemperatureSource>(
 
     let _ = sd_notify::notify(&[sd_notify::NotifyState::Ready]);
     let interval = config.fan_poll_interval();
+    let mut code = ExitCode::SUCCESS;
 
     while !stopping.load(Ordering::Relaxed) {
         match task.step() {
@@ -265,6 +422,14 @@ fn control_loop<B: I2cBus + Send + 'static, T: TemperatureSource>(
         // control loop alive.
         let _ = sd_notify::notify(&[sd_notify::NotifyState::Watchdog]);
 
+        // Checked after the ping, not instead of it: the fan loop is doing its job, and this
+        // is about the other thread. Exiting hands the restart to systemd.
+        if let Some(since) = watch.stalled_for() {
+            report_stalled_ups(since);
+            code = ExitCode::FAILURE;
+            break;
+        }
+
         if cli.once {
             break;
         }
@@ -272,37 +437,36 @@ fn control_loop<B: I2cBus + Send + 'static, T: TemperatureSource>(
     }
 
     stopping.store(true, Ordering::Relaxed);
-    if let Some(t) = ups_thread {
-        let _ = t.join();
-    }
+    watch.join();
     if drive_fan {
         eprintln!("argond: stopping, restoring {safe_duty}");
     } else {
         eprintln!("argond: stopping");
     }
     let _ = sd_notify::notify(&[sd_notify::NotifyState::Stopping]);
-    Ok(ExitCode::SUCCESS)
+    Ok(code)
 }
 
-/// Restores a safe duty on the usual termination signals.
-fn install_signal_handlers<B: I2cBus + Send + 'static>(
+/// Sets the stop flag on the usual termination signals, after running `on_signal`.
+///
+/// `on_signal` is where the fan's safe duty is restored. It runs before the main loop
+/// unwinds: the Drop guard would also fire, but only once the loop notices the flag, and on a
+/// hot machine that delay is the whole problem it exists to avoid. The UPS-only path passes a
+/// no-op, because there is no fan to restore.
+fn install_signal_handlers(
     stopping: &Arc<AtomicBool>,
-    guard: &Arc<FanSafeGuard<B>>,
+    on_signal: impl Fn() + Send + 'static,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use signal_hook::consts::{SIGHUP, SIGINT, SIGTERM};
     use signal_hook::iterator::Signals;
 
     let mut signals = Signals::new([SIGTERM, SIGINT, SIGHUP])?;
     let stopping = Arc::clone(stopping);
-    let guard = Arc::clone(guard);
 
     std::thread::spawn(move || {
         if let Some(sig) = signals.forever().next() {
-            eprintln!("argond: signal {sig}, restoring a safe fan duty");
-            // Act before the main loop unwinds. The Drop guard would also fire, but only
-            // once the loop notices the flag, and on a hot machine that delay is the whole
-            // problem this exists to avoid.
-            let _ = guard.restore_now();
+            eprintln!("argond: signal {sig}, stopping");
+            on_signal();
             stopping.store(true, Ordering::Relaxed);
         }
     });

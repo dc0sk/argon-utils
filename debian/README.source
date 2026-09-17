@@ -1,0 +1,19 @@
+Building this package
+=====================
+
+This is a native package built on the target machine, not on a buildd, and the declared
+Build-Depends do not tell the whole story:
+
+* `debian/rules` puts `$(HOME)/.cargo/bin` first in PATH, because `rust-toolchain.toml` pins
+  Rust 1.95.0 and only rustup's shims honour that file. Debian's own `cargo` ignores it, and
+  trixie's `rustc` cannot satisfy the pin.
+* The build runs `cargo build --locked --offline`, so every dependency must already be in the
+  builder's `~/.cargo/registry`. That is deliberate -- a package build should not pull a
+  different dependency version off the network -- but it means the build is reproducible on a
+  machine that has already fetched them, not on a fresh one.
+* `override_dh_auto_test` runs the whole workspace test suite. `DEB_BUILD_OPTIONS=nocheck`
+  skips it.
+
+To make this buildable anywhere, the dependencies would have to be vendored (`cargo vendor`
+into `vendor/` with a committed `.cargo/config.toml`) and the PATH line dropped in favour of
+`dh-cargo`. Until then, treat the `.deb` as something you build on the machine you run it on.

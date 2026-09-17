@@ -123,12 +123,24 @@ pub fn decide(config: &Config, active_units: &[String], fan: FanPlan) -> Startup
     }
 }
 
-/// The vendor units currently active on this machine.
+/// The vendor units that must be assumed to be running on this machine.
+///
+/// Includes units whose state could not be read at all. A `systemctl` that cannot be run is
+/// not evidence that the vendor daemon is absent, and this list gates both fan writes and the
+/// UPS poweroff -- so it fails closed, towards read-only and dry run.
 #[must_use]
 pub fn active_vendor_units() -> Vec<String> {
     foreign::vendor_units()
         .into_iter()
-        .filter(foreign::UnitState::is_active)
+        .filter(|u| {
+            if u.is_unknown() {
+                eprintln!(
+                    "argond: cannot tell whether {} is running; assuming it is",
+                    u.unit
+                );
+            }
+            u.contends()
+        })
         .map(|u| u.unit)
         .collect()
 }

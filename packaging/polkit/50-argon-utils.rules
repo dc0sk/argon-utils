@@ -3,8 +3,14 @@
 // Lets argond schedule and cancel a poweroff when the UPS battery is critical.
 //
 // The Debian package installs this to /usr/share/polkit-1/rules.d/, which is where a
-// package's rules belong; /etc/polkit-1/rules.d/ is for local overrides and takes precedence.
-// Installing by hand, use /etc/polkit-1/rules.d/.
+// package's rules belong. Installing by hand, use /etc/polkit-1/rules.d/.
+//
+// Overriding it is not simply a matter of dropping a file in /etc: polkit processes rules
+// files in lexical order of BASENAME across both directories, and the first rule to return a
+// non-undefined result wins (polkit(8)). /etc/polkit-1/rules.d/90-local.rules therefore runs
+// AFTER this file and cannot override it. To override, reuse this basename in
+// /etc/polkit-1/rules.d/ -- where it does take precedence for the same name -- or pick one
+// that sorts earlier, e.g. 40-argon-local.rules.
 //
 // Why a rule is needed: argond runs as the unprivileged "argon" system user, outside any
 // login session. On Debian 13 polkit lets an active session power off without asking, but
@@ -18,9 +24,15 @@
 // shutdown. Overriding other programs' inhibitors is a decision for the operator to make
 // explicitly, not a default.
 //
-// UNTESTED on hardware as the "argon" user: the development test ran argond inside a desktop
-// session, where no rule is needed. Whether cancellation needs an additional action is
-// verified by task T12 in docs/testing/HUMAN-TASKS.md.
+// Which actions are involved was verified on Debian 13 (polkit 126) with `pkaction
+// --verbose`: scheduling with other users' sessions present checks
+// power-off-multiple-sessions, scheduling with none checks power-off, and set-wall-message is
+// covered by power-off's `imply` annotation. Both grants are load-bearing, because polkit
+// implication is not documented as transitive.
+//
+// STILL UNTESTED as the "argon" user. T12 does NOT cover this: it ran argond inside a desktop
+// session, where no rule is needed (see its capture record). The first real test of this file
+// is the packaged service scheduling a poweroff -- task T13.
 
 polkit.addRule(function (action, subject) {
     if (subject.user === "argon" &&

@@ -46,6 +46,11 @@ impl PowerControl for FakeLogind {
     fn pending(&mut self) -> Result<Option<SystemTime>> {
         Ok(self.pending)
     }
+    fn wall_message(&mut self) -> Result<Option<String>> {
+        Ok(self
+            .pending
+            .map(|_| argon_device::power::SHUTDOWN_MESSAGE.to_owned()))
+    }
 }
 
 /// (percent, charging byte): 0 = mains, 1 = battery, as on the wire.
@@ -68,7 +73,14 @@ fn run(readings: &[(u8, u8)], dry_run: bool) -> (Vec<(Action, UpsStatus)>, FakeL
 
 #[test]
 fn drain_schedules_once_and_mains_cancels() {
-    let (cycles, power) = run(&[(40, 1), (15, 1), (9, 1), (8, 1), (8, 1), (8, 0)], false);
+    // Two mains readings at the end, because a recovery is confirmed the same way a critical
+    // battery is: one mains reading no longer gives up a confirmed critical state. A supply
+    // flapping faster than the poll interval would otherwise reset the confirmation streak on
+    // every blip and the battery would empty with nothing ever scheduled.
+    let (cycles, power) = run(
+        &[(40, 1), (15, 1), (9, 1), (8, 1), (8, 1), (8, 0), (8, 0)],
+        false,
+    );
     let actions: Vec<&Action> = cycles.iter().map(|(a, _)| a).collect();
     assert!(
         matches!(actions[3], Action::Scheduled { .. }),
@@ -79,20 +91,25 @@ fn drain_schedules_once_and_mains_cancels() {
         &Action::None,
         "rescheduled on a repeat of the same advice"
     );
-    assert_eq!(actions[5], &Action::Cancelled);
+    assert_eq!(
+        actions[5],
+        &Action::None,
+        "gave up a confirmed critical state on a single mains reading: {actions:?}"
+    );
+    assert_eq!(actions[6], &Action::Cancelled, "{actions:?}");
     assert_eq!((power.schedules, power.cancels), (1, 1));
 
     // The published status carries the shutdown time while it is pending, and clears it after.
     assert!(cycles[3].1.shutdown_at.is_some());
     assert_eq!(cycles[3].1.level, "critical");
-    assert!(cycles[5].1.shutdown_at.is_none());
-    assert_eq!(cycles[5].1.level, "on-mains");
+    assert!(cycles[6].1.shutdown_at.is_none());
+    assert_eq!(cycles[6].1.level, "on-mains");
 }
 
 #[test]
 fn the_desktop_agent_sees_the_countdown_and_the_cancellation() {
     // Status files as the daemon would publish them, fed to the agent's watcher.
-    let (cycles, _) = run(&[(40, 1), (15, 1), (9, 1), (8, 1), (8, 0)], false);
+    let (cycles, _) = run(&[(40, 1), (15, 1), (9, 1), (8, 1), (8, 0), (8, 0)], false);
     let mut w = Watcher::new();
     let fmt = |_: SystemTime| "HH:MM".to_owned();
     let notices: Vec<_> = cycles
@@ -125,10 +142,21 @@ fn the_desktop_agent_sees_the_countdown_and_the_cancellation() {
 
 #[test]
 fn dry_run_publishes_state_but_schedules_nothing() {
-    let (cycles, power) = run(&[(9, 1), (8, 1), (8, 0)], true);
+    let (cycles, power) = run(&[(9, 1), (8, 1), (8, 0), (8, 0)], true);
     assert_eq!(cycles[1].0, Action::WouldSchedule);
-    assert_eq!(cycles[2].0, Action::WouldCancel);
+    assert_eq!(cycles[3].0, Action::WouldCancel);
     assert_eq!((power.schedules, power.cancels), (0, 0));
+
+    // And it publishes NO shutdown time: that field is what the desktop agent turns into a
+    // critical "powering off at ..." notice, and in dry run nothing is scheduled to announce.
+    assert!(
+        cycles.iter().all(|(_, s)| s.shutdown_at.is_none()),
+        "dry run published a shutdown time: {:?}",
+        cycles
+            .iter()
+            .map(|(_, s)| s.shutdown_at)
+            .collect::<Vec<_>>()
+    );
 }
 
 #[test]
