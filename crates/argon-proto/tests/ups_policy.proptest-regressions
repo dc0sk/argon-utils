@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc f7e3d42d85ac43d625255aac27c2f9b9095fc75879f1c1eb89d02a550d4fa671 # shrinks to history = [Some((0, true))]
+cc 799e18d77ef97aec165e1c673cb1d569ce8252b344f526faea4fed5405b4d22c # shrinks to history = [Some((0, true)), Some((0, true)), None, Some((0, true))]

@@ -10,6 +10,7 @@
 //! stay gated until the facts are promoted to `observed` by our own capture.
 
 mod frame;
+pub mod policy;
 mod status;
 
 pub use frame::{Frame, FrameError, FrameReader, MAX_PAYLOAD, START_BYTE, checksum, encode_read};
