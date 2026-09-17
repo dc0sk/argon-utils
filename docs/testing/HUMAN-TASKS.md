@@ -328,7 +328,18 @@ produce a machine that halts and cannot be woken by the case button.
 
 ---
 
-## 🔴 T12 — Low-battery shutdown, end to end
+## ✅ T12 — Low-battery shutdown, end to end — **DONE 2026-09-17: it works**
+
+**Result.** Mains out -> `on mains -> battery low -> battery critical` -> poweroff scheduled
+with logind for 5 minutes out; mains back in -> cancelled within one poll interval, with
+nothing left pending. Confirmed against logind's own `ScheduledShutdown` property, not just
+the daemon's log. Evidence and the four things it proves:
+[`OBS-2026-09-17-t12-low-battery-shutdown`](../protocol/captures/OBS-2026-09-17-t12-low-battery-shutdown.md).
+
+Two gaps remain, neither blocking: the desktop notifications were not captured in this run
+(the agent's output went to a closed terminal; delivery itself was confirmed separately with
+`argonctl notify-agent --test`), and the final poweroff was deliberately never allowed to
+happen. The steps below are kept because they are the procedure for re-running it.
 
 **Unblocks:** trusting the automatic shutdown with the real UPS, logind and the Pi desktop.
 

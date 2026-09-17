@@ -1,0 +1,12 @@
+argond: fan: no Argon MCU; the kernel's pwm-fan drives it, reported only
+argond: mode full (configured full)
+argond: sensor /sys/class/thermal/thermal_zone0 (cpu-thermal)
+argond: 45C at startup
+argond: ups: shutdown ENABLED: poweroff 5 min after the battery is confirmed critical, cancelled if mains returns
+argond: ups: reading /dev/serial/by-id/usb-Argon_Argon_USB_XXXXXXXXXXXXXXXX-if00
+argond: ups: unknown -> on mains at 92%
+argond: ups: on mains -> battery low at 92%
+argond: ups: battery low -> battery critical at 92%
+argond: ups: poweroff SCHEDULED for SystemTime { tv_sec: 1789668727, tv_nsec: 121393000 }
+argond: ups: battery critical -> on mains at 92%
+argond: ups: poweroff cancelled

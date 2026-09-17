@@ -179,7 +179,22 @@ fn run(
 fn log_action(action: &Action) {
     match action {
         Action::None => {}
-        Action::Scheduled { at } => eprintln!("argond: ups: poweroff SCHEDULED for {at:?}"),
+        Action::Scheduled { at } => {
+            // T12 logged this as a raw SystemTime debug struct, which nobody reading a
+            // journal at 3 a.m. can parse. The delay is what an operator needs: how long
+            // they have to plug the mains back in.
+            let left = at
+                .duration_since(SystemTime::now())
+                .map_or(0, |d| d.as_secs());
+            let epoch = at
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .map_or(0, |d| d.as_secs());
+            eprintln!(
+                "argond: ups: poweroff SCHEDULED in {}m{:02}s (unix time {epoch})",
+                left / 60,
+                left % 60
+            );
+        }
         Action::AlreadyPending { .. } => {
             eprintln!("argond: ups: a shutdown is already pending; leaving it alone");
         }

@@ -60,9 +60,14 @@ opened with, and that is worth deciding rather than drifting into.
 
 The user chose the recommendation: a delayed, cancellable shutdown, `full` mode only, with a
 notification first. Implemented in `argond` with a desktop notification agent and a polkit
-rule; verified on hardware in dry run. What remains is the end-to-end test with a real
-scheduled poweroff, task **T12**, and actually retiring the vendor's UPS daemons, which is a
-change to the machine and not done without asking.
+rule; verified on hardware in dry run, then end to end with a real scheduled poweroff on
+2026-09-17 (task **T12**: scheduled, cancelled by restoring mains, nothing left pending --
+`OBS-2026-09-17-t12-low-battery-shutdown`).
+
+What remains is not the policy but the deployment: installing `argond` as a service with its
+polkit rule and retiring the vendor's UPS daemons. Both are changes to the user's machine and
+are not done without asking. Until then the shutdown path only runs when `argond` is started
+by hand.
 
 <details><summary>The decision as it was put</summary>
 
