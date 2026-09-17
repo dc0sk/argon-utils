@@ -12,4 +12,5 @@ pub mod mcu;
 pub mod oled;
 pub mod power;
 pub mod safety;
+pub mod status;
 pub mod ups;

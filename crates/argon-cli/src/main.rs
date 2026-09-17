@@ -6,6 +6,7 @@ use clap::{Parser, Subcommand};
 mod button;
 mod doctor;
 mod fan;
+mod notify;
 mod oled;
 mod ups;
 
@@ -45,6 +46,9 @@ enum Command {
     /// Bring up the OLED display. Previews only, unless `--write` or `--off` is given.
     Oled(oled::Args),
 
+    /// Show desktop notifications for UPS events. Runs inside a desktop session.
+    NotifyAgent(notify::Args),
+
     /// Measure the case button's pulse widths.
     ///
     /// The MCU decodes the press and emits a calibrated pulse whose width encodes the
@@ -60,5 +64,6 @@ fn main() -> std::process::ExitCode {
         Command::Button(args) => button::run(&args),
         Command::Fan(args) => fan::run(&args),
         Command::Oled(args) => oled::run(&args),
+        Command::NotifyAgent(args) => notify::run(&args),
     }
 }
