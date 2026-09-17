@@ -377,9 +377,17 @@ cd ~/git/argon-utils && ./target/debug/argond --config docs/testing/t12-ups-shut
 cd ~/git/argon-utils && docs/testing/t12-record.sh &
 ```
 
-1. Terminal B must show `ups: shutdown ENABLED` and `ups: unknown -> on mains`. A warning
-   about `argononed` still running is expected. **If it says `shutdown in dry run`, stop**: a
-   vendor UPS daemon is still running.
+1. Terminal B must show `fan: no Argon MCU; the kernel's pwm-fan drives it, reported only`,
+   `ups: shutdown ENABLED` and `ups: unknown -> on mains`. Whether `argononed` runs no longer
+   matters on the V5: there is no MCU for it to contend over. **If it says `shutdown in dry
+   run`, stop**: a vendor UPS daemon is still running.
+
+   *First attempt (2026-09-17):* argond warned about "another writer on the MCU", and after
+   `argononed` was disabled it exited with `Remote I/O error`. Both came from assuming an MCU
+   the ONE V5 does not have; the daemon now probes for one first and never lets the fan stop
+   UPS monitoring. `argononed` was left **disabled** by that attempt, so it will not start at
+   boot. That is harmless on this machine (the kernel drives the fan, the Pi drives the
+   button); `sudo systemctl enable --now argononed` undoes it if wanted.
 2. **Unplug mains.** Within about 10–15 seconds:
    - terminal B: `on mains -> battery low`, then `battery low -> battery critical`
    - terminal B: `poweroff SCHEDULED for …`
@@ -403,7 +411,7 @@ That happens either because the cancellation did not work, or because you let th
 run out on purpose to see the real poweroff. Either way it produces useful evidence.
 
 **Nothing needs restoring after it boots.** The vendor UPS daemons were stopped, not disabled,
-so they start again at boot. A scheduled shutdown does not survive a reboot. The T12 status
+so they start again at boot (`argononed` stays disabled, see step 1). A scheduled shutdown does not survive a reboot. The T12 status
 file in `/tmp` is gone, which is expected.
 
 Look at what was recorded:

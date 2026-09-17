@@ -72,7 +72,28 @@ fn run(cli: &Cli) -> Result<ExitCode, Box<dyn std::error::Error>> {
         Config::default()
     };
 
-    let decision = startup::decide(&config, &startup::active_vendor_units());
+    // Find out what drives the fan before deciding anything about it. A bus that cannot be
+    // resolved is not fatal: it means no MCU, and the UPS does not need one.
+    let bus_path = match resolve_bus(&config) {
+        Ok(p) => Some(p),
+        Err(e) => {
+            eprintln!("argond: {e}");
+            None
+        }
+    };
+    let mcu_answers = bus_path.as_deref().is_some_and(mcu_answers);
+    let fan = startup::fan_plan(mcu_answers, argon_hal::fan_hwmon::PwmFan::find().is_some());
+    eprintln!(
+        "argond: fan: {}",
+        match fan {
+            startup::FanPlan::Mcu => "Argon MCU at 0x1a",
+            startup::FanPlan::KernelReportOnly =>
+                "no Argon MCU; the kernel's pwm-fan drives it, reported only",
+            startup::FanPlan::NoFan => "no Argon MCU and no kernel fan; nothing to drive",
+        }
+    );
+
+    let decision = startup::decide(&config, &startup::active_vendor_units(), fan);
     if let Some(refusal) = &decision.refusal {
         // WARN, not an error: this is a supported state, and the daemon keeps running.
         eprintln!("argond: {refusal}\n");
@@ -95,23 +116,31 @@ fn run(cli: &Cli) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let first = source.read_decicelsius()?;
     eprintln!("argond: {}C at startup", first / 10);
 
-    match decision.mode {
-        Mode::ReadOnly => {
-            // A null-write transport: the fan is observed, never driven. Constructed here
-            // rather than branched on later, so no code path below can write by accident.
-            let bus = DryRun::new(ReadOnly(NullBus));
-            control_loop(cli, &config, curve, source, bus, decision.mode)
-        }
-        Mode::Managed | Mode::Full => {
-            let bus_path = resolve_bus(&config)?;
-            eprintln!("argond: bus {bus_path}");
-            let bus = RateLimited::new(
-                LinuxI2c::open(&bus_path, u16::from(argon_device::mcu::ADDR))?,
-                config.min_write_interval(),
-            );
-            control_loop(cli, &config, curve, source, bus, decision.mode)
-        }
+    if let (true, startup::FanPlan::Mcu, Some(bus_path)) =
+        (decision.mode.allows_writes(), fan, bus_path)
+    {
+        eprintln!("argond: bus {bus_path}");
+        let bus = RateLimited::new(
+            LinuxI2c::open(&bus_path, u16::from(argon_device::mcu::ADDR))?,
+            config.min_write_interval(),
+        );
+        control_loop(cli, &config, curve, source, bus, decision.mode, true)
+    } else {
+        // A null-write transport: the fan is observed, never driven. Constructed here rather
+        // than branched on later, so no code path below can write by accident.
+        let bus = DryRun::new(ReadOnly(NullBus));
+        control_loop(cli, &config, curve, source, bus, decision.mode, false)
     }
+}
+
+/// Whether an Argon MCU acknowledges its address.
+///
+/// `SMBus` quick-write only: no data byte, so nothing for either firmware dialect to act on
+/// (ADR-0002). Without this the first fan write went to an address nothing answers on a
+/// ONE V5, and its `EREMOTEIO` stopped the daemon.
+fn mcu_answers(bus_path: &str) -> bool {
+    let addr = argon_device::mcu::ADDR;
+    LinuxI2c::open(bus_path, u16::from(addr)).is_ok_and(|mut bus| bus.probe(addr).unwrap_or(false))
 }
 
 /// Resolves the I2C bus path from configuration, by adapter name rather than by number.
@@ -146,6 +175,7 @@ fn control_loop<B: I2cBus + Send + 'static, T: TemperatureSource>(
     source: T,
     bus: B,
     mode: Mode,
+    drive_fan: bool,
 ) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let mcu = Arc::new(Mutex::new(Mcu::new(bus, Dialect::default())));
     let controller = FanController::new(
@@ -163,12 +193,30 @@ fn control_loop<B: I2cBus + Send + 'static, T: TemperatureSource>(
     let stopping = Arc::new(AtomicBool::new(false));
     install_signal_handlers(&stopping, &guard)?;
 
-    if mode.allows_writes() {
+    // UPS monitoring runs on its own thread with its own interval, and decides its own
+    // contention: it only needs the vendor's UPS daemons out of the way, not the fan daemon.
+    // Started before any fan I/O, so nothing the fan does can keep it from running.
+    let ups_thread = if cli.once {
+        None
+    } else {
+        ups::spawn(
+            config,
+            &startup::active_vendor_units(),
+            Arc::clone(&stopping),
+        )
+    };
+
+    if drive_fan {
         // Assert a known duty before anything else. If a previous instance died leaving the
-        // fan stopped, this is the first thing that fixes it.
-        mcu.lock()
+        // fan stopped, this is the first thing that fixes it. Not fatal: exiting would stop
+        // UPS monitoring too, and the loop below keeps retrying the fan anyway.
+        if let Err(e) = mcu
+            .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .set_fan(safe_duty)?;
+            .set_fan(safe_duty)
+        {
+            eprintln!("argond: initial fan write failed: {e}");
+        }
     }
 
     // Shared state the exporter reads. Updated by the control loop; never written by the
@@ -181,18 +229,6 @@ fn control_loop<B: I2cBus + Send + 'static, T: TemperatureSource>(
         }
     }
 
-    // UPS monitoring runs on its own thread with its own interval, and decides its own
-    // contention: it only needs the vendor's UPS daemons out of the way, not the fan daemon.
-    let ups_thread = if cli.once {
-        None
-    } else {
-        ups::spawn(
-            config,
-            &startup::active_vendor_units(),
-            Arc::clone(&stopping),
-        )
-    };
-
     let _ = sd_notify::notify(&[sd_notify::NotifyState::Ready]);
     let interval = config.fan_poll_interval();
 
@@ -203,7 +239,7 @@ fn control_loop<B: I2cBus + Send + 'static, T: TemperatureSource>(
                 duty,
                 wrote,
             }) => {
-                if wrote {
+                if wrote && drive_fan {
                     eprintln!("argond: {}C -> {duty}", decicelsius / 10);
                 }
                 exporter::record(&metrics, Some(decicelsius), 0);
@@ -239,7 +275,11 @@ fn control_loop<B: I2cBus + Send + 'static, T: TemperatureSource>(
     if let Some(t) = ups_thread {
         let _ = t.join();
     }
-    eprintln!("argond: stopping, restoring {safe_duty}");
+    if drive_fan {
+        eprintln!("argond: stopping, restoring {safe_duty}");
+    } else {
+        eprintln!("argond: stopping");
+    }
     let _ = sd_notify::notify(&[sd_notify::NotifyState::Stopping]);
     Ok(ExitCode::SUCCESS)
 }
