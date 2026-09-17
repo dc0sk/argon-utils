@@ -69,6 +69,7 @@ dependencies = [
  "argon-device",
  "argon-hal",
  "argon-proto",
+ "argon-telemetry",
  "clap",
  "sd-notify",
  "signal-hook",
@@ -110,6 +111,14 @@ version = "0.1.0"
 dependencies = [
  "argon-proto",
  "serialport",
+]
+
+[[package]]
+name = "argon-telemetry"
+version = "0.1.0"
+dependencies = [
+ "argon-device",
+ "argon-hal",
 ]
 
 [[package]]

@@ -29,6 +29,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, PoisonError};
 
+mod exporter;
 mod startup;
 
 #[derive(Parser)]
@@ -175,6 +176,16 @@ fn control_loop<B: I2cBus + Send + 'static, T: TemperatureSource>(
             .set_fan(safe_duty)?;
     }
 
+    // Shared state the exporter reads. Updated by the control loop; never written by the
+    // exporter, so a scrape cannot perturb what it measures.
+    let metrics = Arc::new(Mutex::new(exporter::State::default()));
+    if config.telemetry.enabled {
+        match exporter::spawn(&config.telemetry.listen, mode, Arc::clone(&metrics)) {
+            Ok(addr) => eprintln!("argond: metrics on http://{addr}/metrics"),
+            Err(e) => eprintln!("argond: metrics disabled: {e}"),
+        }
+    }
+
     let _ = sd_notify::notify(&[sd_notify::NotifyState::Ready]);
     let interval = config.fan_poll_interval();
 
@@ -188,6 +199,7 @@ fn control_loop<B: I2cBus + Send + 'static, T: TemperatureSource>(
                 if wrote {
                     eprintln!("argond: {}C -> {duty}", decicelsius / 10);
                 }
+                exporter::record(&metrics, Some(decicelsius), 0);
             }
             Ok(Step::SensorFailed {
                 fallback,
@@ -196,6 +208,7 @@ fn control_loop<B: I2cBus + Send + 'static, T: TemperatureSource>(
                 eprintln!(
                     "argond: temperature read failed ({consecutive} in a row), forcing {fallback}"
                 );
+                exporter::record(&metrics, None, consecutive);
             }
             Err(e) => {
                 // A failed write means we are no longer in control. Report and keep trying:

@@ -7,6 +7,7 @@ members = [
     "crates/argon-sim",
     "crates/argon-device",
     "crates/argon-daemon",
+    "crates/argon-telemetry",
 ]
 
 [workspace.package]

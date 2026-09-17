@@ -30,6 +30,8 @@ pub struct Config {
     pub mcu: McuConfig,
     /// UPS monitoring.
     pub ups: UpsConfig,
+    /// Metrics export.
+    pub telemetry: TelemetryConfig,
 }
 
 impl Default for Config {
@@ -39,6 +41,30 @@ impl Default for Config {
             fan: FanConfig::default(),
             mcu: McuConfig::default(),
             ups: UpsConfig::default(),
+            telemetry: TelemetryConfig::default(),
+        }
+    }
+}
+
+/// Metrics export.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct TelemetryConfig {
+    /// Whether to serve Prometheus metrics.
+    pub enabled: bool,
+    /// Address to listen on.
+    ///
+    /// Loopback by default. These metrics describe a machine's thermal and power state and
+    /// the endpoint has no authentication, so exposing it beyond the host should be a
+    /// deliberate act rather than something a default does quietly.
+    pub listen: String,
+}
+
+impl Default for TelemetryConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            listen: "127.0.0.1:9843".to_owned(),
         }
     }
 }
@@ -260,6 +286,20 @@ impl Config {
                 got: "0".to_owned(),
                 expected: "a duty that actually spins the fan; 0 would make the safety \
                            fallback a stopped fan",
+            });
+        }
+
+        if self.telemetry.enabled
+            && self
+                .telemetry
+                .listen
+                .parse::<std::net::SocketAddr>()
+                .is_err()
+        {
+            return Err(ConfigError::BadValue {
+                key: "telemetry.listen",
+                got: self.telemetry.listen.clone(),
+                expected: "an address and port, e.g. 127.0.0.1:9843",
             });
         }
 

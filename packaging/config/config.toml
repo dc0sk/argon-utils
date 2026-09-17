@@ -90,3 +90,15 @@ source = "serial"
 port = "auto"
 
 poll_interval_s = 10
+
+[telemetry]
+# Serve Prometheus metrics at http://<listen>/metrics.
+enabled = false
+
+# Loopback by default, and deliberately so. These metrics describe the machine's thermal and
+# power state, and the endpoint has no authentication of any kind. Exposing it beyond this
+# host should be something you chose, not something a default did quietly.
+#
+# Port 9843 is not registered with the Prometheus project; it was picked to avoid the
+# commonly-used exporter ports. Change it freely.
+listen = "127.0.0.1:9843"
