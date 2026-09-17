@@ -10,5 +10,6 @@ pub mod fan;
 pub mod fan_control;
 pub mod mcu;
 pub mod oled;
+pub mod power;
 pub mod safety;
 pub mod ups;
