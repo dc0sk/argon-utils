@@ -112,6 +112,16 @@ confirmations = 2
 # booting on a near-empty battery loops if power is flapping.
 min_uptime_s = 120
 
+# When the battery is confirmed critical, the machine powers off this many minutes later.
+# Mains returning inside the window cancels it, and a desktop notification says so. 1-30.
+#
+# The poweroff only happens with mode = "full", and only when the vendor's UPS daemons
+# (argonupsrtcd, argononeupsd) are not running -- otherwise argond reports what it would do.
+shutdown_delay_min = 2
+
+# Where argond publishes UPS status for `argonctl notify-agent` and the tray.
+state_file = "/run/argon-utils/ups.state"
+
 [telemetry]
 # Serve Prometheus metrics at http://<listen>/metrics.
 enabled = false

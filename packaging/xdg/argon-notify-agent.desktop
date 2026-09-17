@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=argon-utils UPS notifications
+Comment=Shows desktop notifications when the UPS runs on battery or schedules a shutdown
+Exec=argonctl notify-agent
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

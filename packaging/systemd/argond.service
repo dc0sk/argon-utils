@@ -28,7 +28,9 @@ RestartSec=2
 WatchdogSec=30
 
 # The daemon does not need root. Device access comes from group membership, and host power
-# actions go through logind over D-Bus under polkit.
+# actions go through logind over D-Bus under polkit -- which needs
+# packaging/polkit/50-argon-utils.rules, because a process outside a login session is
+# otherwise asked for administrator authentication it cannot give.
 User=argon
 Group=argon
 SupplementaryGroups=i2c gpio dialout

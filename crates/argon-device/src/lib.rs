@@ -14,3 +14,4 @@ pub mod power;
 pub mod safety;
 pub mod status;
 pub mod ups;
+pub mod ups_service;

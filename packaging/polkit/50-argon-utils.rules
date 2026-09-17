@@ -1,0 +1,29 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// Lets argond schedule and cancel a poweroff when the UPS battery is critical.
+//
+// Install to /etc/polkit-1/rules.d/.
+//
+// Why a rule is needed: argond runs as the unprivileged "argon" system user, outside any
+// login session. On Debian 13 polkit lets an active session power off without asking, but
+// requires administrator authentication for anything else (checked with
+// `pkaction --verbose --action-id org.freedesktop.login1.power-off`: "implicit any:
+// auth_admin_keep"). A daemon cannot answer an authentication prompt.
+//
+// Deliberately NOT granted: org.freedesktop.login1.power-off-ignore-inhibit. If a program
+// holds a shutdown inhibitor, argond respects it rather than overriding it. The trade-off is
+// real: an inhibitor held while the battery runs out means the UPS cuts power without a clean
+// shutdown. Overriding other programs' inhibitors is a decision for the operator to make
+// explicitly, not a default.
+//
+// UNTESTED on hardware as the "argon" user: the development test ran argond inside a desktop
+// session, where no rule is needed. Whether cancellation needs an additional action is
+// verified by task T12 in docs/testing/HUMAN-TASKS.md.
+
+polkit.addRule(function (action, subject) {
+    if (subject.user === "argon" &&
+        (action.id === "org.freedesktop.login1.power-off" ||
+         action.id === "org.freedesktop.login1.power-off-multiple-sessions")) {
+        return polkit.Result.YES;
+    }
+});

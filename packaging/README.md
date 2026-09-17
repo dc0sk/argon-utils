@@ -61,3 +61,18 @@ Both Argon devices are unidentifiable by VID:PID, for different reasons:
 If your Zigbee module's serial differs from the one in the rule, read yours from
 `argonctl doctor` and edit it — or switch to the topology fallback, which matches by position
 on the case's internal hub rather than by identity.
+
+## UPS low-battery shutdown
+
+Three pieces, because the daemon and the desktop are on opposite sides of a boundary:
+
+| File | Install to | Purpose |
+|---|---|---|
+| [`polkit/50-argon-utils.rules`](polkit/50-argon-utils.rules) | `/etc/polkit-1/rules.d/` | lets the unprivileged `argon` user schedule and cancel a poweroff |
+| [`systemd/argond.service`](systemd/argond.service) | `/etc/systemd/system/` | the daemon; owns the UPS serial port |
+| [`xdg/argon-notify-agent.desktop`](xdg/argon-notify-agent.desktop) | `/etc/xdg/autostart/` | desktop notifications, started at login |
+
+The daemon only powers the machine off with `mode = "full"`, and only when the vendor's UPS
+daemons (`argonupsrtcd`, `argononeupsd`) are not running; otherwise it logs what it would
+do. The Raspberry Pi desktop's labwc session runs `lxsession-xdg-autostart`, which is what
+starts the agent (checked on the development machine).

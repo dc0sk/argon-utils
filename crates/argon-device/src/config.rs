@@ -174,6 +174,11 @@ pub struct UpsConfig {
     pub confirmations: u8,
     /// No shutdown is advised until the machine has been up this many seconds.
     pub min_uptime_s: u64,
+    /// Minutes between the battery going critical and the poweroff. Mains returning inside
+    /// this window cancels it.
+    pub shutdown_delay_min: u64,
+    /// Where the daemon publishes UPS status for the desktop agent.
+    pub state_file: String,
 }
 
 impl Default for UpsConfig {
@@ -188,6 +193,8 @@ impl Default for UpsConfig {
             recover_margin: p.recover_margin,
             confirmations: p.confirmations,
             min_uptime_s: p.min_uptime.as_secs(),
+            shutdown_delay_min: 2,
+            state_file: crate::status::DEFAULT_PATH.to_owned(),
         }
     }
 }
@@ -313,6 +320,15 @@ impl Config {
                     self.ups.confirmations
                 ),
                 expected: policy_expectation(e),
+            });
+        }
+
+        if !(1..=30).contains(&self.ups.shutdown_delay_min) {
+            return Err(ConfigError::BadValue {
+                key: "ups.shutdown_delay_min",
+                got: self.ups.shutdown_delay_min.to_string(),
+                expected: "1 to 30 minutes: 0 would be immediate, and a long delay spends the \
+                           battery the shutdown exists to protect",
             });
         }
 

@@ -31,6 +31,7 @@ use std::sync::{Mutex, PoisonError};
 
 mod exporter;
 mod startup;
+mod ups;
 
 #[derive(Parser)]
 #[command(
@@ -180,6 +181,18 @@ fn control_loop<B: I2cBus + Send + 'static, T: TemperatureSource>(
         }
     }
 
+    // UPS monitoring runs on its own thread with its own interval, and decides its own
+    // contention: it only needs the vendor's UPS daemons out of the way, not the fan daemon.
+    let ups_thread = if cli.once {
+        None
+    } else {
+        ups::spawn(
+            config,
+            &startup::active_vendor_units(),
+            Arc::clone(&stopping),
+        )
+    };
+
     let _ = sd_notify::notify(&[sd_notify::NotifyState::Ready]);
     let interval = config.fan_poll_interval();
 
@@ -222,6 +235,10 @@ fn control_loop<B: I2cBus + Send + 'static, T: TemperatureSource>(
         std::thread::sleep(interval);
     }
 
+    stopping.store(true, Ordering::Relaxed);
+    if let Some(t) = ups_thread {
+        let _ = t.join();
+    }
     eprintln!("argond: stopping, restoring {safe_duty}");
     let _ = sd_notify::notify(&[sd_notify::NotifyState::Stopping]);
     Ok(ExitCode::SUCCESS)
