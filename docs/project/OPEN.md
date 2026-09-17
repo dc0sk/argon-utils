@@ -39,8 +39,10 @@ The project was planned around fan control. Two findings moved its centre of gra
   mains-removal transition — so the Argon-proprietary serial protocol is the only channel
   that returns live data at all.
 
-What is left that nothing else does: the **UPS** (battery state, RTC, scheduled wake), the
-**OLED**, the **power button**, and **IR**. That is a coherent product, and arguably a more
+What is left that nothing else does, on the ONE V5 with a Pi 5: the **UPS** (battery state,
+RTC, scheduled wake), the **OLED**, and the **Zigbee** module. On 2026-09-17 T2 showed that
+the case button is the Pi's own power button, which the OS already handles, so it joins the
+fan as something to leave alone on this hardware. IR is still unknown (T6). That is a coherent product, and arguably a more
 useful one than a second fan controller. But it is a different product from the one the plan
 opened with, and that is worth deciding rather than drifting into.
 
@@ -91,8 +93,7 @@ unblock rather than by effort:
 
 | | Task | Unblocks | Effort |
 |---|---|---|---|
-| **T2** | Press the case button | whether we are fixing a vendor bug or matching behaviour | seconds |
-| **T3** | 30 button presses | real pulse thresholds, replacing values we do not trust | five minutes |
+| **T3** | 30 button presses — **on the Pi 4 / ONE V2** | real pulse thresholds; the V5 has none | five minutes |
 | **T7** | OLED bring-up + photo | the display feature | ten minutes |
 | **T6** | IR remote test | whether IR exists on the V5 at all | five minutes |
 | **T9** | `0xFF` power-cut | power-cut arming | 🔴 deferred; Pi 4 first, never over SSH |

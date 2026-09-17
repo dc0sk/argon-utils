@@ -21,6 +21,11 @@ several conclusions in this project came from negative results.
 
 ## Safety legend
 
+> **Anything involving the power button can shut the machine down**, including the session
+> you are running the test from. On Raspberry Pi OS the desktop handles the key itself, so a
+> logind inhibitor gives no protection. Save your work first.
+
+
 | | Meaning |
 |---|---|
 | 🟢 | Safe. Read-only or trivially reversible. Can be done any time. |
@@ -65,7 +70,22 @@ sudo ./target/debug/argonctl ups --wait 45   # sudo IS needed here: /dev/hidraw0
 
 ---
 
-## 🟢 T2 — Does the case power button do anything?
+## ✅ T2 — Does the case power button do anything? — **DONE 2026-09-17**
+
+> **The case button is the Raspberry Pi 5's own power button.** No Argon MCU is involved. The
+> desktop handles it: the first press opens a shutdown dialog, and a second press while the
+> dialog is open runs `shutdown -h now`.
+>
+> **The test shut the machine down.** It had been set up with a logind inhibitor that was
+> expected to prevent that, and it didn't, because on the Pi desktop labwc handles the key
+> itself. Nothing was lost.
+>
+> So GPIO 4 being unheld is expected on this hardware, not a vendor bug, and `doctor` has
+> been corrected. See
+> [OBS-2026-09-17-v5-button-is-the-pi-button](../protocol/captures/OBS-2026-09-17-v5-button-is-the-pi-button.md).
+
+<details><summary>Original task</summary>
+
 
 **Unblocks:** whether we are fixing a vendor bug or matching vendor behaviour.
 
@@ -81,11 +101,19 @@ hardware regardless of software).
 - It reboots or shuts down → something is listening by a path we have not found, and the
   investigation needs reopening.
 
-**Result:** _(not yet done)_
+</details>
+
+**Result: the Pi's own button, handled by the OS. Nothing for argon-utils to do here.**
 
 ---
 
-## 🟡 T3 — Measure the real button pulse widths
+## 🟡 T3 — Measure the real button pulse widths — **on the Pi 4 / ONE V2**
+
+> **Changed 2026-09-17.** The ONE V5 has no MCU pulses to measure, because its button is the
+> Pi's own power button (see T2). Only a Pi 4-era case can answer this.
+>
+> **Warning for any button test:** on the Pi desktop a logind inhibitor does *not* stop the
+> power key. Save your work, or test from a text console.
 
 **Unblocks:** replacing the vendor's pulse-width thresholds (which we hold as `inferred` and
 do not trust) with our own `observed` specification.

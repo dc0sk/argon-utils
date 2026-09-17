@@ -140,12 +140,24 @@ fn report_gpio(chips: &[discovery::GpioChip], warnings: &mut Vec<String>) {
         );
     }
 
-    // The case button reaches the host as pulses on line 4. If nothing holds that line,
-    // nothing is listening, and short-press reboot/shutdown cannot be working.
-    if lines.iter().any(|l| l.offset == 4 && l.consumer.is_none()) {
+    // Which power button is this? On a Pi 5 the dedicated button is a kernel input device, and
+    // an Argon ONE V5's case button is a mechanical extension of it: presses arrive as
+    // KEY_POWER and the desktop or logind handles them. GPIO 4 only matters on Pi 4-era cases,
+    // where an Argon MCU signals presses as pulses on that line.
+    if let Some(dev) = discovery::pi_power_button() {
+        println!(
+            "\n  Power button: the Raspberry Pi's own button ({}), handled by the OS.",
+            dev.display()
+        );
+        println!("  No Argon MCU is involved, so line 4 being unheld is expected here.");
+        println!(
+            "  Careful: on the Pi desktop a second press while the shutdown dialog is open runs\n  \
+             `shutdown -h now`, and a logind inhibitor does not prevent it."
+        );
+    } else if lines.iter().any(|l| l.offset == 4 && l.consumer.is_none()) {
         warnings.push(
-            "line 4 (power button pulses) has no consumer — no process is listening for \
-             button presses on this machine"
+            "line 4 has no consumer. On Pi 4-era Argon cases that is where the MCU signals \
+             button presses, so nothing would be handling them"
                 .into(),
         );
     }

@@ -68,7 +68,8 @@ for why this exists.
 
 | ID | Fact | Status | Source |
 |---|---|---|---|
-| `ARGON-GPIO-BTN` | The case power button is wired to the MCU on BCM 17; the MCU signals the host on BCM 4 | `documented` | [DOC-I2C] |
+| `ARGON-GPIO-BTN` | The case power button is wired to the MCU on BCM 17; the MCU signals the host on BCM 4. **Pi 4-era cases only** | `documented` | [DOC-I2C] |
+| `ARGON-BTN-V5-IS-PI` | **On an Argon ONE V5 with a Pi 5 the case button is the Pi's own power button.** It arrives as `KEY_POWER` from `pwr_button`; no MCU is involved | `observed` | OBS-2026-09-17-v5-button-is-the-pi-button |
 | `ARGON-GPIO-IRRX` | IR receiver on BCM 23 | `documented` | [DOC-I2C] |
 | `ARGON-GPIO-IRTX` | IR transmitter on BCM 22 | `documented` | [DOC-I2C] |
 | `ARGON-GPIO-UARTMON` | The MCU monitors BCM 14 (UART TX) for the `0xFF` power-cut mechanism | `documented` | [DOC-I2C] |

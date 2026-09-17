@@ -287,3 +287,26 @@ pub fn find_argon_zigbee(devices: &[UsbDevice]) -> Option<&UsbDevice> {
         .iter()
         .find(|d| d.vid == "10c4" && d.pid == "ea60" && d.on_controller(INTERNAL_USB_CONTROLLER))
 }
+
+/// The Raspberry Pi's own power button, as a kernel input device.
+///
+/// On a Pi 5 the dedicated power button is a `gpio-keys` device named `pwr_button`. On an
+/// Argon ONE V5 the case button is simply a mechanical extension of it -- there is no Argon
+/// MCU involved -- so key presses arrive as `KEY_POWER` on this device and are handled by the
+/// desktop or logind, never by anything on GPIO 4.
+///
+/// Returns the `/dev/input/eventN` path if present.
+#[must_use]
+pub fn pi_power_button() -> Option<PathBuf> {
+    let entries = std::fs::read_dir("/sys/class/input").ok()?;
+    for e in entries.flatten() {
+        let name = e.file_name().to_string_lossy().into_owned();
+        if !name.starts_with("event") {
+            continue;
+        }
+        if read_trimmed(e.path().join("device/name")).is_ok_and(|n| n == "pwr_button") {
+            return Some(PathBuf::from(format!("/dev/input/{name}")));
+        }
+    }
+    None
+}
