@@ -325,3 +325,35 @@ pub fn header_i2c_bus() -> Option<PathBuf> {
         .or_else(|| buses.first())
         .map(|b| b.dev.clone())
 }
+
+/// The Argon UPS serial port, by a name that survives re-enumeration.
+///
+/// Prefers `/dev/serial/by-id/...Argon...`: a single USB re-enumeration has been observed to
+/// move this device from `ttyACM0` to `ttyACM1`, which software holding the old name cannot
+/// follow. Falls back to the `ttyACM` node found by USB discovery.
+#[must_use]
+pub fn argon_ups_serial_path() -> Option<PathBuf> {
+    if let Ok(entries) = std::fs::read_dir("/dev/serial/by-id") {
+        let mut hits: Vec<PathBuf> = entries
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| {
+                p.file_name()
+                    .is_some_and(|n| n.to_string_lossy().contains("Argon"))
+            })
+            .collect();
+        hits.sort();
+        if let Some(p) = hits.into_iter().next() {
+            return Some(p);
+        }
+    }
+    let usb = usb_devices();
+    find_argon_ups(&usb)?
+        .nodes
+        .iter()
+        .find(|n| {
+            n.file_name()
+                .is_some_and(|f| f.to_string_lossy().starts_with("ttyACM"))
+        })
+        .cloned()
+}

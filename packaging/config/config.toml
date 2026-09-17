@@ -8,8 +8,9 @@
 
 # How much the daemon may do to the hardware.
 #
-#   read-only  no byte is written to any device. Safe alongside the vendor's daemons, and
-#              still useful: status, metrics and discovery all work.
+#   read-only  nothing that changes device state. Queries are allowed -- reading the UPS
+#              means sending it request frames -- but only the side-effect-free ones, and
+#              that is enforced by the transport. Status and monitoring all work.
 #   managed    fan control, display, and button-driven reboot or shutdown.
 #   full       additionally allows the MCU power cut, UPS threshold and RTC writes, and
 #              EEPROM changes. Each of those is gated again individually.

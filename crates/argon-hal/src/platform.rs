@@ -94,3 +94,22 @@ impl Platform {
         })
     }
 }
+
+/// Time since boot, from `/proc/uptime`.
+///
+/// # Errors
+///
+/// Fails if `/proc/uptime` cannot be read or parsed.
+pub fn uptime() -> Result<std::time::Duration> {
+    let text = read_trimmed("/proc/uptime")?;
+    let secs = text
+        .split_whitespace()
+        .next()
+        .and_then(|v| v.parse::<f64>().ok())
+        .filter(|v| v.is_finite() && *v >= 0.0)
+        .ok_or_else(|| crate::Error::Parse {
+            what: "/proc/uptime",
+            got: text.clone(),
+        })?;
+    Ok(std::time::Duration::from_secs_f64(secs))
+}

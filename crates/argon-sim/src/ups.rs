@@ -157,7 +157,10 @@ impl UpsSim {
             Command::GetRtc => self.state.clock.encode_clock().unwrap_or([0; 6]).to_vec(),
             Command::GetWake => match self.state.wake {
                 Some(w) => w.encode_schedule().unwrap_or([0; 5]).to_vec(),
-                None => vec![0; 5],
+                // Observed on hardware (ARGON-UPS-CMD7-EMPTY): with nothing scheduled the
+                // device replies with an empty payload. This used to be five zero bytes, a
+                // guess made before the capture existed, which the real device contradicts.
+                None => Vec::new(),
             },
             Command::SetRtc => {
                 if let Ok(t) = UpsTime::decode_clock(request.payload()) {

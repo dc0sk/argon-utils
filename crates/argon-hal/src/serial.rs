@@ -29,6 +29,7 @@ const READ_SLICE: Duration = Duration::from_millis(100);
 pub struct SerialLink {
     port: Box<dyn serialport::SerialPort>,
     reader: FrameReader,
+    discarded: u64,
 }
 
 impl SerialLink {
@@ -56,6 +57,7 @@ impl SerialLink {
         Self {
             port,
             reader: FrameReader::new(),
+            discarded: 0,
         }
     }
 
@@ -102,13 +104,25 @@ impl SerialLink {
                 // A frame for another command, or a rejected one, or no frame yet: all are
                 // expected on a link that can desynchronise. Keep reading rather than
                 // failing the request.
-                if let Some(Ok(f)) = self.reader.push(b) {
-                    if f.cmd() == cmd {
-                        return Ok(f);
-                    }
+                match self.reader.push(b) {
+                    Some(Ok(f)) if f.cmd() == cmd => return Ok(f),
+                    Some(_) => self.discarded = self.discarded.saturating_add(1),
+                    None => {}
                 }
             }
         }
+    }
+}
+
+impl SerialLink {
+    /// Frames received while waiting for a reply that were not that reply.
+    ///
+    /// Either rejected frames or frames for another command. The device is believed to send
+    /// unsolicited frames (command 8), but that is only `inferred`, so they are not answered --
+    /// this counter is how a long-running monitor finds out whether they happen at all.
+    #[must_use]
+    pub const fn discarded_frames(&self) -> u64 {
+        self.discarded
     }
 }
 

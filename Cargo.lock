@@ -83,6 +83,7 @@ dependencies = [
  "argon-proto",
  "argon-sim",
  "serde",
+ "serialport",
  "toml",
 ]
 

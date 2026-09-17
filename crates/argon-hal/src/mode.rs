@@ -11,10 +11,14 @@ use core::fmt;
 /// How much this process is permitted to do to the hardware.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Mode {
-    /// No byte is written to any device. **The shipped default.**
+    /// Nothing that changes device state. **The shipped default.**
     ///
-    /// A fresh install cannot change your fan, and can run alongside the vendor's daemons
-    /// without contending with them.
+    /// Side-effect-free queries are allowed: reading the UPS means sending it request frames,
+    /// so "no byte written" would make monitoring impossible. The boundary is enforced by the
+    /// transport, not by convention -- I2C writes are refused outright, and the UPS link only
+    /// passes the query commands confirmed on hardware.
+    ///
+    /// A fresh install cannot change your fan or your UPS.
     #[default]
     ReadOnly,
     /// Fan and display writes, and button-driven reboot or shutdown.
