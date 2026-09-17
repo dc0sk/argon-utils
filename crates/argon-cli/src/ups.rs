@@ -179,6 +179,32 @@ fn run_serial(port: &str, args: &Args) -> ExitCode {
         );
         return ExitCode::FAILURE;
     }
+    // That scan only sees processes we are allowed to see. As an ordinary user it cannot see
+    // argond's file descriptors at all, so "nobody holds it" is not a finding -- say so,
+    // rather than letting silence read as an all-clear.
+    if !foreign::can_see_all_processes() {
+        eprintln!(
+            "argonctl: note: cannot check for other readers as an unprivileged user; run under \
+             sudo for that check to mean anything."
+        );
+    }
+
+    // The packaged daemon owns this node: the udev rule gives it to group `argon`, which is
+    // also how two readers are kept apart -- file permissions do that reliably, where the
+    // process scan above cannot.
+    if permission_denied(&path) && is_argond_running() {
+        eprintln!(
+            "argonctl: {} belongs to the argond service (group `argon`), which is holding it \
+             now.\n\n\
+             argond publishes what it reads, so for a quick look:\n\n    \
+             cat /run/argon-utils/ups.state\n\n\
+             To talk to the device from here instead, stop the service first:\n\n    \
+             sudo systemctl stop argond\n\n\
+             and start it again when you are done.",
+            path.display()
+        );
+        return ExitCode::FAILURE;
+    }
 
     let config = match load_config(args.config.as_deref()) {
         Ok(c) => c,
@@ -229,6 +255,23 @@ fn run_serial(port: &str, args: &Args) -> ExitCode {
 }
 
 /// Firmware, clock and wake schedule: read once, not every poll.
+/// Whether opening this path fails purely for lack of permission.
+fn permission_denied(path: &std::path::Path) -> bool {
+    std::fs::OpenOptions::new()
+        .read(true)
+        .open(path)
+        .err()
+        .is_some_and(|e| e.kind() == std::io::ErrorKind::PermissionDenied)
+}
+
+/// Whether the packaged daemon is running, and therefore owns the UPS port.
+fn is_argond_running() -> bool {
+    std::process::Command::new("systemctl")
+        .args(["is-active", "--quiet", "argond.service"])
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
 fn report_identity<L: argon_device::ups::UpsLink>(ups: &mut Ups<L>) {
     match ups.firmware() {
         Ok(v) => println!("  {:<14} {v}", "firmware"),

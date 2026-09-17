@@ -27,6 +27,16 @@
 # --- Argon PWR UPS: CDC-ACM serial interface -------------------------------------------
 # Gives /dev/argon-ups. Never reference ttyACM* by number: a single USB re-enumeration has
 # been observed to move this device from ttyACM0 to ttyACM1.
+#
+# GROUP="argon" REPLACES the default dialout group, and that is deliberate: it is what keeps a
+# second reader off the port. CDC-ACM has no arbitration, two readers split the byte stream and
+# both desynchronise, and the process scan `argonctl` uses to spot a rival cannot see another
+# user's file descriptors -- file permissions can. The cost is that your own account can no
+# longer open the port while the service owns it; `argonctl ups` says so and points at
+# /run/argon-utils/ups.state, which argond publishes for exactly that reason.
+#
+# Do NOT add TAG+="uaccess" here. It would hand the port back to the logged-in user and restore
+# the two-reader hazard this group prevents.
 SUBSYSTEM=="tty", SUBSYSTEMS=="usb", ATTRS{manufacturer}=="Argon", ATTRS{product}=="Argon_USB", \
   SYMLINK+="argon-ups", GROUP="argon", MODE="0660", TAG+="systemd"
 

@@ -445,7 +445,7 @@ it did.
 
 ---
 
-## 🟡 T13 — Does the polkit rule work for the packaged daemon?
+## 🟡 T13 — Does the polkit rule work for the packaged daemon? — **step 1 DONE 2026-09-17: yes**
 
 **Unblocks:** trusting the low-battery poweroff when `argond` runs as the `argon` system user
 rather than inside your desktop session.
@@ -457,17 +457,24 @@ involved was verified with `pkaction --verbose` (scheduling with other sessions 
 `power-off-multiple-sessions`; with none, `power-off`); what is untested is whether the rule
 matches for a system-bus caller that is not in a session.
 
-### Step 1 — ask polkit, without scheduling anything
+### Step 1 — ask polkit, without scheduling anything — **done: both authorised**
 
 ```sh
-sudo -u argon pkcheck --action-id org.freedesktop.login1.power-off --process $$
-echo "power-off: $?"
-sudo -u argon pkcheck --action-id org.freedesktop.login1.power-off-multiple-sessions --process $$
-echo "power-off-multiple-sessions: $?"
+sudo -u argon sh -c 'pkcheck --action-id org.freedesktop.login1.power-off --process $$; \
+    echo "power-off exit: $?"; \
+    pkcheck --action-id org.freedesktop.login1.power-off-multiple-sessions --process $$; \
+    echo "multiple-sessions exit: $?"'
 ```
 
-Exit status `0` means authorised. This asks the question without arming anything, so it is
-safe to run at any time.
+Both returned `0` (authorised) on 2026-09-17 with the package installed, so the rule does
+match for a system-bus caller outside any session. This asks the question without arming
+anything, so it is safe to run at any time.
+
+Note the shape of the command: `pkcheck` must run **as** `argon` and name **its own** process.
+Running `sudo -u argon pkcheck --process $$` names the calling shell, which belongs to your
+user, and polkit refuses that with "Only trusted callers ... can use CheckAuthorization() for
+subjects belonging to other identities" -- a permission error about the *question*, not an
+answer about the rule.
 
 ### Step 2 — the real thing, cheaply
 
