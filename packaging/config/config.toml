@@ -122,6 +122,14 @@ shutdown_delay_min = 2
 # Where argond publishes UPS status for `argonctl notify-agent` and the tray.
 state_file = "/run/argon-utils/ups.state"
 
+# Keep the UPS clock set from the system clock. The UPS clock runs off the UPS battery, so a
+# deep discharge can reset it, and it drifts in between. argond compares the two at startup
+# and every six hours, and sets the UPS clock when it is more than 2 s off -- only in
+# mode = "full", and only while the system clock is NTP-synchronised, since copying an
+# unsynchronised clock could make it worse. Each check is logged, so the journal shows the
+# drift over time.
+sync_clock = true
+
 [oled]
 # Draw a status page on the case OLED: UPS charge and state, a charge bar, the CPU
 # temperature and the fan, and -- when one is scheduled -- the poweroff time.

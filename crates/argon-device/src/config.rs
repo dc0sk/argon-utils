@@ -217,6 +217,9 @@ pub struct UpsConfig {
     pub shutdown_delay_min: u64,
     /// Where the daemon publishes UPS status for the desktop agent.
     pub state_file: String,
+    /// Keep the UPS clock set from the system clock. Only acts in `full` mode, and only while
+    /// the system clock is NTP-synchronised; see `clock_sync`.
+    pub sync_clock: bool,
 }
 
 impl Default for UpsConfig {
@@ -233,6 +236,7 @@ impl Default for UpsConfig {
             min_uptime_s: p.min_uptime.as_secs(),
             shutdown_delay_min: 2,
             state_file: crate::status::DEFAULT_PATH.to_owned(),
+            sync_clock: true,
         }
     }
 }

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! The daemon's UPS thread.
 
+use argon_device::clock_sync::{self, Verdict};
 use argon_device::config::Config;
 use argon_device::power::{Action, Logind, ShutdownCoordinator};
-use argon_device::ups::{QueryOnly, Ups, UpsMonitor};
+use argon_device::ups::{Gate, Ups, UpsMonitor};
 use argon_device::ups_service::{contention, step};
 use argon_hal::mode::Mode;
 use argon_hal::serial::SerialLink;
@@ -13,7 +14,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::thread::JoinHandle;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 /// How many poll intervals may pass with no heartbeat before the thread counts as stalled.
 ///
@@ -83,6 +84,22 @@ pub fn spawn(
         }
     };
 
+    // Setting the UPS clock is the only write argond ever sends the UPS. Gated on full mode
+    // like every other device write, and on the operator's switch.
+    let clock_writes = requested == Mode::Full && config.ups.sync_clock;
+    if clock_writes {
+        eprintln!(
+            "argond: ups: clock sync ON: compared every {} h, set when more than {} s off",
+            clock_sync::CHECK_INTERVAL.as_secs() / 3_600,
+            clock_sync::THRESHOLD_S
+        );
+    } else {
+        eprintln!(
+            "argond: ups: clock sync off (it needs mode \"full\" and sync_clock = true); \
+             the offset is still checked and logged"
+        );
+    }
+
     let port = if config.ups.port == "auto" {
         None
     } else {
@@ -102,6 +119,7 @@ pub fn spawn(
             &state_file,
             &stopping,
             &heartbeat,
+            clock_writes,
         );
     }))
 }
@@ -119,9 +137,13 @@ fn run(
     state_file: &std::path::Path,
     stopping: &AtomicBool,
     heartbeat: &AtomicU64,
+    clock_writes: bool,
 ) {
     let mut coordinator = ShutdownCoordinator::new(Logind, delay, dry_run);
-    let mut monitor: Option<UpsMonitor<QueryOnly<SerialLink>>> = None;
+    let mut monitor: Option<UpsMonitor<Gate<SerialLink>>> = None;
+    // Due immediately: the first check runs right after the first successful poll, so a
+    // clock left wrong by a deep discharge is found at boot rather than six hours in.
+    let mut next_clock_check = Instant::now();
     let mut state_error_logged = false;
     let mut uptime_error_logged = false;
     let mut open_error_logged = false;
@@ -136,7 +158,12 @@ fn run(
                 Ok(Some(link)) => {
                     // A fresh policy on reconnect: readings after a gap must confirm critical
                     // again, which is the conservative direction.
-                    monitor = Some(UpsMonitor::new(Ups::new(QueryOnly(link)), policy.clone()));
+                    let gate = if clock_writes {
+                        Gate::with_clock_writes(link)
+                    } else {
+                        Gate::queries_only(link)
+                    };
+                    monitor = Some(UpsMonitor::new(Ups::new(gate), policy.clone()));
                     open_error_logged = false;
                 }
                 Ok(None) => {}
@@ -202,6 +229,11 @@ fn run(
             if cycle.poll.consecutive_failures >= REOPEN_AFTER {
                 eprintln!("argond: ups: reopening the port");
                 monitor = None;
+            } else if cycle.poll.error.is_none() && Instant::now() >= next_clock_check {
+                // Only on a healthy link, after the poll: the clock is housekeeping, and must
+                // never delay or displace a battery reading.
+                check_clock(m, clock_writes, clock_sync::system_clock_synced());
+                next_clock_check = Instant::now() + clock_sync::CHECK_INTERVAL;
             }
 
             if let Some(dir) = state_file.parent() {
@@ -318,6 +350,61 @@ fn open_link(
     }
 }
 
+/// Compares the UPS clock with the system clock, and sets it if allowed and needed.
+///
+/// Every outcome is logged, in sync or not: over weeks the journal then records how fast the
+/// UPS clock drifts, which nothing else measures. A failure is logged and left for the next
+/// check.
+fn check_clock(m: &mut UpsMonitor<Gate<SerialLink>>, clock_writes: bool, system_synced: bool) {
+    let ups_clock = match m.ups_mut().clock() {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("argond: ups: clock check: reading the clock failed: {e}");
+            return;
+        }
+    };
+    match clock_sync::judge(ups_clock, unix_now(), system_synced) {
+        Verdict::InSync { offset_s } => {
+            eprintln!("argond: ups: clock offset {offset_s:+} s, within tolerance");
+        }
+        Verdict::Untrusted { offset_s } => eprintln!(
+            "argond: ups: clock offset {offset_s:+} s; not correcting it, because the system \
+             clock is not NTP-synchronised"
+        ),
+        Verdict::Implausible => {
+            eprintln!("argond: ups: the clock read back as an impossible date; not acting on it");
+        }
+        Verdict::Correct { offset_s } if !clock_writes => eprintln!(
+            "argond: ups: clock offset {offset_s:+} s; not correcting it (clock sync is off)"
+        ),
+        Verdict::Correct { offset_s } => {
+            clock_sync::sleep_to_next_second();
+            let Some(now) = argon_proto::ups::UpsTime::from_unix_seconds(unix_now()) else {
+                return;
+            };
+            if let Err(e) = m.ups_mut().set_clock(now) {
+                eprintln!("argond: ups: clock was {offset_s:+} s off; setting it failed: {e}");
+                return;
+            }
+            let after = m
+                .ups_mut()
+                .clock()
+                .ok()
+                .map(|t| clock_sync::judge(t, unix_now(), true));
+            match after {
+                Some(Verdict::InSync { offset_s: now_off }) => eprintln!(
+                    "argond: ups: clock was {offset_s:+} s off; set from the system clock, now \
+                     {now_off:+} s"
+                ),
+                other => eprintln!(
+                    "argond: ups: clock was {offset_s:+} s off; set it, but the read-back is \
+                     {other:?}"
+                ),
+            }
+        }
+    }
+}
+
 /// Seconds since the unix epoch, or 0 if the clock is before it.
 fn unix_now() -> u64 {
     SystemTime::now()
@@ -333,5 +420,86 @@ fn sleep_unless_stopping(total: Duration, stopping: &AtomicBool) {
         let d = left.min(slice);
         std::thread::sleep(d);
         left = left.saturating_sub(d);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! The clock check against the simulated UPS over a real PTY. The decision itself is
+    //! tested in `clock_sync`; this is the glue that actually writes, so it is tested in both
+    //! directions -- that it corrects when allowed, and that it does not when not.
+
+    use super::*;
+    use argon_proto::ups::UpsTime;
+    use argon_sim::ups::{Faults, UpsSim, UpsState};
+    use serialport::SerialPort;
+
+    /// Runs `body` against a simulated UPS whose clock starts `offset_s` from the system clock,
+    /// and returns the clock offset afterwards.
+    fn offset_after(offset_s: i64, clock_writes: bool, synced: bool) -> i64 {
+        let start = i64::try_from(unix_now()).unwrap() + offset_s;
+        let state = UpsState {
+            clock: UpsTime::from_unix_seconds(u64::try_from(start).unwrap()).unwrap(),
+            ..UpsState::default()
+        };
+        let (master, slave) = serialport::TTYPort::pair().expect("PTY pair");
+        let slave_name = slave.name().expect("slave path");
+        let stop = Arc::new(AtomicBool::new(false));
+        let sim_stop = Arc::clone(&stop);
+        let sim = std::thread::spawn(move || {
+            let mut master = master;
+            let mut sim = UpsSim::with_faults(state, Faults::default());
+            let _ = sim.serve_until(
+                &mut master,
+                Instant::now() + Duration::from_secs(30),
+                &sim_stop,
+            );
+        });
+        let _slave = slave;
+        let link = SerialLink::open(&slave_name).expect("open the simulated port");
+        let gate = if clock_writes {
+            Gate::with_clock_writes(link)
+        } else {
+            Gate::queries_only(link)
+        };
+        let policy = BatteryPolicy::new(argon_proto::ups::policy::PolicyConfig::default()).unwrap();
+        let mut m = UpsMonitor::new(Ups::new(gate), policy);
+
+        check_clock(&mut m, clock_writes, synced);
+
+        let after = m.ups_mut().clock().expect("read the clock back");
+        stop.store(true, Ordering::Relaxed);
+        drop(m);
+        let _ = sim.join();
+        i64::try_from(after.to_unix_seconds().unwrap()).unwrap()
+            - i64::try_from(unix_now()).unwrap()
+    }
+
+    #[test]
+    fn a_slow_clock_is_corrected_when_allowed() {
+        // The T15 finding: 21 s slow.
+        let after = offset_after(-21, true, true);
+        assert!(
+            after.abs() <= clock_sync::THRESHOLD_S,
+            "still {after:+} s off"
+        );
+    }
+
+    #[test]
+    fn a_slow_clock_is_left_alone_without_clock_writes() {
+        let after = offset_after(-21, false, true);
+        assert!(
+            after <= -19,
+            "was changed without permission: now {after:+} s"
+        );
+    }
+
+    #[test]
+    fn a_slow_clock_is_left_alone_when_the_system_clock_is_not_synced() {
+        let after = offset_after(-21, true, false);
+        assert!(
+            after <= -19,
+            "copied an unsynchronised clock: now {after:+} s"
+        );
     }
 }

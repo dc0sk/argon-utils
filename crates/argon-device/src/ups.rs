@@ -2,7 +2,8 @@
 //! The Argon PWR UPS over its serial protocol, and monitoring built on it.
 //!
 //! Facts: `ARGON-UPS-FRAME`, `ARGON-UPS-CMD0/2/4/5/7` and `ARGON-UPS-CMD7-EMPTY`, all
-//! `observed` on hardware on 2026-09-17. The HID interface is not used: it serves no data on
+//! `observed` on hardware on 2026-09-17; `ARGON-UPS-CMD3` and `ARGON-UPS-CMD3-REPLY`,
+//! `observed` on 2026-09-18 (task T15). The HID interface is not used: it serves no data on
 //! firmware 113 (`ARGON-UPS-HID-LIVE`).
 
 use argon_hal::serial::SerialLink;
@@ -65,6 +66,59 @@ impl<L: UpsLink> UpsLink for QueryOnly<L> {
     }
 }
 
+/// Queries, plus -- when allowed -- setting the clock. Nothing else.
+///
+/// The link argond uses. Setting the clock is the one write whose semantics have been
+/// observed on hardware (`ARGON-UPS-CMD3`, T15); the wake schedule, the meter reset and the
+/// acknowledgement stay refused however the gate is built, because they are still only
+/// `inferred`. Whether the clock may be set is decided once, from the mode, when the gate is
+/// made.
+pub struct Gate<L> {
+    inner: L,
+    clock_writes: bool,
+}
+
+impl<L> Gate<L> {
+    /// Side-effect-free queries only: the same as [`QueryOnly`].
+    pub const fn queries_only(inner: L) -> Self {
+        Self {
+            inner,
+            clock_writes: false,
+        }
+    }
+
+    /// Queries, and setting the clock.
+    pub const fn with_clock_writes(inner: L) -> Self {
+        Self {
+            inner,
+            clock_writes: true,
+        }
+    }
+
+    /// The link behind the gate, for inspection in tests.
+    pub const fn inner(&self) -> &L {
+        &self.inner
+    }
+
+    /// Whether this gate lets `cmd` through.
+    #[must_use]
+    pub const fn allows(&self, cmd: Command) -> bool {
+        QueryOnly::is_query(cmd) || (self.clock_writes && matches!(cmd, Command::SetRtc))
+    }
+}
+
+impl<L: UpsLink> UpsLink for Gate<L> {
+    fn request(&mut self, cmd: Command, payload: &[u8], deadline: Instant) -> Result<Frame> {
+        if !self.allows(cmd) {
+            return Err(Error::WriteBlocked {
+                what: format!("ups command {cmd:?}"),
+                reason: "not permitted by this link's gate",
+            });
+        }
+        self.inner.request(cmd, payload, deadline)
+    }
+}
+
 /// The UPS, driven over some link.
 pub struct Ups<L: UpsLink> {
     link: L,
@@ -110,6 +164,30 @@ impl<L: UpsLink> Ups<L> {
     pub fn clock(&mut self) -> Result<UpsTime> {
         let f = self.query(Command::GetRtc)?;
         UpsTime::decode_clock(f.payload()).map_err(decode_err)
+    }
+
+    /// Sets the UPS clock, UTC.
+    ///
+    /// `ARGON-UPS-CMD3`: six BCD bytes, `YY MM DD HH MM SS`. `ARGON-UPS-CMD3-REPLY`: the device
+    /// answers with an empty command-3 frame. Both observed in T15; a reply carrying a payload
+    /// is not what was observed, so it is reported rather than accepted.
+    ///
+    /// # Errors
+    ///
+    /// Fails on link error, if the link's gate refuses the write, or on an unexpected reply.
+    pub fn set_clock(&mut self, t: UpsTime) -> Result<()> {
+        let payload = t.encode_clock().map_err(decode_err)?;
+        let f = self
+            .link
+            .request(Command::SetRtc, &payload, Instant::now() + REQUEST_DEADLINE)?;
+        if f.payload().is_empty() {
+            Ok(())
+        } else {
+            Err(Error::Parse {
+                what: "the reply to a clock set (expected an empty payload)",
+                got: format!("{:02x?}", f.payload()),
+            })
+        }
     }
 
     /// The wake schedule, if one is set.

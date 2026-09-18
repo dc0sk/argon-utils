@@ -240,7 +240,7 @@ fn t15_preconditions(
         Err(e) => return Err(format!("the wake schedule could not be read ({e})")),
     }
     // The restore step sets the UPS from the system clock, so that clock must be right.
-    if !system_clock_synced() {
+    if !argon_device::clock_sync::system_clock_synced() {
         return Err(
             "the system clock is not NTP-synchronised, so restoring the UPS clock \
              from it would make it worse"
@@ -287,7 +287,7 @@ fn t15(link: &mut SerialLink) -> Outcome {
     // wrong by over an hour and must not be left that way.
     println!();
     println!("Step 3: set the clock to the correct time");
-    wait_for_second_boundary();
+    argon_device::clock_sync::sleep_to_next_second();
     let right_sent_at = now_secs();
     let restored = match UpsTime::from_unix_seconds(right_sent_at) {
         Some(now) => match send_set(link, now) {
@@ -398,25 +398,6 @@ fn check_readback(link: &mut SerialLink, sent_at: u64, offset_s: i64) -> bool {
         }
     }
     ok
-}
-
-fn system_clock_synced() -> bool {
-    std::process::Command::new("timedatectl")
-        .args(["show", "-p", "NTPSynchronized", "--value"])
-        .output()
-        .ok()
-        .is_some_and(|o| String::from_utf8_lossy(&o.stdout).trim() == "yes")
-}
-
-/// Sleeps until just after the next whole second, so a time set from the system clock is
-/// right to a fraction of a second rather than to within one.
-fn wait_for_second_boundary() {
-    let into = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(Duration::ZERO, |d| {
-            Duration::from_nanos(u64::from(d.subsec_nanos()))
-        });
-    std::thread::sleep(Duration::from_secs(1).saturating_sub(into) + Duration::from_millis(5));
 }
 
 fn now_secs() -> u64 {

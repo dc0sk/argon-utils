@@ -22,5 +22,9 @@ clap         = { version = "4", features = ["derive"] }
 sd-notify    = "0.5"
 signal-hook  = "0.4"
 
+[dev-dependencies]
+argon-sim  = { path = "../argon-sim" }
+serialport = { version = "4", default-features = false }
+
 [lints]
 workspace = true

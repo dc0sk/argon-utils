@@ -228,3 +228,101 @@ fn end_to_end_over_a_pty() {
     drop(m);
     let _ = sim.join();
 }
+
+mod gate {
+    //! The link argond uses: queries, plus setting the clock when allowed, and nothing else.
+
+    use super::Scripted;
+    use argon_device::ups::{Gate, Ups, UpsLink};
+    use argon_proto::ups::{Command, UpsTime};
+    use std::time::{Duration, Instant};
+
+    /// Every command the protocol has, so a new variant cannot slip past these tests: adding
+    /// one to `Command` without deciding its gate breaks the exhaustive match below.
+    const ALL: [Command; 9] = [
+        Command::BatteryStatus,
+        Command::ChargeCurrent,
+        Command::SetRtc,
+        Command::FirmwareVersion,
+        Command::GetRtc,
+        Command::SetWake,
+        Command::GetWake,
+        Command::Acknowledge,
+        Command::ResetMeter,
+    ];
+
+    const fn expected_with_clock_writes(cmd: Command) -> bool {
+        match cmd {
+            Command::BatteryStatus
+            | Command::ChargeCurrent
+            | Command::FirmwareVersion
+            | Command::GetRtc
+            | Command::GetWake
+            | Command::SetRtc => true,
+            // Still only `inferred`: never through, however the gate is built.
+            Command::SetWake | Command::Acknowledge | Command::ResetMeter => false,
+        }
+    }
+
+    #[test]
+    fn with_clock_writes_admits_exactly_the_queries_and_the_clock() {
+        let g = Gate::with_clock_writes(());
+        for cmd in ALL {
+            assert_eq!(g.allows(cmd), expected_with_clock_writes(cmd), "{cmd:?}");
+        }
+    }
+
+    #[test]
+    fn queries_only_refuses_the_clock_too() {
+        let g = Gate::queries_only(());
+        assert!(!g.allows(Command::SetRtc));
+        for cmd in ALL {
+            if cmd != Command::SetRtc {
+                assert_eq!(g.allows(cmd), expected_with_clock_writes(cmd), "{cmd:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_refused_write_never_reaches_the_device() {
+        // Asserting on what the device RECEIVED, not only on the error: the scripted link
+        // returns an error when it has no reply queued, so an error alone would also be what a
+        // write that got through looks like.
+        let mut g = Gate::with_clock_writes(Scripted::default());
+        for cmd in [Command::SetWake, Command::ResetMeter, Command::Acknowledge] {
+            assert!(
+                g.request(cmd, &[], Instant::now() + Duration::from_secs(1))
+                    .is_err()
+            );
+        }
+        assert!(
+            g.inner().sent.is_empty(),
+            "reached the device: {:?}",
+            g.inner().sent
+        );
+        // And the positive control: a permitted command does reach it.
+        let _ = g.request(
+            Command::SetRtc,
+            &[],
+            Instant::now() + Duration::from_secs(1),
+        );
+        assert_eq!(g.inner().sent, vec![Command::SetRtc]);
+
+        let mut ups = Ups::new(Gate::queries_only(Scripted::default()));
+        let t = UpsTime::from_unix_seconds(1_789_728_000).unwrap();
+        assert!(
+            ups.set_clock(t).is_err(),
+            "a queries-only gate let a clock set through"
+        );
+    }
+
+    #[test]
+    fn a_set_expects_the_observed_empty_reply() {
+        // ARGON-UPS-CMD3-REPLY: FE 00 03 01. Anything else was not observed and is reported.
+        let t = UpsTime::from_unix_seconds(1_789_728_000).unwrap();
+        let ok = Scripted::default().reply(Command::SetRtc, &[]);
+        assert!(Ups::new(Gate::with_clock_writes(ok)).set_clock(t).is_ok());
+        let odd = Scripted::default().reply(Command::SetRtc, &[0x01]);
+        assert!(Ups::new(Gate::with_clock_writes(odd)).set_clock(t).is_err());
+    }
+}
