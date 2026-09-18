@@ -23,7 +23,11 @@ mod ups;
 )]
 struct Cli {
     #[command(subcommand)]
-    command: Command,
+    command: Option<Command>,
+
+    /// Print this program's manual page (roff) and exit. Used by the package build.
+    #[arg(long, hide = true)]
+    man: bool,
 }
 
 #[derive(Subcommand)]
@@ -65,8 +69,24 @@ enum Command {
 }
 
 fn main() -> std::process::ExitCode {
+    use clap::CommandFactory;
     let cli = Cli::parse();
-    match cli.command {
+    if cli.man {
+        let man = clap_mangen::Man::new(Cli::command()).section("1");
+        return match man.render(&mut std::io::stdout()) {
+            Ok(()) => std::process::ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("argonctl: {e}");
+                std::process::ExitCode::FAILURE
+            }
+        };
+    }
+    let Some(command) = cli.command else {
+        // As before the subcommand became optional: no subcommand is a usage error.
+        let _ = Cli::command().print_help();
+        return std::process::ExitCode::from(2);
+    };
+    match command {
         Command::Doctor(args) => doctor::run(&args),
         Command::Ups(args) => ups::run(&args),
         Command::Button(args) => button::run(&args),

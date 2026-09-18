@@ -1,3 +1,14 @@
+argon-utils (0.1.4) unstable; urgency=medium
+
+  * Manual pages: argond(8), argonctl(1), argon-tray(1), generated from the
+    same definitions as --help.
+  * The programs now report the package version: --version said 0.1.0
+    through 0.1.3.
+  * argond is described as what it is -- a UPS, OLED and fan daemon. It
+    was described as handling the case button, which it does not.
+
+ -- Simon Keimer <dc0sk@mailbox.org>  Fri, 18 Sep 2026 15:00:00 +0200
+
 argon-utils (0.1.3) unstable; urgency=medium
 
   * argond keeps the UPS clock right: it compares it with the system clock

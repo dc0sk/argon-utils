@@ -17,6 +17,7 @@ path = "src/main.rs"
 argon-device = { path = "../argon-device", version = "0.1.0" }
 argon-hal    = { path = "../argon-hal", version = "0.1.0" }
 clap         = { version = "4", features = ["derive"] }
+clap_mangen = "0.3"
 # The blocking API over async-io rather than the default tokio: this binary polls a file every
 # couple of seconds, and a whole tokio runtime for that would be most of its size. ksni is
 # Unlicense, which is compatible with GPL-3.0-or-later.

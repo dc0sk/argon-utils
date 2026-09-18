@@ -40,7 +40,17 @@ mod ups;
 #[command(
     name = "argond",
     version,
-    about = "Fan, button and UPS daemon for Argon40 cases"
+    about = "UPS, OLED and fan daemon for Argon40 cases",
+    long_about = "UPS, OLED and fan daemon for Argon40 cases.\n\n\
+        Monitors the Argon PWR UPS over its USB serial link and, in mode \"full\", schedules a \
+        delayed poweroff when the battery is confirmed critical, cancelled if mains returns. \
+        Keeps the UPS clock set from the system clock. Publishes UPS status to \
+        /run/argon-utils/ups.state for the tray icon and the notification agent. Optionally \
+        draws a status page on the case OLED. Drives the case fan on models with an Argon MCU \
+        and reports the kernel-controlled fan on models without one.\n\n\
+        Configuration: /etc/argon-utils/config.toml. Nothing that changes device state happens \
+        in mode \"read-only\", the default.\n\n\
+        Kill switch: if /etc/argon-utils/disabled exists, the systemd unit does not start."
 )]
 struct Cli {
     /// Configuration file.
@@ -50,10 +60,19 @@ struct Cli {
     /// Run a single control iteration and exit. For checking a configuration.
     #[arg(long)]
     once: bool,
+
+    /// Print this program's manual page (roff) and exit. Used by the package build.
+    #[arg(long, hide = true)]
+    man: bool,
 }
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    if cli.man {
+        return print_man(
+            &clap_mangen::Man::new(<Cli as clap::CommandFactory>::command()).section("8"),
+        );
+    }
     match run(&cli) {
         Ok(code) => code,
         Err(e) => {
@@ -321,6 +340,17 @@ fn report_stalled_ups(since: Duration) {
 fn mcu_answers(bus_path: &str) -> bool {
     let addr = argon_device::mcu::ADDR;
     LinuxI2c::open(bus_path, u16::from(addr)).is_ok_and(|mut bus| bus.probe(addr).unwrap_or(false))
+}
+
+/// Writes a manual page to stdout.
+fn print_man(man: &clap_mangen::Man) -> ExitCode {
+    match man.render(&mut std::io::stdout()) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("argond: {e}");
+            ExitCode::FAILURE
+        }
+    }
 }
 
 /// Resolves the I2C bus path from configuration, by adapter name rather than by number.

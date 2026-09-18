@@ -17,6 +17,7 @@ argon-device = { path = "../argon-device", version = "0.1.0" }
 argon-hal   = { path = "../argon-hal", version = "0.1.0" }
 argon-proto = { path = "../argon-proto", version = "0.1.0" }
 clap        = { version = "4", features = ["derive"] }
+clap_mangen = "0.3"
 
 [dev-dependencies]
 argon-sim  = { path = "../argon-sim" }

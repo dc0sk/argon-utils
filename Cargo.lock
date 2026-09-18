@@ -54,19 +54,20 @@ dependencies = [
 
 [[package]]
 name = "argon-cli"
-version = "0.1.0"
+version = "0.1.4"
 dependencies = [
  "argon-device",
  "argon-hal",
  "argon-proto",
  "argon-sim",
  "clap",
+ "clap_mangen",
  "serialport",
 ]
 
 [[package]]
 name = "argon-daemon"
-version = "0.1.0"
+version = "0.1.4"
 dependencies = [
  "argon-device",
  "argon-hal",
@@ -74,6 +75,7 @@ dependencies = [
  "argon-sim",
  "argon-telemetry",
  "clap",
+ "clap_mangen",
  "sd-notify",
  "serialport",
  "signal-hook",
@@ -81,7 +83,7 @@ dependencies = [
 
 [[package]]
 name = "argon-device"
-version = "0.1.0"
+version = "0.1.4"
 dependencies = [
  "argon-hal",
  "argon-proto",
@@ -93,7 +95,7 @@ dependencies = [
 
 [[package]]
 name = "argon-hal"
-version = "0.1.0"
+version = "0.1.4"
 dependencies = [
  "argon-proto",
  "argon-sim",
@@ -105,14 +107,14 @@ dependencies = [
 
 [[package]]
 name = "argon-proto"
-version = "0.1.0"
+version = "0.1.4"
 dependencies = [
  "proptest",
 ]
 
 [[package]]
 name = "argon-sim"
-version = "0.1.0"
+version = "0.1.4"
 dependencies = [
  "argon-proto",
  "serialport",
@@ -120,7 +122,7 @@ dependencies = [
 
 [[package]]
 name = "argon-telemetry"
-version = "0.1.0"
+version = "0.1.4"
 dependencies = [
  "argon-device",
  "argon-hal",
@@ -128,11 +130,12 @@ dependencies = [
 
 [[package]]
 name = "argon-tray"
-version = "0.1.0"
+version = "0.1.4"
 dependencies = [
  "argon-device",
  "argon-hal",
  "clap",
+ "clap_mangen",
  "ksni",
 ]
 
@@ -376,6 +379,16 @@ name = "clap_lex"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c133bc6a41be0d194c306b5506d15e6feeea7b1d6604bd3f8310dfb2ca96486"
+
+[[package]]
+name = "clap_mangen"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "211d617eaa4b735c96c9e0228fcbdb5120ef623f2b8cb67ffb84c3e02dbc28a4"
+dependencies = [
+ "clap",
+ "roff",
+]
 
 [[package]]
 name = "colorchoice"
@@ -958,6 +971,12 @@ name = "regex-syntax"
 version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
+
+[[package]]
+name = "roff"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "323c417e1d9665a65b263ec744ba09030cfb277e9daa0b018a4ab62e57bc8189"
 
 [[package]]
 name = "rustix"

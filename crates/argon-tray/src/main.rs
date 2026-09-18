@@ -21,7 +21,16 @@ mod tray;
 mod view;
 
 #[derive(Parser)]
-#[command(name = "argon-tray", version, about = "Panel icon for argon-utils")]
+#[command(
+    name = "argon-tray",
+    version,
+    about = "Panel icon for argon-utils",
+    long_about = "Panel icon for argon-utils: the UPS charge and state, the CPU temperature and \
+        the fan, as a StatusNotifierItem. Started at login from /etc/xdg/autostart.\n\n\
+        Reads the status argond publishes in /run/argon-utils/ups.state and never opens the UPS \
+        itself. A status argond has stopped updating is shown as stale, never as current. When \
+        a poweroff is scheduled it offers to cancel it, behind a two-step menu."
+)]
 struct Cli {
     /// Status file argond publishes.
     #[arg(long, value_name = "PATH", default_value = status::DEFAULT_PATH)]
@@ -34,6 +43,10 @@ struct Cli {
     /// Print what the icon would show, once, and exit. Needs no desktop.
     #[arg(long)]
     once: bool,
+
+    /// Print this program's manual page (roff) and exit. Used by the package build.
+    #[arg(long, hide = true)]
+    man: bool,
 }
 
 /// The things the tray reads, found once at startup.
@@ -62,6 +75,16 @@ fn read_status(path: &Path) -> Option<UpsStatus> {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    if cli.man {
+        let man = clap_mangen::Man::new(<Cli as clap::CommandFactory>::command()).section("1");
+        return match man.render(&mut std::io::stdout()) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("argon-tray: {e}");
+                ExitCode::FAILURE
+            }
+        };
+    }
     let mut sources = Sources {
         state: cli.state,
         sensor: ThermalZone::find_cpu().ok(),

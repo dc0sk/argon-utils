@@ -17,7 +17,7 @@ Depends: ${shlibs:Depends},
          systemd-sysv | systemd,
          udev
 Recommends: polkitd | policykit-1
-Description: fan, button and UPS daemon for Argon40 Raspberry Pi cases
+Description: UPS, OLED and fan daemon and tools for Argon40 Raspberry Pi cases
  argon-utils replaces the vendor's Python stack for Argon40 enclosures and
  the Argon PWR UPS with a Rust implementation: a daemon (argond), a command
  line tool (argonctl), a desktop notification agent and a panel icon

@@ -29,6 +29,12 @@ override_dh_auto_install:
 	install -D -m 0755 target/release/argonctl  debian/argon-utils/usr/bin/argonctl
 	install -D -m 0755 target/release/argon-tray debian/argon-utils/usr/bin/argon-tray
 
+# Manual pages, generated from the same clap definitions as --help, so the two cannot drift.
+	install -d debian/argon-utils/usr/share/man/man8 debian/argon-utils/usr/share/man/man1
+	target/release/argond --man     > debian/argon-utils/usr/share/man/man8/argond.8
+	target/release/argonctl --man   > debian/argon-utils/usr/share/man/man1/argonctl.1
+	target/release/argon-tray --man > debian/argon-utils/usr/share/man/man1/argon-tray.1
+
 	install -D -m 0644 packaging/systemd/argond.service \
 		debian/argon-utils/usr/lib/systemd/system/argond.service
 

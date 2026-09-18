@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 [Unit]
-Description=Argon40 case fan, button and UPS daemon
+Description=Argon40 UPS, OLED and fan daemon
 Documentation=https://github.com/dc0sk/argon-utils
 
 # Let systemd enforce mutual exclusion for the UPS: two readers on one CDC-ACM port split the
