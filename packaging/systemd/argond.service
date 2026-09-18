@@ -78,12 +78,15 @@ DeviceAllow=char-hidraw rw
 
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 
-# No StateDirectory=: nothing here keeps state across boots, and systemd would recursively
-# chown the directory to the daemon -- which is where the package's own rollback record lives,
-# so the daemon would end up owning a file that root acts on at removal time.
+# StateDirectory= holds the UPS clock drift record (clock.log), which has to survive reboots
+# because the journal here does not. systemd chowns this directory to the daemon, which is why
+# the package's rollback record is deliberately NOT in it: that lives in
+# /var/lib/argon-utils-retired, where the daemon cannot write. (Both were once in
+# /var/lib/argon-utils, which is how the daemon briefly owned a file root acts on at removal.)
 #
 # RuntimeDirectoryPreserve=restart so a restart does not delete the published status file: the
 # desktop agent would otherwise lose a pending poweroff across a package upgrade.
+StateDirectory=argon-utils
 RuntimeDirectory=argon-utils
 RuntimeDirectoryPreserve=restart
 ConfigurationDirectory=argon-utils

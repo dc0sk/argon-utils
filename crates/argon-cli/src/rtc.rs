@@ -111,6 +111,8 @@ pub fn run(args: &Args) -> ExitCode {
         Err(e) => println!("  wake schedule    unreadable: {e}"),
     }
 
+    print_drift();
+
     if args.t17 {
         return run_t17(&mut link, &wake);
     }
@@ -137,6 +139,27 @@ struct Outcome {
     confirmed: bool,
     /// The correct time was written afterwards and read back.
     restored: bool,
+}
+
+/// Where the packaged argond keeps its drift record.
+const DRIFT_RECORD: &str = "/var/lib/argon-utils/clock.log";
+
+/// Reports the UPS clock's drift from argond's record, if there is enough of it.
+fn print_drift() {
+    use argon_device::drift;
+    let entries = drift::read(std::path::Path::new(DRIFT_RECORD));
+    match (entries.len(), drift::rate(&entries)) {
+        (0, _) => println!("  drift            no record yet ({DRIFT_RECORD})"),
+        (n, Some(r)) => println!(
+            "  drift            {:+.2} s/day, over {:.1} days without a correction ({n} checks recorded)",
+            r.s_per_day,
+            r.span_days()
+        ),
+        (n, None) => println!(
+            "  drift            not measurable yet: {n} checks recorded, but no stretch without a \
+             correction spans a day"
+        ),
+    }
 }
 
 fn resolve_port(port: &str) -> Option<PathBuf> {

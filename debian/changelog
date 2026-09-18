@@ -1,3 +1,12 @@
+argon-utils (0.1.6) unstable; urgency=medium
+
+  * argond keeps a record of the UPS clock's drift that survives reboots,
+    in /var/lib/argon-utils/clock.log -- the journal on Raspberry Pi OS
+    does not -- and argonctl rtc reports the drift rate once there is a
+    day of uncorrected history. Removed on purge.
+
+ -- Simon Keimer <dc0sk@mailbox.org>  Fri, 18 Sep 2026 18:30:00 +0200
+
 argon-utils (0.1.5) unstable; urgency=medium
 
   * Scheduled wake: `argonctl poweroff --wake-at TIME` has argond set a UPS

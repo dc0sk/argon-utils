@@ -4,6 +4,7 @@
 use argon_device::clock_sync::{self, Verdict};
 use argon_device::config::Config;
 use argon_device::control::{Request, Response};
+use argon_device::drift;
 use argon_device::power::PowerControl;
 use argon_device::power::{Action, Logind, ShutdownCoordinator};
 use argon_device::ups::{Gate, Ups, UpsMonitor, Writes};
@@ -162,6 +163,8 @@ fn run(
     requests: &Requests,
 ) {
     let clock_writes = writes.clock;
+    let drift_record = drift_record_path();
+    let drift_record = drift_record.as_deref();
     let mut coordinator = ShutdownCoordinator::new(Logind, delay, dry_run);
     let mut monitor: Option<UpsMonitor<Gate<SerialLink>>> = None;
     // Due immediately: the first check runs right after the first successful poll, so a
@@ -256,7 +259,7 @@ fn run(
                 // Only on a healthy link, after the poll: housekeeping must never delay or
                 // displace a battery reading.
                 if Instant::now() >= next_clock_check {
-                    check_clock(m, clock_writes, clock_sync::system_clock_synced());
+                    check_and_record_clock(m, clock_writes, drift_record);
                     next_clock_check = Instant::now() + clock_sync::CHECK_INTERVAL;
                 }
                 if Instant::now() >= next_wake_check {
@@ -369,6 +372,34 @@ fn open_link(
             Ok(None)
         }
     }
+}
+
+/// Runs a clock check and adds what it did to the drift record, if there is one.
+fn check_and_record_clock(
+    m: &mut UpsMonitor<Gate<SerialLink>>,
+    clock_writes: bool,
+    record: Option<&std::path::Path>,
+) {
+    let entry = check_clock(m, clock_writes, clock_sync::system_clock_synced());
+    if let (Some(entry), Some(path)) = (entry, record) {
+        if let Err(e) = drift::append(path, entry) {
+            eprintln!(
+                "argond: ups: cannot add to the drift record {}: {e}",
+                path.display()
+            );
+        }
+    }
+}
+
+/// Where the drift record lives: `clock.log` in the state directory systemd gives the unit.
+///
+/// `None` outside systemd -- a hand-started argond keeps no record, rather than writing one into
+/// whatever directory it was started from.
+fn drift_record_path() -> Option<PathBuf> {
+    let dirs = std::env::var_os("STATE_DIRECTORY")?;
+    // systemd separates several state directories with colons; this unit declares one.
+    let first = dirs.to_string_lossy().split(':').next()?.to_owned();
+    (!first.is_empty()).then(|| PathBuf::from(first).join("clock.log"))
 }
 
 /// Writes the status file, logging a failure once rather than on every poll.
@@ -541,51 +572,74 @@ fn check_wake(
 /// Every outcome is logged with the offset found, in sync or not, which is the only drift
 /// measurement there is. It lasts only as long as the journal does -- until reboot on
 /// Raspberry Pi OS, whose journal is volatile. A failure is logged and left for the next check.
-fn check_clock(m: &mut UpsMonitor<Gate<SerialLink>>, clock_writes: bool, system_synced: bool) {
+fn check_clock(
+    m: &mut UpsMonitor<Gate<SerialLink>>,
+    clock_writes: bool,
+    system_synced: bool,
+) -> Option<drift::Entry> {
     let ups_clock = match m.ups_mut().clock() {
         Ok(t) => t,
         Err(e) => {
             eprintln!("argond: ups: clock check: reading the clock failed: {e}");
-            return;
+            return None;
         }
     };
-    match clock_sync::judge(ups_clock, unix_now(), system_synced) {
+    let checked_at = unix_now();
+    let entry = |offset_s, action| {
+        Some(drift::Entry {
+            unix: checked_at,
+            offset_s,
+            action,
+        })
+    };
+    match clock_sync::judge(ups_clock, checked_at, system_synced) {
         Verdict::InSync { offset_s } => {
             eprintln!("argond: ups: clock offset {offset_s:+} s, within tolerance");
+            entry(offset_s, drift::Action::InSync)
         }
-        Verdict::Untrusted { offset_s } => eprintln!(
-            "argond: ups: clock offset {offset_s:+} s; not correcting it, because the system \
-             clock is not NTP-synchronised"
-        ),
+        Verdict::Untrusted { offset_s } => {
+            eprintln!(
+                "argond: ups: clock offset {offset_s:+} s; not correcting it, because the system \
+                 clock is not NTP-synchronised"
+            );
+            entry(offset_s, drift::Action::LeftAlone)
+        }
         Verdict::Implausible => {
             eprintln!("argond: ups: the clock read back as an impossible date; not acting on it");
+            None
         }
-        Verdict::Correct { offset_s } if !clock_writes => eprintln!(
-            "argond: ups: clock offset {offset_s:+} s; not correcting it (clock sync is off)"
-        ),
+        Verdict::Correct { offset_s } if !clock_writes => {
+            eprintln!(
+                "argond: ups: clock offset {offset_s:+} s; not correcting it (clock sync is off)"
+            );
+            entry(offset_s, drift::Action::LeftAlone)
+        }
         Verdict::Correct { offset_s } => {
             clock_sync::sleep_to_next_second();
-            let Some(now) = argon_proto::ups::UpsTime::from_unix_seconds(unix_now()) else {
-                return;
-            };
+            let now = argon_proto::ups::UpsTime::from_unix_seconds(unix_now())?;
             if let Err(e) = m.ups_mut().set_clock(now) {
                 eprintln!("argond: ups: clock was {offset_s:+} s off; setting it failed: {e}");
-                return;
+                return entry(offset_s, drift::Action::LeftAlone);
             }
             let after = m
                 .ups_mut()
                 .clock()
                 .ok()
                 .map(|t| clock_sync::judge(t, unix_now(), true));
-            match after {
-                Some(Verdict::InSync { offset_s: now_off }) => eprintln!(
+            if let Some(Verdict::InSync { offset_s: after_s }) = after {
+                eprintln!(
                     "argond: ups: clock was {offset_s:+} s off; set from the system clock, now \
-                     {now_off:+} s"
-                ),
-                other => eprintln!(
+                     {after_s:+} s"
+                );
+                entry(offset_s, drift::Action::Corrected { after_s })
+            } else {
+                eprintln!(
                     "argond: ups: clock was {offset_s:+} s off; set it, but the read-back is \
-                     {other:?}"
-                ),
+                     {after:?}"
+                );
+                // Not recorded as a correction: without a trusted read-back there is no known
+                // starting offset for the next free-running stretch.
+                entry(offset_s, drift::Action::LeftAlone)
             }
         }
     }
@@ -659,7 +713,7 @@ mod tests {
         let policy = BatteryPolicy::new(argon_proto::ups::policy::PolicyConfig::default()).unwrap();
         let mut m = UpsMonitor::new(Ups::new(gate), policy);
 
-        check_clock(&mut m, clock_writes, synced);
+        let _ = check_clock(&mut m, clock_writes, synced);
 
         let after = m.ups_mut().clock().expect("read the clock back");
         stop.store(true, Ordering::Relaxed);
@@ -875,6 +929,33 @@ mod tests {
             check_wake(m, false, unix_now(), &mut Seen::Unknown);
         });
         assert_eq!(after, Some(soon), "wrote without permission");
+    }
+
+    #[test]
+    fn the_drift_record_gets_what_the_check_did() {
+        // The simulator's clock starts days away from now, so a check always has to act.
+        let (entry, _) = with_ups(None, ALL_WRITES, |m| check_clock(m, true, true));
+        let entry = entry.expect("a check that corrected recorded nothing");
+        match entry.action {
+            drift::Action::Corrected { after_s } => {
+                assert!(
+                    after_s.abs() <= clock_sync::THRESHOLD_S,
+                    "read back {after_s:+} s"
+                );
+                assert!(
+                    entry.offset_s.abs() > 3_600,
+                    "recorded the wrong offset: {entry:?}"
+                );
+            }
+            other => panic!("expected a correction, recorded {other:?}"),
+        }
+
+        let (entry, _) = with_ups(None, Writes::default(), |m| check_clock(m, false, true));
+        assert_eq!(
+            entry.map(|e| e.action),
+            Some(drift::Action::LeftAlone),
+            "a check without clock writes must not be recorded as a correction"
+        );
     }
 
     #[test]

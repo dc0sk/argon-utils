@@ -67,6 +67,8 @@ purge)
     # directory and the kill-switch file are ours to clean up.
     rm -f /etc/argon-utils/disabled
     rmdir /etc/argon-utils 2>/dev/null || true
+    # The drift record. Kept on remove -- it is history nothing else holds -- and gone on purge.
+    rm -rf /var/lib/argon-utils
     if getent passwd argon >/dev/null; then
         deluser --system --quiet argon >/dev/null 2>&1 || true
     fi

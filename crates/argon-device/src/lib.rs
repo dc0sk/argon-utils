@@ -8,6 +8,7 @@
 pub mod clock_sync;
 pub mod config;
 pub mod control;
+pub mod drift;
 pub mod fan;
 pub mod fan_control;
 pub mod mcu;
