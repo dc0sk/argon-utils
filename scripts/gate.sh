@@ -37,6 +37,7 @@ run "panic strategy"     ./scripts/check-panic-strategy.sh
 run "cleanroom canary"  ./scripts/cleanroom-check.sh
 run "canary validation" ./scripts/test-cleanroom-check.sh
 run "licences"          ./scripts/check-licenses.py
+run "packaging XML"     ./scripts/check-packaging-xml.sh
 
 echo
 if [ ${#failed[@]} -eq 0 ]; then

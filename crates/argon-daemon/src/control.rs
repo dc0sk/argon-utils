@@ -126,7 +126,7 @@ fn read_request(stream: &UnixStream) -> Result<Request, String> {
     control::from_line(&line).map_err(|e| format!("not a request argond understands: {e}"))
 }
 
-fn relay(req: Request, to_ups: &Sender<Message>, waiting: &AtomicBool) -> Response {
+pub fn relay(req: Request, to_ups: &Sender<Message>, waiting: &AtomicBool) -> Response {
     let (reply_tx, reply_rx) = mpsc::channel();
     if to_ups.send((req, reply_tx)).is_err() {
         return Response::error("UPS monitoring is not running, so nothing can act on this");

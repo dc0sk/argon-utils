@@ -44,6 +44,10 @@ override_dh_auto_install:
 		debian/argon-utils/usr/lib/udev/rules.d/60-argon-utils.rules
 	install -D -m 0644 packaging/polkit/50-argon-utils.rules \
 		debian/argon-utils/usr/share/polkit-1/rules.d/50-argon-utils.rules
+	install -D -m 0644 packaging/polkit/org.argonutils.policy \
+		debian/argon-utils/usr/share/polkit-1/actions/org.argonutils.policy
+	install -D -m 0644 packaging/dbus/org.argonutils.Daemon1.conf \
+		debian/argon-utils/usr/share/dbus-1/system.d/org.argonutils.Daemon1.conf
 
 # These are conffiles on purpose: the config carries the operator's thresholds and mode,
 # and the autostart entry is the kind of thing a desktop user disables locally.

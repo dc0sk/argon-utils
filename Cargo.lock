@@ -79,6 +79,7 @@ dependencies = [
  "sd-notify",
  "serialport",
  "signal-hook",
+ "zbus",
 ]
 
 [[package]]

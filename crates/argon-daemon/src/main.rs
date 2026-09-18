@@ -32,6 +32,7 @@ use std::thread::JoinHandle;
 use std::time::{Duration, SystemTime};
 
 mod control;
+mod dbus;
 mod exporter;
 mod oled;
 mod startup;
@@ -186,6 +187,13 @@ fn start_workers(cli: &Cli, config: &Config, stopping: &Arc<AtomicBool>) -> Work
             },
         )
     };
+    // The same channel serves the D-Bus service, so both routes reach the UPS thread the same
+    // way. Its connection is kept in Workers: dropping it takes the service off the bus.
+    let bus = if cli.once {
+        None
+    } else {
+        dbus::serve(to_ups.clone(), Arc::clone(&request_waiting))
+    };
     let control_thread = if cli.once {
         None
     } else {
@@ -211,7 +219,9 @@ fn start_workers(cli: &Cli, config: &Config, stopping: &Arc<AtomicBool>) -> Work
         .into_iter()
         .flatten()
         .collect();
-    Workers::new(ups_thread, heartbeat, others, config)
+    let mut workers = Workers::new(ups_thread, heartbeat, others, config);
+    workers.bus = bus;
+    workers
 }
 
 /// Works out what drives the fan, and says so.
@@ -292,6 +302,8 @@ struct Workers {
     /// The OLED and control threads: joined on the way out, so the panel is blanked and the
     /// control socket removed before the process exits.
     others: Vec<JoinHandle<()>>,
+    /// The D-Bus service's connection, held so the service stays on the bus.
+    bus: Option<zbus::blocking::Connection>,
 }
 
 impl Workers {
@@ -309,6 +321,7 @@ impl Workers {
             heartbeat,
             stale_after: Duration::from_secs(interval.max(60)),
             others,
+            bus: None,
         }
     }
 
@@ -321,6 +334,8 @@ impl Workers {
     }
 
     fn join(self) {
+        // Off the bus first, so nothing can ask for an action while the rest shuts down.
+        drop(self.bus);
         for t in self.thread.into_iter().chain(self.others) {
             let _ = t.join();
         }

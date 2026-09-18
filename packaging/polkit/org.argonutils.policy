@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!--
+  The polkit action guarding "power off, and have the UPS wake the machine later".
+
+  Defaults mirror logind's own org.freedesktop.login1.power-off (checked on Debian 13 with
+  pkaction's verbose output): an active local session may, without a password; anyone else needs an
+  administrator. Whoever can power off from the desktop's own menu can also power off with a
+  wake, and nobody else can.
+
+  The owner annotation lets argond, running as `argon`, ask polkit about *other* users' calls
+  for this one action. Without it polkit refuses: "Only trusted callers (e.g. uid 0 or an action
+  owner) can use CheckAuthorization() for subjects belonging to other identities".
+
+  Installed to /usr/share/polkit-1/actions/.
+-->
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>argon-utils</vendor>
+  <vendor_url>https://github.com/dc0sk/argon-utils</vendor_url>
+
+  <action id="org.argonutils.poweroff-with-wake">
+    <description>Power off, and have the UPS power the machine on again later</description>
+    <message>Authentication is required to power off with a scheduled wake.</message>
+    <defaults>
+      <allow_any>auth_admin_keep</allow_any>
+      <allow_inactive>auth_admin_keep</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.owner">unix-user:argon</annotate>
+  </action>
+</policyconfig>
