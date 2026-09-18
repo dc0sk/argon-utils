@@ -77,6 +77,11 @@ daemons (`argonupsrtcd`, `argononeupsd`) are not running; otherwise it logs what
 do. The Raspberry Pi desktop's labwc session runs `lxsession-xdg-autostart`, which is what
 starts the agent (checked on the development machine).
 
+On an **Argon ONE UP**, set `[ups] source = "oneup"`: argond then reads the laptop's own battery
+from its CW2217 fuel gauge on the I2C bus instead, with the same policy, delay and
+notifications. There the vendor unit to stop is `argononeupd`, which the package does **not**
+retire, because it also handles the lid. `argonctl battery` shows what the gauge reads.
+
 
 ## Building and installing the Debian package
 

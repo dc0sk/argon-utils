@@ -28,6 +28,7 @@
 extern crate alloc;
 
 pub mod bcd;
+pub mod cw2217;
 pub mod fan;
 #[cfg(feature = "alloc")]
 pub mod hid;

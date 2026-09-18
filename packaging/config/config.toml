@@ -79,7 +79,14 @@ dialect = "legacy"
 bus = "auto"
 
 [ups]
-# Where UPS telemetry comes from: "serial", "hid", or "none".
+# Where UPS telemetry comes from: "serial", "oneup", "hid", or "none".
+#
+# "oneup" is the Argon ONE UP laptop's own battery, read from its Cellwise CW2217 fuel gauge on
+# the I2C bus ([mcu] bus). Reads only. On a ONE UP, "on battery" means the battery is
+# discharging -- including behind a charger too weak for the load. The UPS clock, wake and
+# `port` settings do not apply to it. While the vendor's argononeupd runs, argond monitors but
+# never powers the machine off, as with the PWR UPS's vendor daemons: that daemon is
+# responsible for the ONE UP's battery, and two programs acting on one battery is one too many.
 #
 # "serial" is the Argon-proprietary protocol and is currently the only channel observed to
 # return live data. The HID interface publishes a complete USB HID Power Device descriptor but

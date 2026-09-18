@@ -34,6 +34,7 @@ use std::time::{Duration, SystemTime};
 mod control;
 mod dbus;
 mod exporter;
+mod gauge;
 mod oled;
 mod startup;
 mod ups;
@@ -44,8 +45,10 @@ mod ups;
     version,
     about = "UPS, OLED and fan daemon for Argon40 cases",
     long_about = "UPS, OLED and fan daemon for Argon40 cases.\n\n\
-        Monitors the Argon PWR UPS over its USB serial link and, in mode \"full\", schedules a \
-        delayed poweroff when the battery is confirmed critical, cancelled if mains returns. \
+        Monitors the Argon PWR UPS over its USB serial link -- or, with [ups] source = \
+        \"oneup\", the Argon ONE UP laptop's battery through its fuel gauge -- and, in mode \
+        \"full\", schedules a delayed poweroff when the battery is confirmed critical, \
+        cancelled if mains returns. \
         Keeps the UPS clock set from the system clock. Publishes UPS status to \
         /run/argon-utils/ups.state for the tray icon and the notification agent. Optionally \
         draws a status page on the case OLED. Drives the case fan on models with an Argon MCU \
@@ -173,18 +176,29 @@ fn start_workers(cli: &Cli, config: &Config, stopping: &Arc<AtomicBool>) -> Work
     // port, so it is the only one that can act on them.
     let (to_ups, from_control) = std::sync::mpsc::channel();
     let request_waiting = Arc::new(AtomicBool::new(false));
+    let requests = ups::Requests {
+        rx: from_control,
+        waiting: Arc::clone(&request_waiting),
+    };
+    // Only the PWR UPS has a clock to wake the machine by.
+    let oneup = config.ups.source == "oneup";
     let ups_thread = if cli.once {
         None
+    } else if oneup {
+        gauge::spawn(
+            config,
+            &startup::active_vendor_units(),
+            Arc::clone(stopping),
+            Arc::clone(&heartbeat),
+            requests,
+        )
     } else {
         ups::spawn(
             config,
             &startup::active_vendor_units(),
             Arc::clone(stopping),
             Arc::clone(&heartbeat),
-            ups::Requests {
-                rx: from_control,
-                waiting: Arc::clone(&request_waiting),
-            },
+            requests,
         )
     };
     // The same channel serves the D-Bus service, so both routes reach the UPS thread the same
@@ -192,7 +206,7 @@ fn start_workers(cli: &Cli, config: &Config, stopping: &Arc<AtomicBool>) -> Work
     let bus = if cli.once {
         None
     } else {
-        dbus::serve(to_ups.clone(), Arc::clone(&request_waiting))
+        dbus::serve(to_ups.clone(), Arc::clone(&request_waiting), !oneup)
     };
     let control_thread = if cli.once {
         None

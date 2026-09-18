@@ -293,35 +293,40 @@ pub struct Poll {
     pub consecutive_failures: u32,
 }
 
-/// Polls the UPS and feeds the battery policy.
-pub struct UpsMonitor<L: UpsLink> {
-    ups: Ups<L>,
+/// Something that can be polled for a battery reading and a policy decision.
+///
+/// The PWR UPS ([`UpsMonitor`]) and the ONE UP's fuel gauge
+/// ([`GaugeMonitor`](crate::gauge::GaugeMonitor)) both are, so one monitoring cycle
+/// ([`step`](crate::ups_service::step)) serves either.
+pub trait Monitor {
+    /// Reads the battery once and returns the policy's decision.
+    fn poll(&mut self, uptime: Duration) -> Poll;
+}
+
+/// Feeds readings -- or failures to read -- to the battery policy, counting failures.
+///
+/// A failed read is not an error here: it becomes an `Unknown` observation, which the policy
+/// never turns into shutdown advice. Losing the link is a condition to report, not a reason to
+/// stop monitoring.
+#[derive(Debug, Clone)]
+pub struct Watch {
     policy: BatteryPolicy,
     failures: u32,
 }
 
-impl<L: UpsLink> UpsMonitor<L> {
-    /// Creates a monitor.
-    pub const fn new(ups: Ups<L>, policy: BatteryPolicy) -> Self {
+impl Watch {
+    /// Starts watching with `policy`.
+    #[must_use]
+    pub const fn new(policy: BatteryPolicy) -> Self {
         Self {
-            ups,
             policy,
             failures: 0,
         }
     }
 
-    /// The UPS, for occasional queries outside the battery poll.
-    pub const fn ups_mut(&mut self) -> &mut Ups<L> {
-        &mut self.ups
-    }
-
-    /// Reads the battery once and returns the policy's decision.
-    ///
-    /// A failed read is not an error here: it becomes an `Unknown` observation, which the
-    /// policy never turns into shutdown advice. Losing the link is a condition to report, not
-    /// a reason to stop monitoring.
-    pub fn poll(&mut self, uptime: Duration) -> Poll {
-        match self.ups.battery() {
+    /// Records one reading and returns the policy's decision.
+    pub fn observe(&mut self, reading: Result<BatteryStatus>, uptime: Duration) -> Poll {
+        match reading {
             Ok(b) => {
                 self.failures = 0;
                 let decision = self.policy.observe(
@@ -349,5 +354,38 @@ impl<L: UpsLink> UpsMonitor<L> {
                 }
             }
         }
+    }
+}
+
+/// Polls the UPS and feeds the battery policy.
+pub struct UpsMonitor<L: UpsLink> {
+    ups: Ups<L>,
+    watch: Watch,
+}
+
+impl<L: UpsLink> UpsMonitor<L> {
+    /// Creates a monitor.
+    pub const fn new(ups: Ups<L>, policy: BatteryPolicy) -> Self {
+        Self {
+            ups,
+            watch: Watch::new(policy),
+        }
+    }
+
+    /// The UPS, for occasional queries outside the battery poll.
+    pub const fn ups_mut(&mut self) -> &mut Ups<L> {
+        &mut self.ups
+    }
+
+    /// Reads the battery once and returns the policy's decision.
+    pub fn poll(&mut self, uptime: Duration) -> Poll {
+        let reading = self.ups.battery();
+        self.watch.observe(reading, uptime)
+    }
+}
+
+impl<L: UpsLink> Monitor for UpsMonitor<L> {
+    fn poll(&mut self, uptime: Duration) -> Poll {
+        Self::poll(self, uptime)
     }
 }

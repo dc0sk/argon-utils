@@ -88,6 +88,44 @@ impl I2cBus for LinuxI2c {
     }
 }
 
+/// Reads registers from one device, and can do nothing else.
+///
+/// A register read writes the register number before a repeated start: `S addr+W reg Sr
+/// addr+R data.. P`. That byte is harmless only on a device whose datasheet says it just moves
+/// a pointer -- which is **not** true of the ONE-family MCU (ADR-0002). So this is a separate
+/// trait from [`I2cBus`], used only for devices identified and documented as safe to read,
+/// and it has no write method at all: a driver holding one cannot write, whatever it tries.
+pub trait RegisterRead {
+    /// Reads `buf.len()` bytes starting at `register`, in one transaction.
+    ///
+    /// # Errors
+    ///
+    /// Fails on bus error.
+    fn read_registers(&mut self, register: u8, buf: &mut [u8]) -> Result<()>;
+
+    /// A short description for logs.
+    fn describe(&self) -> String;
+}
+
+impl RegisterRead for LinuxI2c {
+    fn read_registers(&mut self, register: u8, buf: &mut [u8]) -> Result<()> {
+        use i2cdev::core::{I2CMessage, I2CTransfer};
+        use i2cdev::linux::LinuxI2CMessage;
+        let reg = [register];
+        // One transfer, so nothing else on the bus -- the vendor's daemon, say -- can move the
+        // pointer between the write and the read, and a two-byte value cannot tear.
+        let mut msgs = [LinuxI2CMessage::write(&reg), LinuxI2CMessage::read(buf)];
+        self.dev
+            .transfer(&mut msgs)
+            .map(|_| ())
+            .map_err(|e| Error::Io(std::io::Error::other(format!("{}: {e}", self.path))))
+    }
+
+    fn describe(&self) -> String {
+        format!("{} @ 0x{:02x}", self.path, self.addr)
+    }
+}
+
 /// Forbids every write. Wraps the bus used in [`crate::mode::Mode::ReadOnly`].
 pub struct ReadOnly<T>(pub T);
 

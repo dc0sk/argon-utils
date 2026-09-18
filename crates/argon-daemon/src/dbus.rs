@@ -85,6 +85,8 @@ pub struct Daemon1 {
     to_ups: Sender<Message>,
     waiting: Arc<AtomicBool>,
     auth: Box<dyn Authorize>,
+    /// Whether the battery argond watches can wake the machine. The ONE UP's cannot.
+    wake_supported: bool,
 }
 
 // The interface macro fixes these signatures: a method takes `&self` whether it needs it or
@@ -97,10 +99,11 @@ impl Daemon1 {
         env!("CARGO_PKG_VERSION").to_owned()
     }
 
-    /// Whether the caller may power off with a wake: "yes", "challenge" or "no" -- the shape of
-    /// logind's `CanPowerOff`. Only asks polkit; changes nothing.
+    /// Whether the caller may power off with a wake: "yes", "challenge", "no", or "na" when
+    /// this hardware has no wake -- the shape of logind's `CanPowerOff`. Only asks polkit;
+    /// changes nothing.
     fn can_poweroff_with_wake(&self, #[zbus(header)] header: Header<'_>) -> String {
-        can(self.auth.as_ref(), &sender_of(&header)).to_owned()
+        can(self.auth.as_ref(), &sender_of(&header), self.wake_supported).to_owned()
     }
 
     /// Sets a UPS wake at `at_unix`, reads it back, then powers off a minute later. Returns the
@@ -121,7 +124,10 @@ fn sender_of(header: &Header<'_>) -> String {
 }
 
 /// `CanPoweroffWithWake`, without the bus.
-fn can(auth: &dyn Authorize, sender: &str) -> &'static str {
+fn can(auth: &dyn Authorize, sender: &str, wake_supported: bool) -> &'static str {
+    if !wake_supported {
+        return "na";
+    }
     match auth.check(sender, ACTION_POWEROFF_WITH_WAKE, false) {
         Ok(Verdict::Yes) => "yes",
         Ok(Verdict::Challenge) => "challenge",
@@ -167,11 +173,13 @@ fn poweroff(
 pub fn serve(
     to_ups: Sender<Message>,
     waiting: Arc<AtomicBool>,
+    wake_supported: bool,
 ) -> Option<zbus::blocking::Connection> {
     let object = Daemon1 {
         to_ups,
         waiting,
         auth: Box::new(Polkit),
+        wake_supported,
     };
     let built = zbus::blocking::connection::Builder::system()
         .and_then(|b| b.name(BUS_NAME))
@@ -213,19 +221,28 @@ mod tests {
 
     #[test]
     fn can_reports_polkit_and_never_turns_an_error_into_yes() {
-        assert_eq!(can(&Fixed::new(Ok(Verdict::Yes)), ":1.5"), "yes");
+        assert_eq!(can(&Fixed::new(Ok(Verdict::Yes)), ":1.5", true), "yes");
         assert_eq!(
-            can(&Fixed::new(Ok(Verdict::Challenge)), ":1.5"),
+            can(&Fixed::new(Ok(Verdict::Challenge)), ":1.5", true),
             "challenge"
         );
-        assert_eq!(can(&Fixed::new(Ok(Verdict::No)), ":1.5"), "no");
-        assert_eq!(can(&Fixed::new(Err("no polkitd".into())), ":1.5"), "no");
+        assert_eq!(can(&Fixed::new(Ok(Verdict::No)), ":1.5", true), "no");
+        assert_eq!(
+            can(&Fixed::new(Err("no polkitd".into())), ":1.5", true),
+            "no"
+        );
+    }
+
+    #[test]
+    fn hardware_without_a_wake_says_so_whatever_polkit_would_say() {
+        // The ONE UP: "na", so the tray does not offer what cannot be done.
+        assert_eq!(can(&Fixed::new(Ok(Verdict::Yes)), ":1.5", false), "na");
     }
 
     #[test]
     fn can_never_prompts() {
         let auth = Fixed::new(Ok(Verdict::Yes));
-        let _ = can(&auth, ":1.5");
+        let _ = can(&auth, ":1.5", true);
         assert_eq!(
             *auth.1.lock().unwrap(),
             vec![false],

@@ -1,3 +1,16 @@
+argon-utils (0.1.9) unstable; urgency=medium
+
+  * Argon ONE UP battery: with [ups] source = "oneup", argond reads the
+    laptop's Cellwise CW2217 fuel gauge (reads only, identified by its
+    VERSION register first) into the same battery policy, delayed
+    poweroff and status file as the PWR UPS. It acts only in mode "full"
+    and only while the vendor's argononeupd is not running.
+  * argonctl battery: read the ONE UP's gauge by hand.
+  * On the ONE UP, CanPoweroffWithWake answers "na", so the tray does not
+    offer a wake the hardware cannot do.
+
+ -- Simon Keimer <dc0sk@mailbox.org>  Fri, 18 Sep 2026 22:00:00 +0200
+
 argon-utils (0.1.8) unstable; urgency=medium
 
   * The tray shows any shutdown logind has scheduled -- including one it

@@ -196,7 +196,8 @@ impl Default for McuConfig {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct UpsConfig {
-    /// Where telemetry comes from: `serial`, `hid`, or `none`.
+    /// Where telemetry comes from: `serial` (the PWR UPS), `oneup` (the ONE UP's CW2217 fuel
+    /// gauge, on the I2C bus named in `[mcu] bus`), `hid`, or `none`.
     pub source: String,
     /// Port path, or `auto`.
     pub port: String,
@@ -382,11 +383,14 @@ impl Config {
             });
         }
 
-        if !matches!(self.ups.source.as_str(), "serial" | "hid" | "none") {
+        if !matches!(
+            self.ups.source.as_str(),
+            "serial" | "oneup" | "hid" | "none"
+        ) {
             return Err(ConfigError::BadValue {
                 key: "ups.source",
                 got: self.ups.source.clone(),
-                expected: "serial, hid or none",
+                expected: "serial, oneup, hid or none",
             });
         }
 

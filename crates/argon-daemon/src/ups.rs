@@ -32,7 +32,7 @@ pub const STALL_INTERVALS: u32 = 4;
 ///
 /// The device has been seen to re-enumerate under a new node name; a link held open across
 /// that points at nothing and never recovers on its own.
-const REOPEN_AFTER: u32 = 3;
+pub(crate) const REOPEN_AFTER: u32 = 3;
 
 /// Requests from the control socket, and the flag that says one is waiting.
 pub struct Requests {
@@ -202,56 +202,9 @@ fn run(
         }
 
         if let Some(m) = monitor.as_mut() {
-            // A failed uptime read reads as "just booted", which holds the shutdown back.
-            // That is the safe direction, but it is indistinguishable from a healthy daemon
-            // unless it is said out loud.
-            let uptime = match platform::uptime() {
-                Ok(u) => {
-                    uptime_error_logged = false;
-                    u
-                }
-                Err(e) => {
-                    if !uptime_error_logged {
-                        eprintln!(
-                            "argond: ups: cannot read uptime ({e}); treating the machine as \
-                             just booted, which holds any shutdown back"
-                        );
-                        uptime_error_logged = true;
-                    }
-                    Duration::ZERO
-                }
-            };
+            let uptime = uptime_or_zero(&mut uptime_error_logged);
             let cycle = step(m, &mut coordinator, uptime, SystemTime::now());
-
-            // Logged once per episode: a daemon permanently holding a shutdown must not look
-            // like a daemon with nothing to do.
-            if let Advice::HeldForUptime { remaining } = cycle.poll.decision.advice {
-                if !held_logged {
-                    eprintln!(
-                        "argond: ups: battery critical, but holding the shutdown for another \
-                         {}s after boot",
-                        remaining.as_secs()
-                    );
-                    held_logged = true;
-                }
-            } else {
-                held_logged = false;
-            }
-
-            if let Some(from) = cycle.poll.decision.changed_from {
-                let pct = cycle
-                    .status
-                    .percent
-                    .map_or_else(String::new, |p| format!(" at {p}%"));
-                eprintln!("argond: ups: {from} -> {}{pct}", cycle.poll.decision.level);
-            }
-            log_action(&cycle.action);
-            if let Some(e) = &cycle.poll.error {
-                eprintln!(
-                    "argond: ups: read failed ({} in a row): {e}",
-                    cycle.poll.consecutive_failures
-                );
-            }
+            report_cycle(&cycle, &mut held_logged);
             if cycle.poll.consecutive_failures >= REOPEN_AFTER {
                 eprintln!("argond: ups: reopening the port");
                 monitor = None;
@@ -279,6 +232,62 @@ fn run(
     if !dry_run && coordinator.scheduled_at().is_some() {
         // The battery is still critical; stopping this daemon does not change that.
         eprintln!("argond: ups: stopping with a poweroff scheduled; leaving it in place");
+    }
+}
+
+/// Uptime, or zero -- "just booted" -- if it cannot be read.
+///
+/// Zero holds any shutdown back. That is the safe direction, but it is indistinguishable from a
+/// healthy daemon unless it is said out loud, so the failure is logged once per episode.
+pub(crate) fn uptime_or_zero(error_logged: &mut bool) -> Duration {
+    match platform::uptime() {
+        Ok(u) => {
+            *error_logged = false;
+            u
+        }
+        Err(e) => {
+            if !*error_logged {
+                eprintln!(
+                    "argond: ups: cannot read uptime ({e}); treating the machine as just \
+                     booted, which holds any shutdown back"
+                );
+                *error_logged = true;
+            }
+            Duration::ZERO
+        }
+    }
+}
+
+/// Logs what one monitoring cycle found and did.
+pub(crate) fn report_cycle(cycle: &argon_device::ups_service::Cycle, held_logged: &mut bool) {
+    // Logged once per episode: a daemon permanently holding a shutdown must not look like a
+    // daemon with nothing to do.
+    if let Advice::HeldForUptime { remaining } = cycle.poll.decision.advice {
+        if !*held_logged {
+            eprintln!(
+                "argond: ups: battery critical, but holding the shutdown for another {}s after \
+                 boot",
+                remaining.as_secs()
+            );
+            *held_logged = true;
+        }
+    } else {
+        *held_logged = false;
+    }
+
+    if let Some(from) = cycle.poll.decision.changed_from {
+        let pct = cycle
+            .status
+            .percent
+            .map_or_else(String::new, |p| format!(" at {p}%"));
+        eprintln!("argond: ups: {from} -> {}{pct}", cycle.poll.decision.level);
+    }
+    log_action(&cycle.action);
+    if let Some(e) = &cycle.poll.error {
+        eprintln!(
+            "argond: ups: read failed ({} in a row): {e}",
+            cycle.poll.consecutive_failures
+        );
     }
 }
 
@@ -403,7 +412,7 @@ fn drift_record_path() -> Option<PathBuf> {
 }
 
 /// Writes the status file, logging a failure once rather than on every poll.
-fn publish(
+pub(crate) fn publish(
     status: &argon_device::status::UpsStatus,
     path: &std::path::Path,
     error_logged: &mut bool,
@@ -646,19 +655,19 @@ fn check_clock(
 }
 
 /// Seconds since the unix epoch, or 0 if the clock is before it.
-fn unix_now() -> u64 {
+pub(crate) fn unix_now() -> u64 {
     SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs())
 }
 
 /// Sleeps in short slices so a stop request is honoured promptly.
-fn sleep_unless_stopping(total: Duration, stopping: &AtomicBool) {
+pub(crate) fn sleep_unless_stopping(total: Duration, stopping: &AtomicBool) {
     sleep_unless(total, stopping, &AtomicBool::new(false));
 }
 
 /// Sleeps in short slices, ending early on a stop or when a request is waiting.
-fn sleep_unless(total: Duration, stopping: &AtomicBool, request_waiting: &AtomicBool) {
+pub(crate) fn sleep_unless(total: Duration, stopping: &AtomicBool, request_waiting: &AtomicBool) {
     let slice = Duration::from_millis(250);
     let mut left = total;
     while !left.is_zero()

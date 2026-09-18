@@ -210,3 +210,70 @@ fn only_the_vendor_ups_units_count_as_contention() {
     );
     assert!(contention(&["argononed.service".to_owned()]).is_empty());
 }
+
+/// A ONE UP fuel gauge playing back `(percent, current)` readings, one per poll.
+struct ScriptedGauge {
+    script: VecDeque<(u8, i16)>,
+    now: (u8, i16),
+}
+
+impl argon_hal::i2c::RegisterRead for ScriptedGauge {
+    fn read_registers(&mut self, register: u8, buf: &mut [u8]) -> Result<()> {
+        use argon_proto::cw2217::reg;
+        match register {
+            reg::VERSION => buf[0] = argon_proto::cw2217::VERSION_VALUE,
+            // Each poll reads SOC first: that is where the script advances.
+            reg::SOC => {
+                self.now = self.script.pop_front().ok_or(Error::Timeout)?;
+                buf.copy_from_slice(&[self.now.0, 0]);
+            }
+            reg::VCELL => buf.copy_from_slice(&[0x30, 0x00]),
+            reg::CURRENT => buf.copy_from_slice(&self.now.1.to_be_bytes()),
+            _ => buf.fill(0),
+        }
+        Ok(())
+    }
+    fn describe(&self) -> String {
+        "scripted gauge".into()
+    }
+}
+
+#[test]
+fn a_one_up_draining_on_battery_is_powered_off_and_plugging_in_cancels_it() {
+    use argon_device::gauge::{Cw2217, GaugeMonitor};
+    // Discharging all the way down, then the charger: charging current twice confirms it.
+    let script = [
+        (40, -2200),
+        (15, -2200),
+        (9, -2200),
+        (8, -2200),
+        (8, 2800),
+        (8, 2800),
+    ];
+    let gauge = Cw2217::identify(ScriptedGauge {
+        script: script.into_iter().collect(),
+        now: (0, 0),
+    })
+    .unwrap();
+    let mut monitor =
+        GaugeMonitor::new(gauge, BatteryPolicy::new(PolicyConfig::default()).unwrap());
+    let mut coord =
+        ShutdownCoordinator::new(FakeLogind::default(), Duration::from_secs(120), false);
+    let mut actions = Vec::new();
+    let mut levels = Vec::new();
+    for i in 0..script.len() {
+        let now = UNIX_EPOCH + Duration::from_secs(2_000_000_000 + i as u64 * 10);
+        let c = step(&mut monitor, &mut coord, UP, now);
+        actions.push(c.action);
+        levels.push(c.status.level);
+    }
+    assert!(
+        matches!(actions[3], Action::Scheduled { .. }),
+        "{actions:?}"
+    );
+    assert_eq!(levels[3], "critical");
+    assert_eq!(actions[5], Action::Cancelled, "{actions:?}");
+    assert_eq!(levels[5], "on-mains");
+    let power = std::mem::take(coord.power_mut());
+    assert_eq!((power.schedules, power.cancels), (1, 1));
+}

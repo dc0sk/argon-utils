@@ -835,7 +835,7 @@ least 15 minutes out when set, the poweroff comes first, and if the poweroff wer
 
 ### Run it
 
-First install 0.1.6 (your config is kept) and check `argond` is listening:
+First install the current package (your config is kept) and check `argond` is listening:
 
 ```sh
 sudo apt install -y -o Dpkg::Options::=--force-confold ~/git/argon-utils_0.1.8_arm64.deb
@@ -862,6 +862,43 @@ It powers off a minute later. **Note the wake time it printed.**
 (the Pi's own; it starts a halted Pi 5) and report that the wake did not happen.
 
 **Report:** `~/argon-t18.log`.
+
+## 🟡 T19 — The ONE UP's battery through argond
+
+**On the ONE UP** (`one-up-pi`), not the ONE V5. **Unblocks:** trusting argond with the ONE
+UP's battery. Already done by hand on 2026-09-18: the gauge identified, read on charger and on
+battery, and argond run from a scratch folder in read-only mode
+(`OBS-2026-09-18-one-up-survey`).
+
+### Step 1 — install, read-only, alongside the vendor daemon
+
+Nothing here powers anything off: the package installs in mode `read-only`, and while the
+vendor's `argononeupd` runs argond stays in dry run whatever the mode. The package leaves
+`argononeupd` alone -- it is not one of the UPS daemons it retires.
+
+```sh
+# on the ONE V5, where the package is built:
+scp ~/git/argon-utils_0.1.9_arm64.deb dc0sk@one-up-pi:
+# on the ONE UP:
+sudo apt install -y ./argon-utils_0.1.9_arm64.deb
+sudo sed -i 's/^source = "serial"/source = "oneup"/' /etc/argon-utils/config.toml
+sudo systemctl restart argond
+argonctl battery
+journalctl -u argond -b --no-pager -o cat | grep ups
+```
+
+Expect `ONE UP fuel gauge: CW2217 at /dev/i2c-1 @ 0x64` and a level line. Then unplug the
+charger for a minute and plug it back in, and run the `journalctl` line again: expect
+`discharging`, `on mains -> on battery`, then `charging` and back to `on mains`. The tray icon
+should follow.
+
+**Report:** the `journalctl` output.
+
+### Step 2 — letting argond power off: a decision first
+
+argond only acts on the battery with `mode = "full"` **and** `argononeupd` stopped. Stopping it
+gives up whatever else it does on the ONE UP -- at least the lid switch it holds on GPIO27,
+which argond does not handle. That is a decision for you, not a test step: see OPEN.md, B8.
 
 ## 🟡 T13 — Does the polkit rule work for the packaged daemon? — **step 1 DONE 2026-09-17: yes**
 

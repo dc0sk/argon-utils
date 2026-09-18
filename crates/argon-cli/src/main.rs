@@ -3,6 +3,7 @@
 
 use clap::{Parser, Subcommand};
 
+mod battery;
 mod button;
 mod doctor;
 mod fan;
@@ -46,6 +47,12 @@ enum Command {
     /// disturb whatever holds the serial port.
     #[command(subcommand_negates_reqs = true)]
     Ups(ups::Args),
+
+    /// Read the Argon ONE UP's battery from its fuel gauge. Read-only.
+    ///
+    /// Reads only the CW2217's documented read-only registers; safe alongside the vendor's
+    /// daemon and argond.
+    Battery(battery::Args),
 
     /// Show what the fan controller would do. Always a dry run.
     Fan(fan::Args),
@@ -104,6 +111,7 @@ fn main() -> std::process::ExitCode {
         Command::Doctor(args) => doctor::run(&args),
         Command::Ups(args) => ups::run(&args),
         Command::Button(args) => button::run(&args),
+        Command::Battery(args) => battery::run(&args),
         Command::Fan(args) => fan::run(&args),
         Command::Oled(args) => oled::run(&args),
         Command::NotifyAgent(args) => notify::run(&args),
