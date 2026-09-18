@@ -162,11 +162,11 @@ backs a write.
 | ID | Fact | Status | Source |
 |---|---|---|---|
 | `ONEUP-I2C-PRESENCE` | I2C bus 1 has exactly one device, at `0x64`. Nothing answers at `0x1a` | `observed` | presence scan, i2cdetect default mode |
-| `ONEUP-0x64-IDENTITY` | The `0x64` device is a Cellwise **CW2217** battery fuel gauge. Consistent with the CW2217BAAD's fixed address, `0x64` [DS-CW2217]. Confirmable without changing anything: its VERSION register reads `0xA0` | `inferred`, until VERSION is read | [FORUM-ONEUP-CW2217], [DS-CW2217] |
+| `ONEUP-0x64-IDENTITY` | The `0x64` device is a Cellwise **CW2217** battery fuel gauge: the CW2217BAAD's fixed address is `0x64`, and its VERSION register (`0x00`) read `0xA0`, the value the datasheet fixes | `observed` | [FORUM-ONEUP-CW2217] (lead), [DS-CW2217], OBS-2026-09-18-one-up-survey |
 | `ONEUP-RSENSE` | The current-sense resistor, which scales CURRENT to amperes | `unknown` | -- |
 
-What the CW2217 datasheet documents [DS-CW2217] -- true of the chip; on the ONE UP only once
-`ONEUP-0x64-IDENTITY` is confirmed:
+What the CW2217 datasheet documents [DS-CW2217] -- true of the chip, and so of the ONE UP's
+gauge, though each is `documented` rather than `observed` until read there:
 
 | ID | Fact | Status |
 |---|---|---|

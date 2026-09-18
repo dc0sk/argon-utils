@@ -8,15 +8,15 @@ last_updated: 2026-09-18
 # OBS-2026-09-18-one-up-survey
 
 First look at an **Argon ONE UP** (the CM5 laptop), reached over SSH as `one-up-pi`.
-**Passive, apart from one I2C presence scan. No register was read or written.** The vendor's
+**Passive, apart from one I2C presence scan and, later, one register read. Nothing was
+written.** The vendor's
 `argononeupd` service was running throughout and was left alone; its files were not read.
 
 ## Result
 
 - **One I2C device on bus 1, at `0x64`. Nothing at `0x1a`.** So the ONE UP's controller is
   not where the ONE-family MCU sits, and nothing learned about the `0x1a` protocol carries
-  over by default. What `0x64` is -- a fuel gauge, an Argon MCU, something else -- is
-  `unknown`.
+  over by default. It is a CW2217 fuel gauge -- see *Identification* below.
 - **No kernel battery driver.** `/sys/class/power_supply/` is empty: whatever reports the
   battery, the kernel is not bound to it, and the `0x64` scan was not refused as busy.
 - **The fan is the kernel's**, as on the ONE V5 with a Pi 5: `pwm-fan` cooling device, hwmon
@@ -27,6 +27,21 @@ First look at an **Argon ONE UP** (the CM5 laptop), reached over SSH as `one-up-
   edges) -- consistent with the lid switch the plan placed there, not yet confirmed as one.
 - **No UPS on USB.** No `/dev/serial/by-id`, and the five hidraw nodes are the keyboard and a
   USB audio adapter. The PWR UPS protocol does not apply here.
+
+## Identification (later the same day)
+
+A forum post citing the ONE UP's block diagram named the part a Cellwise CW2217, whose fixed
+address is `0x64` by its datasheet (FACTS: `[FORUM-ONEUP-CW2217]`, `[DS-CW2217]`). With the
+operator's go-ahead, one register was read at 2026-09-18T18:36:17Z:
+
+| Transaction | Result |
+|---|---|
+| `S 64+W 00 Sr 64+R data P` (SMBus read-byte-data, register `0x00`) | `0xA0` |
+
+`0xA0` is the value the datasheet fixes for the CW2217's VERSION register in every mode. The
+written byte only sets the register pointer: the datasheet's write needs a data byte after
+it. **The device at `0x64` is a CW2217** (`ONEUP-0x64-IDENTITY`, now `observed`). The vendor
+daemon was running; nothing else was read.
 
 ## Method
 
@@ -48,10 +63,8 @@ to act on -- the reason it is the one operation discovery permits (plan, section
 
 ## What this does not tell us
 
-- What the device at `0x64` is, or how to read the battery from it. Identifying it needs
-  either published documentation (Argon's, or a datasheet once the part is known from the
-  board) or a decision to read a register -- which sends a register byte first, the
-  hazard ADR-002 describes, on a device whose dialect is unknown.
+- The battery readings themselves: only VERSION has been read. The ONE UP's current-sense
+  resistor, which scales the current reading, is unknown.
 - Whether GPIO27 is the lid switch. Watching it would need the vendor daemon stopped, since
   it holds the line.
 - Anything about charging, wake or the ONE UP's power path.
