@@ -19,6 +19,7 @@ use std::time::{Duration, SystemTime};
 
 mod tray;
 mod view;
+mod wake;
 
 #[derive(Parser)]
 #[command(
@@ -122,7 +123,22 @@ fn main() -> ExitCode {
 
     let interval = Duration::from_secs(cli.interval.max(1));
     let mut shown = first;
+    let mut next_wake_refresh = std::time::Instant::now();
     while !handle.is_closed() {
+        // Once a minute, off the menu's path: whether "power off and wake" can be offered, and
+        // the times to offer. Opening the menu never waits on the bus or on `date`.
+        if std::time::Instant::now() >= next_wake_refresh {
+            let can = wake::can();
+            let now = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .map_or(0, |d| d.as_secs());
+            let presets = wake::presets(now, wake::next_seven(now));
+            handle.update(|t| {
+                t.can_wake = can;
+                t.presets = presets;
+            });
+            next_wake_refresh = std::time::Instant::now() + Duration::from_secs(60);
+        }
         std::thread::sleep(interval);
         let next = render(&sources.read());
         // Only push a change. Every update is a D-Bus signal the panel acts on, and most

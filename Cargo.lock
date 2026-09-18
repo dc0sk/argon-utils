@@ -139,6 +139,7 @@ dependencies = [
  "clap",
  "clap_mangen",
  "ksni",
+ "zbus",
 ]
 
 [[package]]

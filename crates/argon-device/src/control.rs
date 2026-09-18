@@ -15,6 +15,16 @@ use serde::{Deserialize, Serialize};
 /// Where argond listens.
 pub const SOCKET_PATH: &str = "/run/argon-utils/control.sock";
 
+/// argond's name on the system bus.
+pub const BUS_NAME: &str = "org.argonutils.Daemon1";
+/// Its object.
+pub const OBJECT_PATH: &str = "/org/argonutils/Daemon1";
+/// Its interface.
+pub const INTERFACE: &str = "org.argonutils.Daemon1";
+/// The polkit action guarding a poweroff with a scheduled wake. Must match
+/// `packaging/polkit/org.argonutils.policy`.
+pub const ACTION_POWEROFF_WITH_WAKE: &str = "org.argonutils.poweroff-with-wake";
+
 /// A request to argond.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -107,6 +117,17 @@ mod tests {
             to_line(&Request::PoweroffWithWake { at_unix: 60 }).unwrap(),
             "{\"poweroff_with_wake\":{\"at_unix\":60}}\n"
         );
+    }
+
+    #[test]
+    fn the_action_named_in_code_is_the_one_the_policy_file_defines() {
+        // A mismatch is silent at runtime: polkit answers "no" for an action it has never heard
+        // of, and the feature simply never works.
+        let policy = include_str!("../../../packaging/polkit/org.argonutils.policy");
+        assert!(policy.contains(&format!("<action id=\"{ACTION_POWEROFF_WITH_WAKE}\">")));
+        let dbus = include_str!("../../../packaging/dbus/org.argonutils.Daemon1.conf");
+        assert!(dbus.contains(&format!("own=\"{BUS_NAME}\"")));
+        assert!(dbus.contains(&format!("send_interface=\"{INTERFACE}\"")));
     }
 
     #[test]

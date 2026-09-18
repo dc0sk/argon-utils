@@ -2,6 +2,7 @@
 //! The `StatusNotifierItem`: a thin shell around a rendered [`View`].
 
 use crate::view::{Urgency, View};
+use crate::wake::{self, Preset};
 use std::process::Command;
 
 /// The tray item.
@@ -10,6 +11,11 @@ pub struct ArgonTray {
     pub view: View,
     /// The outcome of the last thing the user asked for, shown until the next.
     pub last_action: Option<String>,
+    /// What polkit says about powering off with a wake, via argond; `None` when argond is not on
+    /// the bus. Refreshed in the background, so opening the menu never waits on it.
+    pub can_wake: Option<String>,
+    /// The wake times offered, refreshed with `can_wake`.
+    pub presets: Vec<Preset>,
 }
 
 impl ArgonTray {
@@ -18,6 +24,8 @@ impl ArgonTray {
         Self {
             view,
             last_action: None,
+            can_wake: None,
+            presets: Vec::new(),
         }
     }
 }
@@ -103,6 +111,38 @@ impl ksni::Tray for ArgonTray {
             );
         }
 
+        if wake::offer(self.can_wake.as_deref(), self.view.shutdown_pending)
+            && !self.presets.is_empty()
+        {
+            items.push(MenuItem::Separator);
+            // The submenu is the confirmation: every item in it states the consequence --
+            // power off now -- in its label, and argond still announces the poweroff a minute
+            // ahead with `shutdown -c` to cancel.
+            items.push(
+                SubMenu {
+                    label: "Power off now…".into(),
+                    icon_name: "system-shutdown-symbolic".into(),
+                    submenu: self
+                        .presets
+                        .iter()
+                        .map(|p| {
+                            let at = p.at_unix;
+                            StandardItem {
+                                label: p.label.clone(),
+                                activate: Box::new(move |this: &mut Self| {
+                                    this.last_action = Some(wake_result(at));
+                                }),
+                                ..Default::default()
+                            }
+                            .into()
+                        })
+                        .collect(),
+                    ..Default::default()
+                }
+                .into(),
+            );
+        }
+
         if let Some(msg) = &self.last_action {
             items.push(MenuItem::Separator);
             items.push(label(msg));
@@ -119,6 +159,23 @@ impl ksni::Tray for ArgonTray {
             .into(),
         );
         items
+    }
+}
+
+/// Asks argond to power off and wake, and says what happened.
+fn wake_result(at_unix: u64) -> String {
+    let at = |unix: u64| {
+        argon_device::status::local_hhmm(
+            std::time::UNIX_EPOCH + std::time::Duration::from_secs(unix),
+        )
+    };
+    match wake::poweroff_with_wake(at_unix) {
+        Ok((wake_unix, poweroff_unix)) => format!(
+            "Powering off at {}. The UPS will wake it at {}.",
+            at(poweroff_unix),
+            at(wake_unix)
+        ),
+        Err(e) => format!("Not powered off: {e}"),
     }
 }
 

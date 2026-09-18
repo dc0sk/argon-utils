@@ -18,12 +18,7 @@ use std::sync::mpsc::Sender;
 use zbus::message::Header;
 use zbus::zvariant::Value;
 
-/// The bus name argond owns.
-pub const BUS_NAME: &str = "org.argonutils.Daemon1";
-/// Where the object lives.
-pub const OBJECT_PATH: &str = "/org/argonutils/Daemon1";
-/// The polkit action that guards a poweroff with a scheduled wake.
-pub const ACTION_POWEROFF_WITH_WAKE: &str = "org.argonutils.poweroff-with-wake";
+use argon_device::control::{ACTION_POWEROFF_WITH_WAKE, BUS_NAME, OBJECT_PATH};
 
 /// What polkit said about a caller.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

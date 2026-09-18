@@ -35,12 +35,12 @@ Deliverables from the plan that do not exist yet, so nothing claims them by omis
 | | What | Notes |
 |---|---|---|
 | ~~**B1**~~ | ~~Man pages~~ — **built 2026-09-18**: `argond(8)`, `argonctl(1)`, `argon-tray(1)`, generated from the clap definitions at package build | — |
-| **B2** | IPC: D-Bus service and Unix socket | **first slice built 2026-09-18**: a root-only Unix socket (`/run/argon-utils/control.sock`, JSON lines) carrying the wake request. No D-Bus yet, and nothing for the tray, whose display still comes from the status file |
+| **B2** | IPC: D-Bus service and Unix socket | **built 2026-09-18**: the root-only socket, and `org.argonutils.Daemon1` on the system bus with polkit (logind's power-off defaults). Carries "power off with a wake". Not yet verified on the real bus -- needs the package installed |
 | ~~**B3**~~ | ~~OLED status page in `argond`~~ — **built 2026-09-18** | confirmed on the case panel: orientation, legibility at contrast 64, nothing clipped. Off by default; `[oled] enabled = true` |
 | **B4** | UPS scheduled wake | **clock sync built 2026-09-18**: argond checks the UPS clock at startup and every 6 h and sets it when more than 2 s off (full mode, NTP-synced system clock, `sync_clock`). **Built 2026-09-18**: `argonctl poweroff --wake-at` (argond sets the wake, reads it back, then powers off) and a safety net that parks any schedule coming due on a running machine. **T18** is the real test, waiting for a run |
 | ~~**B7**~~ | ~~Persistent drift record~~ — **built 2026-09-18**: every clock check appends to `/var/lib/argon-utils/clock.log` (bounded to 1,000 lines, cut to the newest 500), and `argonctl rtc` reports a rate once an uncorrected stretch spans a day. Earlier points, before the record existed: +0 s at 11:52 and +0/+1 s at 13:52 UTC on 2026-09-18, after T15 set the clock at 11:19 | — |
 | **B5** | Zigbee detect/health | **working on hardware (T16, 2026-09-18)**: `argonctl zigbee` identifies the module; `--probe` reads the firmware version, non-disruptively. Firmware *update* tooling is not built, and would need its own risk decision |
-| **B6** | Tray controls beyond cancelling a poweroff | waits on B2 |
+| **B6** | Tray controls | **started 2026-09-18**: "Power off now… and wake in 1 h / 8 h / tomorrow 07:00", offered only when polkit could allow it. Cancelling a poweroff was already there. OLED on/off and more would each need a D-Bus method |
 
 Done since the plan: the tray icon (`argon-tray`, confirmed on the Pi desktop panel
 2026-09-18: icon, tooltip and menu all render), the OLED status page (confirmed on the case
