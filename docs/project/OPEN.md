@@ -64,10 +64,11 @@ rule; verified on hardware in dry run, then end to end with a real scheduled pow
 2026-09-17 (task **T12**: scheduled, cancelled by restoring mains, nothing left pending --
 `OBS-2026-09-17-t12-low-battery-shutdown`).
 
-What remains is not the policy but the deployment: installing `argond` as a service with its
-polkit rule and retiring the vendor's UPS daemons. Both are changes to the user's machine and
-are not done without asking. Until then the shutdown path only runs when `argond` is started
-by hand.
+**Deployed 2026-09-17** as the `argon-utils` Debian package, armed in `mode = "full"`, with the
+vendor's UPS daemons retired (and recorded for restoration on removal). **Verified in its
+deployed form on 2026-09-18** by task T14: a real discharge from 88 % ended in the packaged
+service powering the machine off at the configured delay, as a non-session system user under
+its polkit rule (`OBS-2026-09-18-t14-full-discharge`).
 
 <details><summary>The decision as it was put</summary>
 

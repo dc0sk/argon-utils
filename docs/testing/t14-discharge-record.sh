@@ -295,8 +295,9 @@ report() {
     log_boot=$(sed -n 's/^# boot_id *//p' "$LOG" | tail -1)
     if [ "$now_boot" != "$log_boot" ]; then
         echo "  The machine has rebooted since the log was written, which is the expected end."
-        echo "  The previous boot's journal is also persistent here:"
-        echo "    journalctl -u argond -b -1 | tail -40"
+        echo "  The last sample before the gap is the latest moment the machine was known up."
+        echo "  (The previous boot's journal is not kept: Raspberry Pi OS sets Storage=volatile"
+        echo "  through /usr/lib/systemd/journald.conf.d/40-rpi-volatile-storage.conf.)"
     else
         echo "  Still the same boot: the machine has not powered off (yet)."
     fi

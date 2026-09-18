@@ -170,6 +170,14 @@ elif [ -n "${last_sample:-}" ]; then
             printf '  => %dh %dm per percentage point at halt\n' \
                 $((per_point / 3600)) $(((per_point % 3600) / 60))
             printf '  => a full depletion from 10%% would take about %dh\n' $((per_point * 10 / 3600))
+        elif [ "$drop" -lt 0 ]; then
+            # Rising while off is not drain. A voltage-derived gauge reads higher once the load
+            # is removed, because cell voltage recovers at rest; charging on mains before the
+            # first reading also adds some. The two cannot be separated from this log.
+            printf '  The gauge ROSE by %s point(s) while off. That is not a drain figure:\n' $((-drop))
+            printf '  a voltage-derived gauge reads higher once the load is gone (cell voltage\n'
+            printf '  recovers at rest), and charging on mains before the first reading adds\n'
+            printf '  some. This log cannot separate the two, and gives no halt-drain rate.\n'
         else
             printf '  The gauge did not move: either the drain is below its resolution over\n'
             printf '  this interval, or the pack was already at its floor.\n'

@@ -362,10 +362,15 @@ this first:
 **Everything is logged to `~/argon-t12/`.** `/tmp` is tmpfs, so anything written there is
 gone after a poweroff, and the home directory is on persistent storage.
 
-(An earlier version of this claimed the journal is `Storage=volatile` on Raspberry Pi OS. That
-is wrong on this machine: `/var/log/journal` exists and `journald.conf` leaves `Storage=auto`,
-so the journal *is* persistent and `journalctl -b -1` works after a poweroff. The logging to
-`$HOME` is belt-and-braces, not the only record.)
+The journal does not help either: Raspberry Pi OS ships
+`/usr/lib/systemd/journald.conf.d/40-rpi-volatile-storage.conf` with `Storage=volatile`, so the
+journal of the boot that powered off is gone -- `journalctl -b -1` answers "no persistent
+journal was found". **The files in `$HOME` are the only record.**
+
+(A 2026-09-17 edit claimed the opposite, reasoning from `/var/log/journal` existing and
+`journald.conf` leaving `Storage=auto` commented. Both are true and neither decides it: the
+drop-in overrides `journald.conf`, and `systemd-analyze cat-config systemd/journald.conf` shows
+the effective value. T14 settled it -- the previous boot's journal was not there.)
 
 The config in [`t12-ups-shutdown.toml`](t12-ups-shutdown.toml) uses absurd thresholds so any
 reading on battery counts as critical, which triggers the path in seconds rather than hours.
@@ -445,7 +450,18 @@ it did.
 
 ---
 
-## 🔴 T14 — Full discharge: does the packaged service really power the machine off?
+## ✅ T14 — Full discharge: does the packaged service really power the machine off? — **DONE 2026-09-18: yes**
+
+**Result.** Mains out at 88 % (07:59:07), `low` at 20 % after 142 min, `critical` at 10 %
+after 157 min, poweroff scheduled for 10:38:55 -- and the machine was down within six seconds
+of it, with the daemon running as the `argon` system user outside any session. **2 h 37 min
+from 88 % to `critical`** at desktop idle. The gauge never moved upwards in 79 points. Evidence,
+the curve, and what it does *not* show:
+[`OBS-2026-09-18-t14-full-discharge`](../protocol/captures/OBS-2026-09-18-t14-full-discharge.md).
+
+Two things still open from it: whether the desktop notifications appeared (your report), and
+the halt-drain rate, since the machine was off only 13 minutes before being rebooted on mains.
+The steps below are kept as the procedure for re-running it.
 
 **Unblocks:** the last unexercised link in the chain, and the one number nobody has: how long
 this machine actually runs on the PWR UPS, and how long the fall from `low` to `critical`
@@ -566,10 +582,12 @@ would give you roughly four minutes before a fresh poweroff.
 ```sh
 cd ~/git/argon-utils
 docs/testing/t14-discharge-record.sh report    # durations, discharge rate, did it power off
-journalctl -u argond -b -1 | tail -40          # the daemon's own account of the last boot
+docs/testing/t14-curve.sh                      # the per-point curve
 ```
 
-The journal on this machine **is** persistent, so the previous boot's log survives.
+The previous boot's journal is **not** available: Raspberry Pi OS sets `Storage=volatile`
+through a drop-in. The recorder's log in `~/argon-t14/` is the only record, which is why it
+exists.
 
 **Report:** the output of `report`, and whether the notifications appeared. The interesting
 numbers are mains-loss → `low`, `low` → `critical`, and whether the poweroff happened at the
