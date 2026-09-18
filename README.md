@@ -3,10 +3,32 @@
 GPLv3 Rust tooling for Argon40 Raspberry Pi enclosures and the Argon PWR UPS — a clean-room
 replacement for the vendor's Python stack.
 
-> **Status: early development (M0).** Nothing here controls hardware yet. The protocol
-> codecs and the project's safety scaffolding exist; the daemon, CLI and tray do not.
-> Capability claims below state their evidence tier honestly — see
-> [Evidence tiers](#evidence-tiers).
+> **Status: working on one machine.** A Raspberry Pi 5 in an Argon ONE V5, with the Argon PWR
+> UPS, the OLED and the Industria Zigbee module, runs it daily as a Debian package. Everything
+> below says how it was verified -- see [Evidence tiers](#evidence-tiers). Other Argon
+> hardware is not supported yet.
+
+## What works today
+
+On a Pi 5 in an ONE V5 with the PWR UPS -- all `observed` on that hardware unless stated:
+
+| Feature | What it does | Verified |
+|---|---|---|
+| **UPS monitoring** | `argond` reads charge and mains state over the UPS's USB serial port and publishes it; `argonctl ups` prints it | daily use since 2026-09-17 |
+| **Low-battery shutdown** | a delayed, cancellable poweroff when the battery reaches critical, with desktop notifications first; cancelled by itself if mains returns | a real discharge from 88 % to a clean poweroff (T14) |
+| **UPS clock** | kept in step with the system clock, and its drift recorded across reboots | T15 |
+| **Power off and wake** | `argonctl poweroff --wake-at 07:00`, or the tray: the UPS powers the machine on again at the set time | wake set and read back (T17); **the wake itself is not yet observed** (T18) |
+| **Tray icon** | charge, CPU temperature and fan in the panel; shows and cancels a scheduled shutdown; "power off and wake" where polkit allows | in the Raspberry Pi desktop's panel |
+| **OLED** | a status page on the case display | on the case panel |
+| **Zigbee** | `argonctl zigbee --probe` identifies the module and reads its firmware version, without disturbing it | T16 |
+| **Fan** | reported, not controlled: on a Pi 5 the kernel already drives it, and taking over would cost its critical trip | -- |
+
+The ONE V5 has no fan microcontroller when fitted with a Pi 5, and its button is the Pi's own
+power button, which the OS already handles. So on this machine the useful product is the UPS,
+the OLED and the Zigbee module.
+
+Install from the Debian package: see [`packaging/README.md`](packaging/README.md). Nothing is
+armed on install -- `mode = "read-only"` until you change it in `/etc/argon-utils/config.toml`.
 
 ## Why
 
@@ -18,21 +40,25 @@ means no shutdown), no machine-readable output, no metrics — and no license at
 `argon-utils` aims to replace it with something you can script, monitor, and trust around
 your power supply.
 
-## What it will support
+## Other Argon hardware
 
-Derived by crawling [github.com/Argon40Tech](https://github.com/Argon40Tech) and by
+None of this is supported yet: the table is what the hardware can do, not what this project
+does with it. Derived by crawling [github.com/Argon40Tech](https://github.com/Argon40Tech) and by
 inspecting real hardware. Argon ships 14 SKUs; only five have any control software, and
 several products are passive enclosures with no controllable electronics at all.
 
 | Hardware | Fan | Button | OLED | IR | UPS | RTC |
 |---|---|---|---|---|---|---|
 | ONE V2 / V3 | ✔ | ✔ | — | ✔ | — | — |
-| **ONE V5** | ✔ | ✔ | ✔ | ? | via PWR | via PWR |
+| **ONE V5** | ✔\* | ✔\* | ✔ | ? | via PWR | via PWR |
 | EON | ✔ | ✔ | ✔ | ✔ | — | ✔ |
 | Fan HAT | ✔ | ✔ | — | — | — | — |
 | ONE UP | — | ✔ | — | — | ✔ | — |
 | **PWR UPS 5K/10K** | — | — | — | — | ✔ | ✔ |
 | NEO 5 | — | — | — | — | — | — |
+
+\* With a Pi 4. With a Pi 5 there is no fan microcontroller, and the button is the Pi's own
+(see above).
 
 Not supported, because there is nothing to control: THRML, POLY, Industria HMI displays,
 and "ONE M.2/NVMe" (which is two `config.txt` lines on any Pi 5, not a device).
@@ -53,6 +79,10 @@ This software can stop a fan, cut power, and shut down the host. The design refl
   write first, so reading register `0x80` on legacy firmware is indistinguishable from
   setting the fan to 128%. See [ADR-002](docs/design/adr/0002-legacy-mcu-dialect-by-default.md).
 - **The fan fails loud, not silent** — a crashed daemon must never leave the fan stopped.
+  (On a Pi 5 in the ONE V5 the question does not arise: the fan stays the kernel's.)
+- **Power actions go through logind and polkit**, need `mode = "full"`, and are announced
+  and cancellable. A wake that would come due on a running machine -- where the UPS's likely
+  response is to cut power -- is moved out of the way before it can.
 - We **never** emit MCU opcode `0xBB` (bootloader entry). The exit sequence is unknown and
   a failed flash can leave the MCU unrecoverable.
 
