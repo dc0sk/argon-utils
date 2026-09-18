@@ -131,8 +131,9 @@ and charging on mains before the first reading adds some; this log cannot separa
 
 ## What it does not show
 
-- **Whether the desktop notifications appeared.** Not recorded anywhere; it rests on the
-  operator's report.
+- **Whether the desktop notifications appeared.** Not observed: the operator was away from
+  the screen at both moments. They had been seen working in earlier runs, so this is a gap in
+  this run's evidence rather than a known failure.
 - **The halt-drain rate**, and so how long a full depletion for calibration would take with the
   machine off. The machine was off for 13 minutes, and the gauge rose rather than fell.
 - **Watt-hours.** The pack estimate of roughly 15 Wh assumes a draw of 4.6 W that was never

@@ -459,8 +459,9 @@ from 88 % to `critical`** at desktop idle. The gauge never moved upwards in 79 p
 the curve, and what it does *not* show:
 [`OBS-2026-09-18-t14-full-discharge`](../protocol/captures/OBS-2026-09-18-t14-full-discharge.md).
 
-Two things still open from it: whether the desktop notifications appeared (your report), and
-the halt-drain rate, since the machine was off only 13 minutes before being rebooted on mains.
+Notifications: not observed in this run -- the operator was away from the screen at both
+moments -- but seen working in earlier runs. Still open: the halt-drain rate, since the machine
+was off only 13 minutes before being rebooted on mains.
 The steps below are kept as the procedure for re-running it.
 
 **Unblocks:** the last unexercised link in the chain, and the one number nobody has: how long
