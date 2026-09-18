@@ -445,6 +445,74 @@ it did.
 
 ---
 
+## 🔴 T14 — Full discharge: does the packaged service really power the machine off?
+
+**Unblocks:** the last unexercised link in the chain, and the one number nobody has: how long
+this machine actually runs on the PWR UPS, and how long the fall from `low` to `critical`
+takes.
+
+**This test ends with the machine powering off. That is the point.** Unlike T12, nothing is
+cancelled: mains stays out until `argond` decides, schedules, and lets the poweroff happen.
+
+### Why this is worth the interruption
+
+Everything about the packaged service has been verified *separately*: the poweroff path
+against a fake logind, the whole chain in T12 (but as your user, in a desktop session, with
+inverted thresholds and a cancellation), and the polkit rule with `pkcheck` (T13 step 1). The
+joint has never run. This is also the only way to learn the real battery runtime -- the
+thresholds (20 % / 10 %) were chosen on the principle that a fuel gauge is least trustworthy
+near empty, not from measurement.
+
+### Before you start
+
+- **Save your work and close anything that matters.** The machine powers off on its own.
+- Plan for it to take **hours**. From 90 % to 10 % at Pi 5 idle is unknown, which is the
+  measurement; the recorder samples every 10 s so a long run is fine.
+- `argond` must be in `mode = "full"` (`journalctl -u argond` should say
+  `ups: shutdown ENABLED`). The recorder refuses to start otherwise.
+- The recorder never opens the UPS serial port. `argond` owns it, and two readers on a
+  CDC-ACM port desynchronise; it reads only the status file `argond` publishes.
+
+### Run it
+
+```sh
+cd ~/git/argon-utils
+docs/testing/t14-discharge-record.sh start     # refuses unless everything is ready
+```
+
+Then **unplug mains** and leave the machine alone. The recorder detaches with `setsid`, so it
+survives the terminal closing, an SSH disconnect and the session ending.
+
+```sh
+docs/testing/t14-discharge-record.sh status    # whenever you want to look
+```
+
+Expect, in order: `on-mains` → `on-battery` → `low` at 20 % → `critical` at 10 % confirmed →
+a scheduled poweroff → the machine goes off about 2 minutes later. Desktop notifications
+should appear at `low` and at `critical`.
+
+**To abort at any point:** plug mains back in. Cancellation now needs two consecutive mains
+readings (~20 s), well inside the 2-minute delay. Harder abort:
+`sudo shutdown -c && sudo systemctl stop argond`.
+
+### When it comes back
+
+**Plug mains in before you power it on.** The battery will be at about 10 %, and booting on a
+nearly empty battery is exactly the boot-loop case `min_uptime_s = 120` exists to blunt -- it
+would give you roughly four minutes before a fresh poweroff.
+
+```sh
+cd ~/git/argon-utils
+docs/testing/t14-discharge-record.sh report    # durations, discharge rate, did it power off
+journalctl -u argond -b -1 | tail -40          # the daemon's own account of the last boot
+```
+
+The journal on this machine **is** persistent, so the previous boot's log survives.
+
+**Report:** the output of `report`, and whether the notifications appeared. The interesting
+numbers are mains-loss → `low`, `low` → `critical`, and whether the poweroff happened at the
+configured delay.
+
 ## 🟡 T13 — Does the polkit rule work for the packaged daemon? — **step 1 DONE 2026-09-17: yes**
 
 **Unblocks:** trusting the low-battery poweroff when `argond` runs as the `argon` system user
