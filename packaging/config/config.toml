@@ -126,8 +126,9 @@ state_file = "/run/argon-utils/ups.state"
 # deep discharge can reset it, and it drifts in between. argond compares the two at startup
 # and every six hours, and sets the UPS clock when it is more than 2 s off -- only in
 # mode = "full", and only while the system clock is NTP-synchronised, since copying an
-# unsynchronised clock could make it worse. Each check is logged, so the journal shows the
-# drift over time.
+# unsynchronised clock could make it worse. Each check is logged with the offset it found.
+# (On Raspberry Pi OS the journal is kept only until reboot, so that record does not span
+# restarts.)
 sync_clock = true
 
 [oled]

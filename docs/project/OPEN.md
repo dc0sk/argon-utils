@@ -38,6 +38,7 @@ Deliverables from the plan that do not exist yet, so nothing claims them by omis
 | **B2** | IPC: D-Bus service and Unix socket | the tray and notification agent read the status file instead, which covers display; controls beyond `shutdown -c` need this |
 | ~~**B3**~~ | ~~OLED status page in `argond`~~ — **built 2026-09-18** | confirmed on the case panel: orientation, legibility at contrast 64, nothing clipped. Off by default; `[oled] enabled = true` |
 | **B4** | UPS scheduled wake | **clock sync built 2026-09-18**: argond checks the UPS clock at startup and every 6 h and sets it when more than 2 s off (full mode, NTP-synced system clock, `sync_clock`). Scheduled wake still needs command 6 confirmed the way T15 confirmed command 3 |
+| **B7** | A persistent record of UPS clock drift | argond logs each check's offset, but the journal is volatile on Raspberry Pi OS, so the record ends at every reboot. First data point: +0 s at 2026-09-18 11:52 UTC, 2 h 33 min after T15 set it. Needs a small state file (and `StateDirectory=` back in the unit, now safe since the rollback record moved out of it) |
 | **B5** | Zigbee detect/health | detection exists in `argonctl doctor`; no health probe |
 | **B6** | Tray controls beyond cancelling a poweroff | waits on B2 |
 

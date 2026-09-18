@@ -352,9 +352,9 @@ fn open_link(
 
 /// Compares the UPS clock with the system clock, and sets it if allowed and needed.
 ///
-/// Every outcome is logged, in sync or not: over weeks the journal then records how fast the
-/// UPS clock drifts, which nothing else measures. A failure is logged and left for the next
-/// check.
+/// Every outcome is logged with the offset found, in sync or not, which is the only drift
+/// measurement there is. It lasts only as long as the journal does -- until reboot on
+/// Raspberry Pi OS, whose journal is volatile. A failure is logged and left for the next check.
 fn check_clock(m: &mut UpsMonitor<Gate<SerialLink>>, clock_writes: bool, system_synced: bool) {
     let ups_clock = match m.ups_mut().clock() {
         Ok(t) => t,
