@@ -146,6 +146,22 @@ not contend with the serial port.
 The module has no datasheet in Argon's published set (checked 2026-09-18), so nothing about
 its board-level wiring is `documented`.
 
+## ONEUP-* — Argon ONE UP (CM5 laptop)
+
+One unit, surveyed passively on 2026-09-18 with the vendor's daemon running
+([OBS-2026-09-18-one-up-survey](captures/OBS-2026-09-18-one-up-survey.md)). Nothing here
+backs a write.
+
+| ID | Fact | Status | Source |
+|---|---|---|---|
+| `ONEUP-I2C-PRESENCE` | I2C bus 1 has exactly one device, at `0x64`. Nothing answers at `0x1a` | `observed` | presence scan, i2cdetect default mode |
+| `ONEUP-0x64-IDENTITY` | What the `0x64` device is, and its register map | `unknown` | -- |
+| `ONEUP-NO-KERNEL-BATTERY` | No `power_supply` class device; no kernel driver bound on any I2C bus | `observed` | sysfs |
+| `ONEUP-FAN` | The fan is the kernel's `pwm-fan` (line `FAN_PWM`), as on a Pi 5 in the ONE V5 | `observed` | sysfs, `gpioinfo` |
+| `ONEUP-POWER-KEY` | The power key is the Pi's own (`pwr_button` on `PWR_GPIO`) | `observed` | `/sys/class/input`, `gpioinfo` |
+| `ONEUP-GPIO27` | Held by the vendor daemon with pull-up and both-edge events. That it is the lid switch is `inferred` from the plan and not confirmed | `observed` (held); purpose `inferred` | `gpioinfo` |
+| `ONEUP-NO-USB-UPS` | No UPS on USB: the PWR UPS serial protocol does not apply | `observed` | `lsusb`, hidraw names |
+
 ## ARGON-OLED-* / ARGON-RTC-*
 
 | ID | Fact | Status | Source |
