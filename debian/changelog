@@ -1,3 +1,13 @@
+argon-utils (0.1.2) unstable; urgency=medium
+
+  * argond can draw a status page on the case OLED: UPS charge and state,
+    a charge bar, CPU temperature, fan, and the poweroff time when one is
+    scheduled. Off by default; set [oled] enabled = true. A reading argond
+    has stopped updating is shown as STALE, never as the last number.
+  * argonctl oled --status previews that page in the terminal.
+
+ -- Simon Keimer <dc0sk@mailbox.org>  Fri, 18 Sep 2026 12:30:00 +0200
+
 argon-utils (0.1.1) unstable; urgency=medium
 
   * Add argon-tray, a panel icon for the UPS state, CPU temperature and
