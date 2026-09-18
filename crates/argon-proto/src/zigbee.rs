@@ -297,6 +297,47 @@ mod tests {
     }
 
     #[test]
+    fn the_bytes_captured_from_the_module_decode() {
+        // T16, 2026-09-18 (OBS-2026-09-18-t16-zigbee-probe), verbatim. The version reply has TEN
+        // data bytes against the documented nine; the decoder must still read the first nine.
+        let ping = [0xFE, 0x02, 0x61, 0x01, 0x59, 0x06, 0x3D];
+        let version = [
+            0xFE, 0x0A, 0x61, 0x02, 0x02, 0x01, 0x02, 0x07, 0x01, 0x6B, 0xB1, 0x34, 0x01, 0x00,
+            0x81,
+        ];
+        let decode = |bytes: &[u8]| {
+            let mut r = MtReader::new();
+            let frames: Vec<_> = bytes.iter().filter_map(|&b| r.push(b)).collect();
+            assert_eq!(frames.len(), 1, "{frames:?}");
+            frames
+                .into_iter()
+                .next()
+                .unwrap()
+                .expect("captured frame rejected")
+        };
+
+        let p = decode(&ping);
+        assert!(p.is(SYS_PING_RSP));
+        assert_eq!(p.data(), &[0x59, 0x06]);
+
+        let v = decode(&version);
+        assert!(v.is(SYS_VERSION_RSP));
+        assert_eq!(v.data().len(), 10);
+        let v = Version::decode(v.data()).expect("real version reply did not decode");
+        assert_eq!(
+            (
+                v.transport_rev,
+                v.product,
+                v.major,
+                v.minor,
+                v.maint,
+                v.revision
+            ),
+            (2, 1, 2, 7, 1, Some(20_230_507))
+        );
+    }
+
+    #[test]
     fn versions_decode_with_and_without_a_revision() {
         let v = Version::decode(&[2, 0, 2, 7, 1]).unwrap();
         assert_eq!((v.major, v.minor, v.maint, v.revision), (2, 7, 1, None));
