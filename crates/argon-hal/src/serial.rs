@@ -115,6 +115,37 @@ impl SerialLink {
 }
 
 impl SerialLink {
+    /// Writes raw bytes, then returns every byte that arrives within `window`.
+    ///
+    /// For experiments on commands whose reply is not yet known. [`request`](Self::request)
+    /// discards any frame that is not the one it expects, which is right for a known query and
+    /// exactly wrong when the question is *what* the device sends back -- an echo, an
+    /// acknowledgement, something unsolicited, or nothing. Decoding is left to the caller, so
+    /// the raw bytes survive as evidence even if they do not frame.
+    ///
+    /// # Errors
+    ///
+    /// Fails on I/O error.
+    pub fn write_and_collect(&mut self, out: &[u8], window: Duration) -> Result<Vec<u8>> {
+        self.reader.reset();
+        self.port.write_all(out)?;
+        self.port.flush()?;
+
+        let deadline = Instant::now() + window;
+        let mut got = Vec::new();
+        let mut buf = [0u8; 256];
+        while Instant::now() < deadline {
+            match self.port.read(&mut buf) {
+                Ok(n) => got.extend_from_slice(&buf[..n]),
+                Err(e)
+                    if e.kind() == std::io::ErrorKind::TimedOut
+                        || e.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(e) => return Err(Error::Io(e)),
+            }
+        }
+        Ok(got)
+    }
+
     /// Frames received while waiting for a reply that were not that reply.
     ///
     /// Either rejected frames or frames for another command. The device is believed to send

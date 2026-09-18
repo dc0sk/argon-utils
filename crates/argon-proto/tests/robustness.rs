@@ -276,3 +276,58 @@ proptest! {
         }
     }
 }
+
+mod unix_time {
+    use argon_proto::ups::UpsTime;
+    use proptest::prelude::*;
+
+    /// Vectors computed independently with Python's `calendar.timegm`, not with this code, so
+    /// the conversion is not being checked against itself.
+    /// Year, month, day, hour, minute, second.
+    type Civil = (u16, u8, u8, u8, u8, u8);
+
+    const VECTORS: [(u64, Civil); 6] = [
+        (946_684_800, (2000, 1, 1, 0, 0, 0)),
+        (951_825_600, (2000, 2, 29, 12, 0, 0)),
+        (1_789_651_755, (2026, 9, 17, 13, 29, 15)),
+        (1_798_761_599, (2026, 12, 31, 23, 59, 59)),
+        (1_835_417_228, (2028, 2, 29, 6, 7, 8)),
+        (4_102_444_799, (2099, 12, 31, 23, 59, 59)),
+    ];
+
+    #[test]
+    fn known_instants_convert_both_ways() {
+        for (secs, (year, month, day, hour, minute, second)) in VECTORS {
+            let t = UpsTime::from_unix_seconds(secs).expect("in range");
+            assert_eq!(
+                (t.year, t.month, t.day, t.hour, t.minute, t.second),
+                (year, month, day, hour, minute, Some(second)),
+                "from {secs}"
+            );
+            assert_eq!(t.to_unix_seconds(), Some(secs), "back to {secs}");
+        }
+    }
+
+    #[test]
+    fn years_the_device_cannot_hold_are_refused() {
+        assert_eq!(UpsTime::from_unix_seconds(946_684_799), None, "1999-12-31");
+        assert_eq!(
+            UpsTime::from_unix_seconds(4_102_444_800),
+            None,
+            "2100-01-01"
+        );
+    }
+
+    proptest! {
+        #[test]
+        fn every_representable_second_round_trips(secs in 946_684_800u64..=4_102_444_799) {
+            let t = UpsTime::from_unix_seconds(secs).unwrap();
+            prop_assert!(t.is_plausible());
+            prop_assert_eq!(t.to_unix_seconds(), Some(secs));
+            // And through the wire encoding the device actually receives.
+            let wire = t.encode_clock().unwrap();
+            let back = UpsTime::decode_clock(&wire).unwrap();
+            prop_assert_eq!(back.to_unix_seconds(), Some(secs));
+        }
+    }
+}

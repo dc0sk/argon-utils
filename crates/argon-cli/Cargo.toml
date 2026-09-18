@@ -18,5 +18,9 @@ argon-hal   = { path = "../argon-hal", version = "0.1.0" }
 argon-proto = { path = "../argon-proto", version = "0.1.0" }
 clap        = { version = "4", features = ["derive"] }
 
+[dev-dependencies]
+argon-sim  = { path = "../argon-sim" }
+serialport = { version = "4", default-features = false }
+
 [lints]
 workspace = true

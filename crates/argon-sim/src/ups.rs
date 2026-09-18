@@ -55,6 +55,10 @@ pub struct Faults {
     pub silent: bool,
     /// Split each response into single-byte writes with this pause between them.
     pub dribble: Option<Duration>,
+    /// Acknowledge a clock set as usual but do not change the clock -- a device that ignores
+    /// the write. The negative control for task T15: an experiment that cannot tell this apart
+    /// from a real set would confirm nothing.
+    pub ignore_clock_set: bool,
 }
 
 /// A simulated UPS serving one client over a byte stream.
@@ -63,18 +67,16 @@ pub struct UpsSim {
     faults: Faults,
     reader: FrameReader,
     responses: usize,
+    /// When `state.clock` was last set. The real clock ticks, and a frozen one made every
+    /// read-back after a set look wrong by the elapsed time.
+    clock_set_at: Instant,
 }
 
 impl UpsSim {
     /// Creates a simulator with the given state.
     #[must_use]
     pub fn new(state: UpsState) -> Self {
-        Self {
-            state,
-            faults: Faults::default(),
-            reader: FrameReader::new(),
-            responses: 0,
-        }
+        Self::with_faults(state, Faults::default())
     }
 
     /// Creates a simulator that misbehaves in the given ways.
@@ -85,7 +87,18 @@ impl UpsSim {
             faults,
             reader: FrameReader::new(),
             responses: 0,
+            clock_set_at: Instant::now(),
         }
+    }
+
+    /// The clock as it reads now: the last value set, plus the time since.
+    fn clock_now(&self) -> UpsTime {
+        self.state
+            .clock
+            .to_unix_seconds()
+            .map(|s| s + self.clock_set_at.elapsed().as_secs())
+            .and_then(UpsTime::from_unix_seconds)
+            .unwrap_or(self.state.clock)
     }
 
     /// The state the simulator is reporting.
@@ -154,7 +167,7 @@ impl UpsSim {
             Command::BatteryStatus => vec![self.state.percent, self.state.charging_byte],
             Command::ChargeCurrent => self.state.charge_current_raw.to_be_bytes().to_vec(),
             Command::FirmwareVersion => vec![self.state.firmware],
-            Command::GetRtc => self.state.clock.encode_clock().unwrap_or([0; 6]).to_vec(),
+            Command::GetRtc => self.clock_now().encode_clock().unwrap_or([0; 6]).to_vec(),
             Command::GetWake => match self.state.wake {
                 Some(w) => w.encode_schedule().unwrap_or([0; 5]).to_vec(),
                 // Observed on hardware (ARGON-UPS-CMD7-EMPTY): with nothing scheduled the
@@ -164,7 +177,10 @@ impl UpsSim {
             },
             Command::SetRtc => {
                 if let Ok(t) = UpsTime::decode_clock(request.payload()) {
-                    self.state.clock = t;
+                    if !self.faults.ignore_clock_set {
+                        self.state.clock = t;
+                        self.clock_set_at = Instant::now();
+                    }
                 }
                 Vec::new()
             }

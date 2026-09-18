@@ -8,6 +8,7 @@ mod doctor;
 mod fan;
 mod notify;
 mod oled;
+mod rtc;
 mod ups;
 
 #[derive(Parser)]
@@ -49,6 +50,13 @@ enum Command {
     /// Show desktop notifications for UPS events. Runs inside a desktop session.
     NotifyAgent(notify::Args),
 
+    /// Read the UPS clock. `--t15 --write` runs the experiment that confirms how to set it.
+    ///
+    /// Without those flags this only queries. The write exists solely as task T15 in
+    /// docs/testing/HUMAN-TASKS.md: setting the clock is an `inferred` fact, and an inferred
+    /// fact may not back a write path until it has been observed.
+    Rtc(rtc::Args),
+
     /// Measure the case button's pulse widths.
     ///
     /// The MCU decodes the press and emits a calibrated pulse whose width encodes the
@@ -65,5 +73,6 @@ fn main() -> std::process::ExitCode {
         Command::Fan(args) => fan::run(&args),
         Command::Oled(args) => oled::run(&args),
         Command::NotifyAgent(args) => notify::run(&args),
+        Command::Rtc(args) => rtc::run(&args),
     }
 }

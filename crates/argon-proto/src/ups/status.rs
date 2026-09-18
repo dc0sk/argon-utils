@@ -153,6 +153,66 @@ impl UpsTime {
         ])
     }
 
+    /// Converts seconds since the unix epoch (UTC) to a clock time.
+    ///
+    /// `None` outside the years the device can represent (2000-2099: a two-digit BCD year
+    /// offset from 2000). Civil-from-days after Howard Hinnant's algorithm, which is exact for
+    /// the proleptic Gregorian calendar; no date library, because this crate is `no_std` and
+    /// needs one conversion.
+    #[must_use]
+    pub const fn from_unix_seconds(secs: u64) -> Option<Self> {
+        let days = secs / 86_400;
+        let rem = secs % 86_400;
+        // Shift the epoch to 0000-03-01 so leap days fall at the end of a year.
+        let z = days + 719_468;
+        let era = z / 146_097;
+        let doe = z - era * 146_097;
+        let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+        let mp = (5 * doy + 2) / 153;
+        let day = doy - (153 * mp + 2) / 5 + 1;
+        let month = if mp < 10 { mp + 3 } else { mp - 9 };
+        let year = yoe + era * 400 + if month <= 2 { 1 } else { 0 };
+        if year < 2000 || year > 2099 {
+            return None;
+        }
+        // Every value below is range-checked by construction, so the casts cannot truncate.
+        #[allow(clippy::cast_possible_truncation)]
+        Some(Self {
+            year: year as u16,
+            month: month as u8,
+            day: day as u8,
+            hour: (rem / 3_600) as u8,
+            minute: (rem % 3_600 / 60) as u8,
+            second: Some((rem % 60) as u8),
+        })
+    }
+
+    /// Converts to seconds since the unix epoch (UTC), the inverse of
+    /// [`from_unix_seconds`](Self::from_unix_seconds).
+    ///
+    /// `None` if the time is not [plausible](Self::is_plausible). A missing seconds field (a
+    /// wake schedule) counts as zero.
+    #[must_use]
+    pub const fn to_unix_seconds(&self) -> Option<u64> {
+        if !self.is_plausible() {
+            return None;
+        }
+        let y = self.year as u64 - if self.month <= 2 { 1 } else { 0 };
+        let era = y / 400;
+        let yoe = y - era * 400;
+        let m = self.month as u64;
+        let mp = if m > 2 { m - 3 } else { m + 9 };
+        let doy = (153 * mp + 2) / 5 + self.day as u64 - 1;
+        let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+        let days = era * 146_097 + doe - 719_468;
+        let second = match self.second {
+            Some(s) => s as u64,
+            None => 0,
+        };
+        Some(days * 86_400 + self.hour as u64 * 3_600 + self.minute as u64 * 60 + second)
+    }
+
     /// Whether every field is within its calendar range.
     ///
     /// Valid BCD is not the same as a valid date: `0x99` decodes cleanly to 99 and is not a

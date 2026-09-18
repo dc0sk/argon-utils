@@ -612,6 +612,76 @@ What it did establish:
 - `argond` reported `on battery -> on mains` within one poll of replugging, and published
   `on-mains` again, so the recovery path works at this end of the curve too.
 
+## 🟡 T15 — Does command 3 really set the UPS clock?
+
+**Unblocks:** B4 -- keeping the UPS clock right, and scheduled wake. It matters more than it
+sounds: the UPS clock runs off the UPS battery, so a deep discharge like T14's can reset it.
+
+**Why a test is needed at all.** Reading the clock (`ARGON-UPS-CMD5`) is `observed`. Setting
+it (`ARGON-UPS-CMD3`) is only `inferred`, and the clean-room rule is that an inferred fact may
+not back a write path until it has been seen to work. This task is that observation.
+
+### What it does -- exactly
+
+`argonctl rtc --t15 --write` sends **command 3 twice and nothing else that writes** (never 6,
+the wake schedule, and never 9, the destructive meter reset):
+
+1. Three baseline reads of the clock against the system clock, with nothing written.
+2. Sets the UPS clock **1 h 17 min 29 s behind** -- a deliberately wrong, distinctive time --
+   and reads it back twice.
+3. Sets it to the **correct** time, timed to a second boundary, and reads that back twice.
+
+Every byte sent and received is printed, including whatever the UPS answers to a set, which
+nobody has recorded yet.
+
+Why write a wrong time first: setting the clock to "now" proves nothing if it was already
+close, because a read-back that matches is then indistinguishable from a write the UPS
+ignored. A distinctive wrong time cannot be matched by accident.
+
+**It refuses to start unless** the config says `mode = "full"`, no wake schedule is set (a
+wrong clock could move or fire one), the system clock is NTP-synchronised (step 3 copies it),
+and the three baseline reads agree with each other.
+
+### Rehearsed before it reaches your hardware
+
+Against the simulated UPS over a real PTY, three ways:
+
+| Simulated UPS | Tool concludes |
+|---|---|
+| sets its clock | confirmed, restored |
+| acknowledges the set but ignores it | **not** confirmed |
+| ignores the set, and its clock was already correct | **not** confirmed, "restored" |
+
+The third row is the case a naive "set it to now and read it back" test gets wrong. The
+distinctive wrong time is what catches it.
+
+### Risks, and why they are small
+
+- The UPS clock is wrong for about five seconds. With no wake schedule set -- the tool checks
+  -- nothing reads it in that window.
+- `argond` has to be **stopped** for about half a minute, because the UPS port has exactly one
+  owner. **Nothing watches the battery meanwhile, so do this on mains.**
+- If the restore in step 3 fails, the output says so in capitals. Running the command again
+  restores the clock.
+
+### Run it
+
+```sh
+cd ~/git/argon-utils
+cargo build -p argon-cli
+sudo systemctl stop argond
+sudo ./target/debug/argonctl rtc                                   # read-only look first
+sudo ./target/debug/argonctl rtc --t15 --write | tee ~/argon-t15.log
+sudo systemctl start argond
+systemctl is-active argond                                         # must say: active
+```
+
+`sudo` because the packaged service gives the UPS port to group `argon`; `tee` runs as you,
+so the log is yours.
+
+**Report:** `~/argon-t15.log`. The line that matters is `T15 RESULT`; the `received` lines are
+the other half -- what the UPS answers to a set is itself a new fact.
+
 ## 🟡 T13 — Does the polkit rule work for the packaged daemon? — **step 1 DONE 2026-09-17: yes**
 
 **Unblocks:** trusting the low-battery poweroff when `argond` runs as the `argon` system user

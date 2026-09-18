@@ -59,7 +59,9 @@ dependencies = [
  "argon-device",
  "argon-hal",
  "argon-proto",
+ "argon-sim",
  "clap",
+ "serialport",
 ]
 
 [[package]]

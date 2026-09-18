@@ -37,7 +37,7 @@ Deliverables from the plan that do not exist yet, so nothing claims them by omis
 | **B1** | Man pages for `argond`, `argonctl`, `argon-tray` | lintian overrides point here; `--help` is complete meanwhile |
 | **B2** | IPC: D-Bus service and Unix socket | the tray and notification agent read the status file instead, which covers display; controls beyond `shutdown -c` need this |
 | ~~**B3**~~ | ~~OLED status page in `argond`~~ — **built 2026-09-18** | confirmed on the case panel: orientation, legibility at contrast 64, nothing clipped. Off by default; `[oled] enabled = true` |
-| **B4** | UPS RTC and scheduled wake | reads are `observed`; the write commands are not, so they need a hardware confirmation before any write path (clean-room rule) |
+| **B4** | UPS RTC and scheduled wake | reads are `observed`; setting is not. **T15** is the confirmation, tooled and rehearsed against the simulator, waiting for a run on hardware |
 | **B5** | Zigbee detect/health | detection exists in `argonctl doctor`; no health probe |
 | **B6** | Tray controls beyond cancelling a poweroff | waits on B2 |
 
