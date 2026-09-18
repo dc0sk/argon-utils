@@ -33,6 +33,13 @@ for why this exists.
 - **[DOC-TI-MT]** Texas Instruments, *Z-Stack Monitor and Test API* -- the published serial
   protocol of TI's Z-Stack coordinator firmware (framing, `SYS_*` commands). Describes the
   firmware, not the Argon module: each fact still needs confirming on this module (task T16).
+- **[DS-CW2217]** Cellwise, *CW2217BAAD datasheet* V0.1 (2021), as published through a
+  distributor: <https://uploadcdn.oneyac.com/attachments/files/brand_pdf/cellwise/06/EB/2022040752158413.pdf>.
+  Describes the chip, not the ONE UP board: the sense resistor, battery profile and whether
+  this chip is on the board at all are not in it.
+- **[FORUM-ONEUP-CW2217]** A user post (not Argon staff), 2026-02-13, citing "the block diagram
+  provided with the hardware": <https://forum.argon40.com/t/argon-one-up-native-battery-integration/9146>.
+  A claim of which part is fitted -- no code was read from it.
 - **[OBS-<date>-<topic>]** our own captures, under `docs/protocol/captures/`.
 
 ---
@@ -155,7 +162,23 @@ backs a write.
 | ID | Fact | Status | Source |
 |---|---|---|---|
 | `ONEUP-I2C-PRESENCE` | I2C bus 1 has exactly one device, at `0x64`. Nothing answers at `0x1a` | `observed` | presence scan, i2cdetect default mode |
-| `ONEUP-0x64-IDENTITY` | What the `0x64` device is, and its register map | `unknown` | -- |
+| `ONEUP-0x64-IDENTITY` | The `0x64` device is a Cellwise **CW2217** battery fuel gauge. Consistent with the CW2217BAAD's fixed address, `0x64` [DS-CW2217]. Confirmable without changing anything: its VERSION register reads `0xA0` | `inferred`, until VERSION is read | [FORUM-ONEUP-CW2217], [DS-CW2217] |
+| `ONEUP-RSENSE` | The current-sense resistor, which scales CURRENT to amperes | `unknown` | -- |
+
+What the CW2217 datasheet documents [DS-CW2217] -- true of the chip; on the ONE UP only once
+`ONEUP-0x64-IDENTITY` is confirmed:
+
+| ID | Fact | Status |
+|---|---|---|
+| `CW2217-READ` | A register read is `S addr+W reg Sr addr+R data P`. The written byte only sets the register pointer; a write needs a data byte after it | `documented` |
+| `CW2217-VERSION` | `0x00`, read-only, fixed `0xA0` in both active and shutdown mode | `documented` |
+| `CW2217-VCELL` | `0x02`-`0x03`, 14-bit unsigned, 312.5 µV per LSB | `documented` |
+| `CW2217-SOC` | `0x04` = whole percent; `0x05` = 1/256 % | `documented` |
+| `CW2217-TEMP` | `0x06`, °C = value / 2 - 40 (NTC at the TS pin) | `documented` |
+| `CW2217-CURRENT` | `0x0E`-`0x0F`, signed 16-bit two's complement; positive = charging (`0x7FFF` max charge, `0x8001` max discharge); A = 52.4 × value / (32768 × Rsense mΩ) | `documented` |
+| `CW2217-CYCLES-SOH` | `0xA4`-`0xA5` charge cycles, `0xA6` state of health, both read-only | `documented` |
+| `CW2217-CONFIG` | `0x08` holds SLEEP and RESTART. Writing it puts the gauge to sleep or restarts its SOC calculation. **Never written by this project** | `documented` |
+| `CW2217-PROFILE` | The battery profile and `SOC_ALERT` bit 7 (`UPDATE_FLAG`) are the integrator's configuration. **Never written by this project** | `documented` |
 | `ONEUP-NO-KERNEL-BATTERY` | No `power_supply` class device; no kernel driver bound on any I2C bus | `observed` | sysfs |
 | `ONEUP-FAN` | The fan is the kernel's `pwm-fan` (line `FAN_PWM`), as on a Pi 5 in the ONE V5 | `observed` | sysfs, `gpioinfo` |
 | `ONEUP-POWER-KEY` | The power key is the Pi's own (`pwr_button` on `PWR_GPIO`) | `observed` | `/sys/class/input`, `gpioinfo` |
