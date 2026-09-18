@@ -5,6 +5,7 @@ argon-utils (0.1.12) unstable; urgency=medium
     policy file was unpacked -- before the user existed -- and dropped the
     rule naming it, so argond was refused its bus name until the next
     reload. Seen on a fresh install on the ONE UP.
+  * Desktop notifications say "Battery", like the tray, instead of "UPS".
 
  -- Simon Keimer <dc0sk@mailbox.org>  Sat, 19 Sep 2026 02:00:00 +0200
 

@@ -261,7 +261,7 @@ impl Watcher {
             self.stale_reported = true;
             return say.then(|| Notice {
                 urgency: Urgency::Normal,
-                text: "UPS monitoring has stopped updating.".to_owned(),
+                text: "Battery monitoring has stopped updating.".to_owned(),
             });
         }
         self.stale_reported = false;
@@ -333,7 +333,7 @@ pub fn notice(
         (_, "low") => format!("Battery low{pct}."),
         (_, "critical") => format!("Battery critical{pct}."),
         (_, "on-mains") => format!("Mains power restored{pct}."),
-        (_, "unknown") => "Lost contact with the UPS.".to_owned(),
+        (_, "unknown") => "Lost contact with the battery.".to_owned(),
         _ => return None,
     };
     let urgency = if current.level == "critical" {

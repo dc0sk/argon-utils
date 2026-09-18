@@ -97,7 +97,7 @@ fn deliver(n: &Notice) -> Result<&'static str, String> {
             urgency,
             "--app-name",
             "argon-utils",
-            "UPS",
+            "Battery",
             &n.text,
         ])
         .output();
