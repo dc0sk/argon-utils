@@ -14,6 +14,9 @@
 #
 # Usage:
 #     docs/testing/t14-discharge-record.sh start     # detaches; survives the terminal closing
+#     docs/testing/t14-discharge-record.sh start --anyway   # already on battery: start late,
+#                                                           # taking the real mains-loss time
+#                                                           # from argond's journal
 #     docs/testing/t14-discharge-record.sh status    # is it running, and where is it up to
 #     docs/testing/t14-discharge-record.sh report    # analyse the log, after the machine is back
 #     docs/testing/t14-discharge-record.sh stop
@@ -35,6 +38,15 @@ state_value() {
     # $1 = key. Empty string if the file or key is missing.
     [ -r "$STATE_FILE" ] || return 0
     sed -n "s/^$1=//p" "$STATE_FILE" | head -1
+}
+
+# When argond saw mains go away, from its own journal. The recorder can therefore be started
+# after the fact -- which is what happens when someone unplugs first and starts second -- and
+# still report a true "on battery for" duration instead of counting from when it was launched.
+mains_lost_epoch() {
+    journalctl -u argond --since "12 hours ago" -o short-unix --no-pager 2>/dev/null |
+        grep -E 'ups: (on mains|unknown) -> (on battery|battery low|battery critical)' |
+        tail -1 | cut -d. -f1 || true
 }
 
 logind_shutdown() {
@@ -96,9 +108,13 @@ preflight() {
 
     local level
     level=$(state_value level)
-    if [ "$level" != "on-mains" ]; then
-        echo "T14: level is \"$level\", not on-mains. Plug mains in and let it settle first," >&2
-        echo "T14: so the log starts from a known state." >&2
+    if [ "$level" != "on-mains" ] && [ "${ANYWAY:-0}" != "1" ]; then
+        echo "T14: level is \"$level\", not on-mains." >&2
+        echo "T14: Either plug mains in and let it settle, so the log starts from a known" >&2
+        echo "T14: state, or -- if you have already unplugged and the discharge is under way" >&2
+        echo "T14: -- start anyway and the real mains-loss time will be taken from argond's" >&2
+        echo "T14: journal:" >&2
+        echo "T14:   $0 start --anyway" >&2
         fail=1
     fi
 
@@ -129,6 +145,23 @@ record() {
     } >>"$LOG"
 
     local last_level="" unplug_epoch=0 low_epoch=0 critical_epoch=0
+
+    # Started after mains was already lost: recover the true moment from argond's journal, so
+    # every "on battery for" figure below is measured from the outage rather than from the
+    # launch of this script.
+    if [ "$(state_value level)" != "on-mains" ]; then
+        unplug_epoch=$(mains_lost_epoch)
+        if [ -n "${unplug_epoch:-}" ] && [ "$unplug_epoch" -gt 0 ] 2>/dev/null; then
+            last_level=$(state_value level)
+            {
+                echo "# NOTE recording started $(( start_epoch - unplug_epoch ))s after mains was lost"
+                echo "# MARK mains lost at $(date -Is -d "@$unplug_epoch") (from argond's journal)"
+            } >>"$LOG"
+        else
+            unplug_epoch=$start_epoch
+            echo "# NOTE already on battery, and the journal did not say when; timing starts now" >>"$LOG"
+        fi
+    fi
 
     while :; do
         local now level percent shutdown_at pending temp load elapsed
@@ -285,6 +318,7 @@ start() {
         echo "T14: already recording (pid $(cat "$PIDFILE"))" >&2
         exit 1
     fi
+    [ "${2:-}" = "--anyway" ] && ANYWAY=1
     preflight
     mkdir -p "$DIR"
 
@@ -298,7 +332,11 @@ start() {
 
     echo "T14: recording every ${INTERVAL}s -> $LOG  (pid $pid)"
     echo
-    echo "Now: unplug mains. Then leave it alone."
+    if [ "${ANYWAY:-0}" = "1" ]; then
+        echo "Already on battery: recording from here, timed from the real mains-loss moment."
+    else
+        echo "Now: unplug mains. Then leave it alone."
+    fi
     echo
     echo "The machine will power off on its own once the battery is confirmed critical."
     echo "SAVE YOUR WORK FIRST -- that poweroff is the point of the test."
@@ -321,7 +359,7 @@ stop() {
 }
 
 case "${1:-}" in
-start) start ;;
+start) start "$@" ;;
 __run) record ;;
 status) status ;;
 report) report ;;

@@ -475,10 +475,17 @@ near empty, not from measurement.
 
 ### Run it
 
+Start the recorder first if you can, but either order works:
+
 ```sh
 cd ~/git/argon-utils
-docs/testing/t14-discharge-record.sh start     # refuses unless everything is ready
+docs/testing/t14-discharge-record.sh start           # while still on mains
+docs/testing/t14-discharge-record.sh start --anyway  # already unplugged
 ```
+
+`--anyway` exists because unplugging first is the natural thing to do. It takes the true
+mains-loss moment from argond's own journal line (`ups: on mains -> on battery at NN%`), so
+every duration is still measured from the outage rather than from when the script started.
 
 Then **unplug mains** and leave the machine alone. The recorder detaches with `setsid`, so it
 survives the terminal closing, an SSH disconnect and the session ending.
@@ -512,6 +519,24 @@ The journal on this machine **is** persistent, so the previous boot's log surviv
 **Report:** the output of `report`, and whether the notifications appeared. The interesting
 numbers are mains-loss → `low`, `low` → `critical`, and whether the poweroff happened at the
 configured delay.
+
+### Attempt 1, 2026-09-18: aborted after 220 s, by design
+
+Mains out at 07:51:14 (89 %), back at 07:54:54 (87 %) — the operator replugged, so nothing was
+scheduled and nothing powered off. Log kept as
+`~/argon-t14/timeline-aborted-2026-09-18T0754.log`.
+
+What it did establish:
+
+- The recorder, the status file and the journal agree on the transition times, and the
+  mains-back mark landed in the log correctly.
+- **2 percentage points in 220 s**, i.e. roughly 110 s per point at desktop-idle load
+  (load ~0.45, 44 °C). Taken at face value that would put 87 % → 10 % at about **2.4 hours**,
+  but this is the least trustworthy part of the curve: the first points after mains loss are
+  partly the gauge settling, not discharge. It is an order of magnitude, not a measurement —
+  which is exactly why the full run is still worth doing.
+- `argond` reported `on battery -> on mains` within one poll of replugging, and published
+  `on-mains` again, so the recovery path works at this end of the curve too.
 
 ## 🟡 T13 — Does the polkit rule work for the packaged daemon? — **step 1 DONE 2026-09-17: yes**
 
