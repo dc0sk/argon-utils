@@ -59,6 +59,8 @@ pub struct Faults {
     /// the write. The negative control for task T15: an experiment that cannot tell this apart
     /// from a real set would confirm nothing.
     pub ignore_clock_set: bool,
+    /// Acknowledge a wake-schedule set but do not store it. The negative control for T17.
+    pub ignore_wake_set: bool,
 }
 
 /// A simulated UPS serving one client over a byte stream.
@@ -186,7 +188,9 @@ impl UpsSim {
             }
             Command::SetWake => {
                 if let Ok(t) = UpsTime::decode_schedule(request.payload()) {
-                    self.state.wake = Some(t);
+                    if !self.faults.ignore_wake_set {
+                        self.state.wake = Some(t);
+                    }
                 }
                 Vec::new()
             }

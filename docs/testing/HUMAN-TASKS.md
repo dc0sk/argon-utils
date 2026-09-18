@@ -748,6 +748,61 @@ No `sudo`: the port is in group `dialout`, which your account is in.
 whether opening the port restarted the radio; the `heard` line is the raw evidence for the
 second.
 
+## 🟡 T17 — Does command 6 really set the wake schedule?
+
+**Unblocks:** B4, scheduled wake -- the UPS powering the Pi back on at a set time.
+
+**Why a test is needed.** Reading the schedule (`ARGON-UPS-CMD7`) is `observed`; setting it
+(`ARGON-UPS-CMD6`) is only `inferred`, so no wake write path may be built until it is seen to
+work -- exactly as T15 did for the clock.
+
+**Why the test times are decades away.** A Pi 5 set to power off on halt, as this one is,
+restarts when its power comes back. So the UPS most likely wakes it by cutting and restoring
+its output -- inferred, not observed, but it is the dangerous reading: a schedule that came
+due while the machine was running would be an abrupt power cut. So T17 never writes a time
+that could come due.
+
+### What it does -- exactly
+
+`argonctl rtc --t17 --write` sends **command 6 twice and nothing else that writes**:
+
+1. Sets the wake schedule to **2098-07-13 06:29 UTC** and reads it back twice.
+2. Sets it to **2097-03-21 17:42 UTC** -- different in every field, so the read-back cannot
+   be a leftover of step 1 -- and reads it back twice.
+
+Every byte sent and received is printed, including whatever the UPS answers to a set.
+
+**It refuses unless** the config says `mode = "full"` and **no wake schedule is set now**: it
+will not overwrite one of yours, because there is no known way to put it back.
+
+**It leaves the schedule set, at 2097.** No command to clear a schedule is documented, and
+guessing one -- an empty payload, say -- risks the UPS taking leftover bytes as a time. A
+schedule 70 years out is inert; `argonctl rtc` and the report will show it.
+
+### Rehearsed
+
+Against the simulated UPS: a UPS that stores the schedule is confirmed; one that acknowledges
+the write but ignores it is **not**. Separately, the two times are checked at compile time --
+changing either to a near year does not build.
+
+### Run it
+
+Same shape as T15, on mains, because `argond` owns the UPS port and must be stopped for
+the few seconds this takes:
+
+```sh
+cd ~/git/argon-utils
+cargo build -p argon-cli
+sudo systemctl stop argond
+sudo ./target/debug/argonctl rtc                                   # read-only look first
+sudo ./target/debug/argonctl rtc --t17 --write | tee ~/argon-t17.log
+sudo systemctl start argond
+systemctl is-active argond                                         # must say: active
+```
+
+**Report:** `~/argon-t17.log`. The `T17 RESULT` line is the verdict; the `received` lines
+record what the UPS answers to a wake set.
+
 ## 🟡 T13 — Does the polkit rule work for the packaged daemon? — **step 1 DONE 2026-09-17: yes**
 
 **Unblocks:** trusting the low-battery poweroff when `argond` runs as the `argon` system user

@@ -44,8 +44,13 @@ pub struct Args {
     #[arg(long)]
     pub t15: bool,
 
-    /// Permit the T15 writes. Without it this command only queries.
-    #[arg(long, requires = "t15")]
+    /// Run task T17: set the wake schedule to one far-future time and read it back, then to a
+    /// different far-future time and read that back. Requires --write.
+    #[arg(long, conflicts_with = "t15")]
+    pub t17: bool,
+
+    /// Permit the writes of T15 or T17. Without it this command only queries.
+    #[arg(long)]
     pub write: bool,
 
     /// Serial port, or "auto" to find the UPS by its USB identity.
@@ -54,11 +59,16 @@ pub struct Args {
 }
 
 pub fn run(args: &Args) -> ExitCode {
-    if args.t15 && !args.write {
+    let experiment = args.t15 || args.t17;
+    if experiment && !args.write {
         eprintln!(
-            "argonctl: --t15 writes to the UPS clock and needs --write as well. Read \
-             docs/testing/HUMAN-TASKS.md (T15) first."
+            "argonctl: --t15 and --t17 write to the UPS and need --write as well. Read \
+             docs/testing/HUMAN-TASKS.md first."
         );
+        return ExitCode::FAILURE;
+    }
+    if args.write && !experiment {
+        eprintln!("argonctl: --write only means something with --t15 or --t17");
         return ExitCode::FAILURE;
     }
 
@@ -101,6 +111,9 @@ pub fn run(args: &Args) -> ExitCode {
         Err(e) => println!("  wake schedule    unreadable: {e}"),
     }
 
+    if args.t17 {
+        return run_t17(&mut link, &wake);
+    }
     if !args.t15 {
         return ExitCode::SUCCESS;
     }
@@ -327,13 +340,23 @@ fn report(o: Outcome) {
     }
 }
 
-/// Sends a set and prints everything that comes back, raw and decoded.
+/// Sets the clock and prints everything that comes back, raw and decoded.
 fn send_set(link: &mut SerialLink, t: UpsTime) -> Result<(), String> {
     let payload = t.encode_clock().map_err(|e| format!("{e:?}"))?;
-    let frame = Frame::new(Command::SetRtc.as_byte(), &payload).map_err(|e| e.to_string())?;
+    send_frame(link, Command::SetRtc, &payload, &fmt(t))
+}
+
+/// Sends one command and prints everything that comes back, raw and decoded.
+fn send_frame(
+    link: &mut SerialLink,
+    cmd: Command,
+    payload: &[u8],
+    target: &str,
+) -> Result<(), String> {
+    let frame = Frame::new(cmd.as_byte(), payload).map_err(|e| e.to_string())?;
     let mut out = [0u8; 16];
     let n = frame.encode_into(&mut out).map_err(|e| e.to_string())?;
-    println!("  target           {}", fmt(t));
+    println!("  target           {target}");
     println!("  sent             {}", hex(&out[..n]));
 
     let got = link
@@ -366,6 +389,155 @@ fn send_set(link: &mut SerialLink, t: UpsTime) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// The two wake times T17 writes: distinctive, different from each other in every field, and
+/// decades away, so a schedule the UPS might act on cannot come due. If waking works by cutting
+/// and restoring the Pi's power -- the likely mechanism for a Pi 5 set to power off on halt --
+/// a schedule that fired while the machine was running would be an abrupt power cut.
+const T17_FIRST: UpsTime = UpsTime {
+    year: 2098,
+    month: 7,
+    day: 13,
+    hour: 6,
+    minute: 29,
+    second: None,
+};
+const T17_SECOND: UpsTime = UpsTime {
+    year: 2097,
+    month: 3,
+    day: 21,
+    hour: 17,
+    minute: 42,
+    second: None,
+};
+
+// Checked at compile time, so an edit that brings a T17 time within reach -- or makes the two
+// times share a field, so the second read-back could be a stale copy of the first -- does not
+// build.
+const _: () = {
+    assert!(
+        T17_FIRST.year >= 2090 && T17_SECOND.year >= 2090,
+        "T17 times must be decades away"
+    );
+    assert!(T17_FIRST.is_plausible() && T17_SECOND.is_plausible());
+    assert!(T17_FIRST.year != T17_SECOND.year && T17_FIRST.month != T17_SECOND.month);
+    assert!(T17_FIRST.day != T17_SECOND.day && T17_FIRST.hour != T17_SECOND.hour);
+    assert!(T17_FIRST.minute != T17_SECOND.minute);
+};
+
+/// What T17 established.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct WakeOutcome {
+    /// The first time was written and read back exactly.
+    first: bool,
+    /// The second, different, time was written and read back exactly.
+    second: bool,
+}
+
+fn run_t17(link: &mut SerialLink, wake: &Result<Option<UpsTime>, String>) -> ExitCode {
+    if let Err(why) = t17_preconditions(wake) {
+        eprintln!("\nargonctl: T17 refused: {why}");
+        return ExitCode::FAILURE;
+    }
+    let outcome = t17(link);
+    println!();
+    println!("T17 RESULT");
+    if outcome.first && outcome.second {
+        println!("  CONFIRMED: command 6 sets the wake schedule. Two different far-future times");
+        println!("  were written and each read back exactly.");
+    } else {
+        println!(
+            "  NOT CONFIRMED (first {}, second {}).",
+            outcome.first, outcome.second
+        );
+        println!("  ARGON-UPS-CMD6 stays `inferred`, and no wake write path may be built on it.");
+    }
+    match read_wake(link) {
+        Ok(Some(t)) => println!(
+            "  The schedule is LEFT at {} -- decades away. No command to clear a schedule is\n  \
+             known, and guessing one could leave a near-term time behind.",
+            fmt(t)
+        ),
+        Ok(None) => println!("  The schedule reads as none."),
+        Err(e) => println!("  The final schedule could not be read: {e}"),
+    }
+    if outcome.first && outcome.second {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
+fn t17_preconditions(wake: &Result<Option<UpsTime>, String>) -> Result<(), String> {
+    let config = Config::load(std::path::Path::new(DEFAULT_PATH))
+        .map_err(|e| format!("cannot read {DEFAULT_PATH} to check the mode: {e}"))?;
+    if config.mode().unwrap_or_default() != Mode::Full {
+        return Err(format!(
+            "mode is {:?} in {DEFAULT_PATH}; setting a wake schedule is a full-mode operation",
+            config.mode
+        ));
+    }
+    // Never overwrite a schedule someone set: there is no known way to put it back.
+    match wake {
+        Ok(None) => Ok(()),
+        Ok(Some(t)) => Err(format!(
+            "a wake schedule is already set ({}); it would be overwritten and cannot be restored",
+            fmt(*t)
+        )),
+        Err(e) => Err(format!("the current wake schedule could not be read ({e})")),
+    }
+}
+
+fn t17(link: &mut SerialLink) -> WakeOutcome {
+    let mut results = [false; 2];
+    for (i, target) in [T17_FIRST, T17_SECOND].into_iter().enumerate() {
+        println!();
+        println!("Step {}: set the wake schedule to {}", i + 1, fmt(target));
+        let Ok(payload) = target.encode_schedule() else {
+            eprintln!("argonctl: cannot encode {}", fmt(target));
+            break;
+        };
+        if let Err(e) = send_frame(link, Command::SetWake, &payload, &fmt(target)) {
+            eprintln!("argonctl: sending failed: {e}");
+            break;
+        }
+        results[i] = (0..2).all(|_| {
+            std::thread::sleep(Duration::from_millis(500));
+            match read_wake(link) {
+                Ok(Some(got)) => {
+                    let pass = same_minute(got, target);
+                    println!(
+                        "  read back        {}   {}",
+                        fmt(got),
+                        if pass { "ok" } else { "MISMATCH" }
+                    );
+                    pass
+                }
+                Ok(None) => {
+                    println!("  read back        none   MISMATCH");
+                    false
+                }
+                Err(e) => {
+                    println!("  read back        failed: {e}");
+                    false
+                }
+            }
+        });
+    }
+    WakeOutcome {
+        first: results[0],
+        second: results[1],
+    }
+}
+
+/// Whether two schedule times name the same minute. A schedule has no seconds field.
+const fn same_minute(a: UpsTime, b: UpsTime) -> bool {
+    a.year == b.year
+        && a.month == b.month
+        && a.day == b.day
+        && a.hour == b.hour
+        && a.minute == b.minute
 }
 
 /// Reads the clock twice and checks it against what was set, `offset_s` from the system
@@ -476,6 +648,55 @@ mod tests {
         drop(link);
         let _ = sim.join();
         outcome
+    }
+
+    fn t17_with_sim(faults: Faults) -> WakeOutcome {
+        let (master, slave) = serialport::TTYPort::pair().expect("PTY pair");
+        let slave_name = slave.name().expect("slave path");
+        let stop = Arc::new(AtomicBool::new(false));
+        let sim_stop = Arc::clone(&stop);
+        let sim = std::thread::spawn(move || {
+            let mut master = master;
+            let mut sim = UpsSim::with_faults(UpsState::default(), faults);
+            let _ = sim.serve_until(
+                &mut master,
+                Instant::now() + Duration::from_secs(60),
+                &sim_stop,
+            );
+        });
+        let _slave = slave;
+        let mut link = SerialLink::open(&slave_name).expect("open the simulated port");
+        let outcome = t17(&mut link);
+        stop.store(true, Ordering::Relaxed);
+        drop(link);
+        let _ = sim.join();
+        outcome
+    }
+
+    #[test]
+    fn t17_confirms_a_device_that_sets_its_schedule() {
+        assert_eq!(
+            t17_with_sim(Faults::default()),
+            WakeOutcome {
+                first: true,
+                second: true
+            }
+        );
+    }
+
+    #[test]
+    fn t17_does_not_confirm_a_device_that_ignores_the_set() {
+        let faults = Faults {
+            ignore_wake_set: true,
+            ..Faults::default()
+        };
+        assert_eq!(
+            t17_with_sim(faults),
+            WakeOutcome {
+                first: false,
+                second: false
+            }
+        );
     }
 
     #[test]
