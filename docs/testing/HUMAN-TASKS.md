@@ -873,14 +873,16 @@ battery, and argond run from a scratch folder in read-only mode
 ### Step 1 — install, read-only, alongside the vendor daemon
 
 Nothing here powers anything off: the package installs in mode `read-only`, and while the
-vendor's `argononeupd` runs argond stays in dry run whatever the mode. The package leaves
-`argononeupd` alone -- it is not one of the UPS daemons it retires.
+vendor's `argononeupd` runs argond stays in dry run whatever the mode. From 0.1.10 the package
+leaves `argononeupd` alone. **0.1.9 did not**: its unit listed `argononeupd` under `Conflicts=`,
+so starting argond stopped it (seen on the ONE UP, 2026-09-19 00:43:56). After installing
+0.1.10, start it again: `sudo systemctl start argononeupd`.
 
 ```sh
 # on the ONE V5, where the package is built:
-scp ~/git/argon-utils_0.1.9_arm64.deb dc0sk@one-up-pi:
+scp ~/git/argon-utils_0.1.10_arm64.deb dc0sk@one-up-pi:
 # on the ONE UP:
-sudo apt install -y ./argon-utils_0.1.9_arm64.deb
+sudo apt install -y ./argon-utils_0.1.10_arm64.deb
 sudo sed -i 's/^source = "serial"/source = "oneup"/' /etc/argon-utils/config.toml
 sudo systemctl restart argond
 argonctl battery

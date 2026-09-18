@@ -12,7 +12,15 @@ Documentation=https://github.com/dc0sk/argon-utils
 # nothing to put it back -- and in the shipped read-only mode argond would not drive the fan
 # either, leaving it at whatever duty was last written. MCU contention is handled at runtime
 # instead, by degrading to read-only (see startup::decide).
-Conflicts=argononeupsd.service argonupsrtcd.service argononeupd.service
+#
+# argononeupd (the ONE UP's vendor daemon) is NOT listed either, for the same reason: it also
+# holds the lid switch, which argond does not handle, and the package neither records nor
+# restores it. Reading the ONE UP's fuel gauge alongside it is safe -- the I2C bus arbitrates --
+# and argond stays in dry run while it runs (ups_service::ONEUP_VENDOR_UNITS). Listing it here
+# stopped it on install, on a ONE UP, in 0.1.9.
+#
+# Exactly ups_service::UPS_VENDOR_UNITS; a test in argon-device keeps the two the same.
+Conflicts=argononeupsd.service argonupsrtcd.service
 
 # The poweroff path goes through logind over the system bus, under polkit. Without this
 # ordering the contention and shutdown checks can run before the bus is there.

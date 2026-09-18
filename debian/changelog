@@ -1,3 +1,14 @@
+argon-utils (0.1.10) unstable; urgency=medium
+
+  * argond.service no longer lists argononeupd.service under Conflicts=.
+    Starting argond stopped the ONE UP's vendor daemon, which also holds
+    the lid switch, with nothing recorded to restore it. argond already
+    stays in dry run while that daemon runs; reading the fuel gauge
+    alongside it is safe. A test now keeps Conflicts= equal to the UPS
+    vendor units the package retires and restores.
+
+ -- Simon Keimer <dc0sk@mailbox.org>  Sat, 19 Sep 2026 01:00:00 +0200
+
 argon-utils (0.1.9) unstable; urgency=medium
 
   * Argon ONE UP battery: with [ups] source = "oneup", argond reads the

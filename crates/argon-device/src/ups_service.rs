@@ -76,3 +76,32 @@ pub fn step<M: Monitor, P: PowerControl>(
         status,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The units the packaged service stops by `Conflicts=`.
+    fn unit_conflicts() -> Vec<String> {
+        let unit = include_str!("../../../packaging/systemd/argond.service");
+        unit.lines()
+            .filter_map(|l| l.strip_prefix("Conflicts="))
+            .flat_map(|v| v.split_whitespace().map(str::to_owned))
+            .collect()
+    }
+
+    #[test]
+    fn the_service_conflicts_with_exactly_the_ups_vendor_units() {
+        // Conflicts= stops a unit when argond starts, with nothing recorded to restore it. Only
+        // the UPS daemons the package retires and restores may be listed -- not argononed, and
+        // not argononeupd, which also holds the ONE UP's lid.
+        let mut got = unit_conflicts();
+        got.sort();
+        let mut want: Vec<String> = UPS_VENDOR_UNITS.iter().map(|u| (*u).to_owned()).collect();
+        want.sort();
+        assert_eq!(got, want);
+        for u in ONEUP_VENDOR_UNITS {
+            assert!(!got.iter().any(|g| g == u), "{u} is stopped on install");
+        }
+    }
+}
