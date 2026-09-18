@@ -863,7 +863,7 @@ It powers off a minute later. **Note the wake time it printed.**
 
 **Report:** `~/argon-t18.log`.
 
-## 🟡 T19 — The ONE UP's battery through argond
+## 🟡 T19 — The ONE UP's battery through argond — **step 1 DONE 2026-09-19: works**
 
 **On the ONE UP** (`one-up-pi`), not the ONE V5. **Unblocks:** trusting argond with the ONE
 UP's battery. Already done by hand on 2026-09-18: the gauge identified, read on charger and on
@@ -871,6 +871,17 @@ battery, and argond run from a scratch folder in read-only mode
 (`OBS-2026-09-18-one-up-survey`).
 
 ### Step 1 — install, read-only, alongside the vendor daemon
+
+**Result 2026-09-19, 0.1.10, `argononeupd` running alongside:** the packaged argond found the
+gauge (24 cycles, health 100 %) and followed the charger both ways within one poll:
+
+```
+00:53:22 unknown -> on mains at 100%; resting on the charger (4.400 V, current -6)
+00:54:22 on mains -> on battery at 100%; discharging (4.370 V, current -2256)
+00:55:32 on battery -> on mains at 100%; charging (4.432 V, current +3280)
+```
+
+Dry run throughout (mode read-only). 0.1.9 had stopped `argononeupd` on install; 0.1.10 did not.
 
 Nothing here powers anything off: the package installs in mode `read-only`, and while the
 vendor's `argononeupd` runs argond stays in dry run whatever the mode. From 0.1.10 the package
