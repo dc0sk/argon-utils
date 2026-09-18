@@ -29,8 +29,10 @@ mod wake;
     long_about = "Panel icon for argon-utils: the UPS charge and state, the CPU temperature and \
         the fan, as a StatusNotifierItem. Started at login from /etc/xdg/autostart.\n\n\
         Reads the status argond publishes in /run/argon-utils/ups.state and never opens the UPS \
-        itself. A status argond has stopped updating is shown as stale, never as current. When \
-        a poweroff is scheduled it offers to cancel it, behind a two-step menu."
+        itself. A status argond has stopped updating is shown as stale, never as current. It shows \
+        any shutdown logind has scheduled and offers to cancel it -- behind a two-step menu for \
+        argond's low-battery poweroff, since cancelling that one risks the battery running out. \
+        Where polkit allows, it offers to power off with a UPS wake."
 )]
 struct Cli {
     /// Status file argond publishes.
@@ -104,10 +106,27 @@ fn main() -> ExitCode {
         if first.shutdown_pending {
             println!("menu      offers: Cancel the scheduled poweroff");
         }
+        let scheduled = zbus::blocking::Connection::system()
+            .ok()
+            .and_then(|c| wake::logind_scheduled(&c));
+        match (
+            &scheduled,
+            wake::pending(scheduled.as_ref().map(|(k, u)| (k.as_str(), *u)), None),
+        ) {
+            (None, _) => println!("logind    could not read ScheduledShutdown"),
+            (Some(_), None) => println!("logind    no shutdown scheduled"),
+            (Some(_), Some(p)) => println!(
+                "logind    {} at {}",
+                p.kind,
+                status::local_hhmm(SystemTime::UNIX_EPOCH + Duration::from_secs(p.at_unix))
+            ),
+        }
         return ExitCode::SUCCESS;
     }
 
-    let handle = match tray::ArgonTray::new(first.clone()).spawn() {
+    let tray = tray::ArgonTray::new(first.clone());
+    let ours = std::sync::Arc::clone(&tray.ours);
+    let handle = match tray.spawn() {
         Ok(h) => h,
         Err(e) => {
             // No StatusNotifierWatcher on the session bus: a panel without tray support, or
@@ -123,6 +142,10 @@ fn main() -> ExitCode {
 
     let interval = Duration::from_secs(cli.interval.max(1));
     let mut shown = first;
+    // Kept open: logind is asked on every poll, so a shutdown scheduled or cancelled anywhere
+    // shows within one interval.
+    let system_bus = zbus::blocking::Connection::system().ok();
+    let mut shown_pending: Option<wake::Pending> = None;
     let mut next_wake_refresh = std::time::Instant::now();
     while !handle.is_closed() {
         // Once a minute, off the menu's path: whether "power off and wake" can be offered, and
@@ -140,6 +163,16 @@ fn main() -> ExitCode {
             next_wake_refresh = std::time::Instant::now() + Duration::from_secs(60);
         }
         std::thread::sleep(interval);
+        if let Some(conn) = &system_bus {
+            let scheduled = wake::logind_scheduled(conn);
+            let ours = ours.lock().ok().and_then(|o| *o);
+            let now_pending =
+                wake::pending(scheduled.as_ref().map(|(k, u)| (k.as_str(), *u)), ours);
+            if now_pending != shown_pending {
+                handle.update(|t| t.pending.clone_from(&now_pending));
+                shown_pending = now_pending;
+            }
+        }
         let next = render(&sources.read());
         // Only push a change. Every update is a D-Bus signal the panel acts on, and most
         // polls change nothing.

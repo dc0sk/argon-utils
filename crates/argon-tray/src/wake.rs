@@ -19,11 +19,68 @@ pub struct Preset {
 /// Whether to offer "Power off and wake" at all.
 ///
 /// Only when polkit could say yes -- "yes", or "challenge" meaning after a password -- and not
-/// while a poweroff is already scheduled: a second one would replace it, and a wake set now
-/// would come with a poweroff the user did not choose.
+/// while a shutdown of any kind is already scheduled: a second one would replace it, and a wake
+/// set now would come with a poweroff the user did not choose.
 #[must_use]
 pub fn offer(can: Option<&str>, shutdown_pending: bool) -> bool {
     !shutdown_pending && matches!(can, Some("yes" | "challenge"))
+}
+
+/// A shutdown logind has scheduled, whoever scheduled it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Pending {
+    /// logind's name for it: "poweroff", "reboot", "halt", or a `dry-` form of those.
+    pub kind: String,
+    /// When, unix seconds.
+    pub at_unix: u64,
+    /// The UPS wake, when this is the poweroff this tray asked argond for.
+    pub wake_unix: Option<u64>,
+}
+
+/// How far apart logind's time and argond's reported poweroff time may be and still be the
+/// same poweroff. logind holds microseconds; argond reports whole seconds.
+const SAME_POWEROFF_S: u64 = 2;
+
+/// What is pending, from logind's `ScheduledShutdown` -- `(kind, microseconds)`, with an empty
+/// kind or zero time when nothing is -- and the `(wake, poweroff)` of this tray's own last
+/// request. The wake is attached only when logind's poweroff is that request's: after a cancel
+/// and some other shutdown, it would be a claim about a wake nobody set for it.
+#[must_use]
+pub fn pending(scheduled: Option<(&str, u64)>, ours: Option<(u64, u64)>) -> Option<Pending> {
+    let (kind, usec) = scheduled?;
+    if kind.is_empty() || usec == 0 {
+        return None;
+    }
+    let at_unix = usec / 1_000_000;
+    let wake_unix = ours
+        .filter(|&(_, poweroff)| {
+            kind == "poweroff" && at_unix.abs_diff(poweroff) <= SAME_POWEROFF_S
+        })
+        .map(|(wake, _)| wake);
+    Some(Pending {
+        kind: kind.to_owned(),
+        at_unix,
+        wake_unix,
+    })
+}
+
+/// Reads logind's `ScheduledShutdown`. `None` when it cannot be read.
+///
+/// Properties are read fresh each time rather than from zbus's cache, which relies on logind
+/// signalling changes to this one.
+#[must_use]
+pub fn logind_scheduled(conn: &zbus::blocking::Connection) -> Option<(String, u64)> {
+    let proxy = zbus::blocking::proxy::Builder::<zbus::blocking::Proxy<'_>>::new(conn)
+        .destination("org.freedesktop.login1")
+        .ok()?
+        .path("/org/freedesktop/login1")
+        .ok()?
+        .interface("org.freedesktop.login1.Manager")
+        .ok()?
+        .cache_properties(zbus::proxy::CacheProperties::No)
+        .build()
+        .ok()?;
+    proxy.get_property("ScheduledShutdown").ok()
 }
 
 /// The presets offered, given now and the next 07:00 (both unix seconds).
@@ -123,6 +180,31 @@ mod tests {
             !offer(Some("yes"), true),
             "offered on top of a scheduled poweroff"
         );
+    }
+
+    #[test]
+    fn nothing_scheduled_is_nothing_pending() {
+        assert_eq!(pending(None, None), None);
+        assert_eq!(pending(Some(("", 0)), Some((5, 1))), None);
+        assert_eq!(pending(Some(("poweroff", 0)), None), None);
+    }
+
+    #[test]
+    fn our_poweroff_carries_its_wake() {
+        let got = pending(Some(("poweroff", 1_000_000_900)), Some((4_600, 1_001))).unwrap();
+        assert_eq!(got.at_unix, 1_000);
+        assert_eq!(got.wake_unix, Some(4_600));
+    }
+
+    #[test]
+    fn someone_elses_shutdown_gets_no_wake_claimed_for_it() {
+        // Our request was cancelled and the user scheduled their own poweroff later on.
+        let later = pending(Some(("poweroff", 5_000_000_000)), Some((4_600, 1_000))).unwrap();
+        assert_eq!(later.wake_unix, None);
+        // A reboot at the very time is still not our poweroff.
+        let reboot = pending(Some(("reboot", 1_000_000_000)), Some((4_600, 1_000))).unwrap();
+        assert_eq!(reboot.wake_unix, None);
+        assert_eq!(reboot.kind, "reboot");
     }
 
     #[test]

@@ -1,3 +1,12 @@
+argon-utils (0.1.8) unstable; urgency=medium
+
+  * The tray shows any shutdown logind has scheduled -- including one it
+    asked argond for, with the time the UPS will wake the machine -- and
+    offers to cancel it. It no longer offers "Power off now…" on top of a
+    shutdown that is already scheduled.
+
+ -- Simon Keimer <dc0sk@mailbox.org>  Fri, 18 Sep 2026 21:00:00 +0200
+
 argon-utils (0.1.7) unstable; urgency=medium
 
   * argond serves org.argonutils.Daemon1 on the system bus. Whoever may
