@@ -1,3 +1,13 @@
+argon-utils (0.1.1) unstable; urgency=medium
+
+  * Add argon-tray, a panel icon for the UPS state, CPU temperature and
+    fan, started at login. Reads argond's status file; never opens the UPS
+    port. Offers cancelling a scheduled poweroff, behind two clicks.
+  * argonctl ups: explain the "Permission denied" when the packaged
+    service owns the UPS port, and point at the status file instead.
+
+ -- Simon Keimer <dc0sk@mailbox.org>  Fri, 18 Sep 2026 11:40:00 +0200
+
 argon-utils (0.1.0) unstable; urgency=medium
 
   * Initial package: the argond system service, argonctl, the UPS udev

@@ -2,7 +2,7 @@
 project: argon-utils
 doc: project/OPEN
 status: living
-last_updated: 2026-09-17
+last_updated: 2026-09-18
 ---
 
 # Open items
@@ -27,6 +27,22 @@ the renderer is a pure function with tests, so it will still work whenever it ma
 battery channel opens up (task T4), adding those metrics is a small change.
 
 **Do not spend further effort here** until the higher-value items below are settled.
+
+## Not yet built
+
+Deliverables from the plan that do not exist yet, so nothing claims them by omission.
+
+| | What | Notes |
+|---|---|---|
+| **B1** | Man pages for `argond`, `argonctl`, `argon-tray` | lintian overrides point here; `--help` is complete meanwhile |
+| **B2** | IPC: D-Bus service and Unix socket | the tray and notification agent read the status file instead, which covers display; controls beyond `shutdown -c` need this |
+| **B3** | OLED status pages in `argond` | the panel works (T7); only a test pattern is drawn today |
+| **B4** | UPS RTC and scheduled wake | reads are `observed`; the write commands are not, so they need a hardware confirmation before any write path (clean-room rule) |
+| **B5** | Zigbee detect/health | detection exists in `argonctl doctor`; no health probe |
+| **B6** | Tray controls beyond cancelling a poweroff | waits on B2 |
+
+Done since the plan: the tray icon (`argon-tray`, confirmed on the Pi desktop panel
+2026-09-18: icon, tooltip and menu all render), the notification agent, the Debian package.
 
 ## The question underneath the others
 

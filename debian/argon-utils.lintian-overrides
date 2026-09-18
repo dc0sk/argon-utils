@@ -10,7 +10,8 @@
 argon-utils: maintainer-script-calls-systemctl [postinst:*]
 argon-utils: maintainer-script-calls-systemctl [postrm:*]
 
-# Not yet written. Both binaries have complete --help output, and the operator-facing
-# documentation is in /usr/share/doc/argon-utils. Tracked in docs/project/OPEN.md.
+# Not yet written. All three binaries have complete --help output, and the operator-facing
+# documentation is in /usr/share/doc/argon-utils. Tracked as B1 in docs/project/OPEN.md.
 argon-utils: no-manual-page [usr/bin/argond]
 argon-utils: no-manual-page [usr/bin/argonctl]
+argon-utils: no-manual-page [usr/bin/argon-tray]
