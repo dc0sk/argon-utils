@@ -688,6 +688,61 @@ so the log is yours.
 **Report:** `~/argon-t15.log`. The line that matters is `T15 RESULT`; the `received` lines are
 the other half -- what the UPS answers to a set is itself a new fact.
 
+## 🟡 T16 — Does the Zigbee module answer, and does opening its port restart it?
+
+**Unblocks:** B5, Zigbee health -- the scope you chose at the start: detect the module, report
+its firmware, and say whether it is healthy.
+
+**What is known and what is not.** The module is a CP2102N USB-serial bridge in front of a
+CC2652P radio (`ZIGBEE-USB`, observed). What firmware the radio runs is not established; TI's
+Z-Stack coordinator firmware is expected, and its serial protocol is published
+(`documented`). What is **not** known, and has no datasheet: whether the bridge's DTR and RTS
+lines are wired to the radio's reset and bootloader pins (`ZIGBEE-LINES`). On many CC2652
+boards they are, and Linux raises both lines whenever a serial port is opened -- so on such a
+board, merely opening the port restarts the radio.
+
+### What the probe does -- exactly
+
+`argonctl zigbee --probe`:
+
+1. Opens the port at 115200 baud and **immediately lowers DTR, then RTS**. Opening raises both
+   for a moment; that cannot be prevented from user space. Releasing the bootloader line
+   before the reset line is the order in which, on the usual wiring, the radio restarts into
+   its normal firmware rather than its bootloader.
+2. **Listens for 3 seconds, sending nothing.** Z-Stack announces every restart with a
+   `SYS_RESET_IND` message, so hearing one here is an observation of the wiring: opening the
+   port restarted the radio.
+3. Sends `SYS_PING`, then `SYS_VERSION` -- two read-only questions. Nothing that joins,
+   forms, erases, writes or resets anything.
+
+Every byte in both directions is printed. It refuses if anything else holds the port.
+
+### Risks
+
+- The radio may restart once when the port is opened. Nothing is using it, so nothing is
+  interrupted.
+- The worst case is a board wired in a way the release order does not suit, which could leave
+  the radio **in its bootloader**. That erases nothing -- the bootloader only acts on commands,
+  and none are sent -- but the radio would not answer until it is reset. A full shutdown and
+  restart of the Pi will very probably reset it; that is not verified. If the probe reports
+  NO ANSWER, tell me before trying anything else.
+- It does not need `argond` stopped: `argond` does not touch the Zigbee module.
+
+### Run it
+
+```sh
+cd ~/git/argon-utils
+cargo build -p argon-cli
+./target/debug/argonctl zigbee                              # identity only, opens nothing
+./target/debug/argonctl zigbee --probe | tee ~/argon-t16.log
+```
+
+No `sudo`: the port is in group `dialout`, which your account is in.
+
+**Report:** `~/argon-t16.log`. The `T16 RESULT` lines say whether the firmware answered and
+whether opening the port restarted the radio; the `heard` line is the raw evidence for the
+second.
+
 ## 🟡 T13 — Does the polkit rule work for the packaged daemon? — **step 1 DONE 2026-09-17: yes**
 
 **Unblocks:** trusting the low-battery poweroff when `argond` runs as the `argon` system user

@@ -33,3 +33,4 @@ pub mod fan;
 pub mod hid;
 pub mod oled;
 pub mod ups;
+pub mod zigbee;

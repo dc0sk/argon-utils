@@ -10,6 +10,7 @@ mod notify;
 mod oled;
 mod rtc;
 mod ups;
+mod zigbee;
 
 #[derive(Parser)]
 #[command(
@@ -61,6 +62,12 @@ enum Command {
     /// fact may not back a write path until it has been observed.
     Rtc(rtc::Args),
 
+    /// Identify the Zigbee module. `--probe` runs the read-only health probe (task T16).
+    ///
+    /// Without --probe nothing is opened. The probe listens first, then sends only `SYS_PING`
+    /// and `SYS_VERSION`, and refuses if anything else holds the port.
+    Zigbee(zigbee::Args),
+
     /// Measure the case button's pulse widths.
     ///
     /// The MCU decodes the press and emits a calibrated pulse whose width encodes the
@@ -94,5 +101,6 @@ fn main() -> std::process::ExitCode {
         Command::Oled(args) => oled::run(&args),
         Command::NotifyAgent(args) => notify::run(&args),
         Command::Rtc(args) => rtc::run(&args),
+        Command::Zigbee(args) => zigbee::run(&args),
     }
 }

@@ -30,6 +30,9 @@ for why this exists.
 - **[DS-SSD1306]** Solomon Systech SSD1306 datasheet rev 1.1.
 - **[DS-PCF8563]** NXP PCF8563 datasheet.
 - **[DS-HIDPD]** USB-IF *Usage Tables for HID Power Devices* rev 1.0.
+- **[DOC-TI-MT]** Texas Instruments, *Z-Stack Monitor and Test API* -- the published serial
+  protocol of TI's Z-Stack coordinator firmware (framing, `SYS_*` commands). Describes the
+  firmware, not the Argon module: each fact still needs confirming on this module (task T16).
 - **[OBS-<date>-<topic>]** our own captures, under `docs/protocol/captures/`.
 
 ---
@@ -120,6 +123,23 @@ not contend with the serial port.
 | `ARGON-UPS-HID-PARSER-XCHECK` | The Linux kernel's HID parser and `argon-proto`'s derive identical report IDs, field counts and logical ranges from the same descriptor | `observed` | same |
 | `ARGON-UPS-HID-ACCESS` | HID telemetry must be read via **`hidraw`**, never libusb. A libusb interface claim detaches the kernel driver and breaks `/dev/ttyACM0` until the device is re-enumerated; hidraw does not | `observed` | same |
 | `ARGON-UPS-USBID` | The UPS enumerates as `1d6b:0104` — the *generic Linux USB gadget* VID:PID. It must be identified by string descriptors (`Argon` / `Argon USB` / serial), never by VID:PID | `observed` | OBS-2026-09-15-ups-ident |
+
+## ZIGBEE-* — Argon Industria Zigbee module (CC2652P behind a CP2102N)
+
+| ID | Fact | Status | Source |
+|---|---|---|---|
+| `ZIGBEE-USB` | A CP2102N (`10c4:ea60`) with Silicon Labs' generic strings and serial `xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`, on port 2 of the case's internal hub (`1-1.2`, controller `1000480000.usb`) | `observed` | `udevadm info`, 2026-09-18 |
+| `ZIGBEE-CP2102N-GPIO` | The bridge exposes 7 GPIO lines (`gpiochip14`), all idle inputs | `observed` | `gpioinfo`, 2026-09-18 |
+| `ZIGBEE-LINES` | **Whether the bridge's DTR/RTS reach the radio's reset and bootloader pins** -- which decides whether opening the port restarts it | `unknown` | undocumented; T16 observes it |
+| `ZIGBEE-BAUD` | Z-Stack's serial interface runs at 115200 8N1, no flow control | `documented` | [DOC-TI-MT] |
+| `ZIGBEE-MT-FRAME` | Frames are `FE LEN CMD0 CMD1 DATA FCS`, FCS the XOR of LEN through the last data byte | `documented` | [DOC-TI-MT] |
+| `ZIGBEE-SYS-PING` | `SYS_PING` is `21 01`; the reply `61 01` carries 2 capability bytes, little-endian | `documented` | [DOC-TI-MT] |
+| `ZIGBEE-SYS-VERSION` | `SYS_VERSION` is `21 02`; the reply `61 02` carries transport rev, product, major, minor, maint, and in newer releases a 4-byte revision | `documented` | [DOC-TI-MT] |
+| `ZIGBEE-RESET-IND` | The firmware sends `41 80` (`SYS_RESET_IND`) unprompted after every restart | `documented` | [DOC-TI-MT] |
+| `ZIGBEE-FIRMWARE` | What firmware the module runs -- Z-Stack coordinator is expected but not established | `unknown` | T16 |
+
+The module has no datasheet in Argon's published set (checked 2026-09-18), so nothing about
+its board-level wiring is `documented`.
 
 ## ARGON-OLED-* / ARGON-RTC-*
 

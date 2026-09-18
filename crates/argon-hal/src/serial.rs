@@ -162,3 +162,78 @@ impl std::fmt::Debug for SerialLink {
         f.debug_struct("SerialLink").finish_non_exhaustive()
     }
 }
+
+/// A raw serial port with explicit control of the modem lines, for devices other than the UPS.
+///
+/// Exists for the Zigbee module. On many CC2652 boards the USB-serial bridge's DTR and RTS lines
+/// are wired to the radio's reset and bootloader pins, and Linux raises both when a port is
+/// opened -- so for such a device, "open the port" can already be an action. The caller decides
+/// the line states straight after opening, rather than inheriting whatever the kernel chose.
+pub struct RawPort {
+    port: Box<dyn serialport::SerialPort>,
+}
+
+impl RawPort {
+    /// Opens a port, 8N1, no flow control.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the port cannot be opened.
+    pub fn open(path: impl AsRef<Path>, baud: u32) -> Result<Self> {
+        let path = path.as_ref().to_string_lossy().into_owned();
+        // Linux raises DTR and RTS when any tty is opened; that cannot be prevented from user
+        // space (the serialport crate documents the same). `dtr_on_open(false)` drops DTR
+        // inside `open()` itself, as early as possible, which shortens that unavoidable pulse
+        // and keeps DTR released before RTS.
+        let port = serialport::new(&path, baud)
+            .timeout(READ_SLICE)
+            .flow_control(serialport::FlowControl::None)
+            .dtr_on_open(false)
+            .open()
+            .map_err(|e| Error::Io(std::io::Error::other(format!("{path}: {e}"))))?;
+        Ok(Self { port })
+    }
+
+    /// Sets DTR, then RTS -- in that order, which matters on the usual auto-bootloader wiring.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the driver refuses.
+    pub fn set_lines(&mut self, dtr: bool, rts: bool) -> Result<()> {
+        let io = |e: serialport::Error| Error::Io(std::io::Error::other(e.to_string()));
+        self.port.write_data_terminal_ready(dtr).map_err(io)?;
+        self.port.write_request_to_send(rts).map_err(io)
+    }
+
+    /// Writes bytes.
+    ///
+    /// # Errors
+    ///
+    /// Fails on I/O error.
+    pub fn write_all(&mut self, bytes: &[u8]) -> Result<()> {
+        self.port.write_all(bytes)?;
+        self.port.flush()?;
+        Ok(())
+    }
+
+    /// Returns every byte that arrives within `window`.
+    ///
+    /// # Errors
+    ///
+    /// Fails on I/O error.
+    pub fn collect(&mut self, window: Duration) -> Result<Vec<u8>> {
+        let deadline = Instant::now() + window;
+        let mut got = Vec::new();
+        let mut buf = [0u8; 256];
+        while Instant::now() < deadline {
+            match self.port.read(&mut buf) {
+                Ok(n) => got.extend_from_slice(&buf[..n]),
+                Err(e)
+                    if e.kind() == std::io::ErrorKind::TimedOut
+                        || e.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(e) => return Err(Error::Io(e)),
+            }
+        }
+        Ok(got)
+    }
+}
