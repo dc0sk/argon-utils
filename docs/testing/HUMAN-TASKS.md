@@ -835,10 +835,10 @@ least 15 minutes out when set, the poweroff comes first, and if the poweroff wer
 
 ### Run it
 
-First install 0.1.5 (your config is kept) and check `argond` is listening:
+First install 0.1.6 (your config is kept) and check `argond` is listening:
 
 ```sh
-sudo apt install -y -o Dpkg::Options::=--force-confold ~/git/argon-utils_0.1.5_arm64.deb
+sudo apt install -y -o Dpkg::Options::=--force-confold ~/git/argon-utils_0.1.6_arm64.deb
 journalctl -u argond -n 20 --no-pager -o cat | grep -E 'control|wake'
 ```
 
