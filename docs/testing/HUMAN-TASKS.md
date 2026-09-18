@@ -502,6 +502,61 @@ should appear at `low` and at `critical`.
 readings (~20 s), well inside the 2-minute delay. Harder abort:
 `sudo shutdown -c && sudo systemctl stop argond`.
 
+### The curve, and what it says about the gauge
+
+```sh
+docs/testing/t14-curve.sh          # per-point timings, five-point bands, pack estimate
+```
+
+Separate from the recorder on purpose: bash reads a script lazily, so editing the recorder
+mid-run can change what the running shell executes next.
+
+The shape is the interesting part. At constant load a well-calibrated coulomb counter gives
+a flat column of seconds-per-point. A column that **rises and then falls** is the signature of
+a **voltage-derived** state of charge on a lithium pack: steep at the top of the curve, flat
+across the 3.8-3.7 V plateau, steep again past the knee. Attempt 2 showed exactly that rise
+(100 s/point at 80-84 %, 181 s/point at 60-64 %) at flat load (0.2-1.1) and flat temperature
+(44-46 C), so the machine's draw was not what changed.
+
+This matters for a claim we should not make: **an uncalibrated pack is not what makes the
+segments lengthen.** A wrong full-charge capacity is a *uniform* scale error, not a
+progressive one. Calibration fixes where the endpoints land, not the shape in between. The
+falsifiable half is whether seconds-per-point collapses below roughly 20-25 % as the knee
+arrives; if it keeps lengthening to the end, the voltage-curve explanation is wrong.
+
+The script also reports whether the gauge ever moved *upwards* while on battery. In attempt 2
+it did not, over 37 consecutive points -- so single readings can be taken at face value for
+direction, which is worth knowing given the policy only needs two confirmations.
+
+### Depleting the rest, for the vendor's calibration
+
+The vendor recommends a full depletion to give the gauge a low-voltage reference. That can be
+had without risking a filesystem, because the two things are separable:
+
+1. Let `argond` power the machine off at 10 %, as configured. The filesystem is down from
+   here on, so nothing below can corrupt it.
+2. **Leave it unplugged with the machine off.** The halted Pi (`POWER_OFF_ON_HALT=1`) plus the
+   UPS's own electronics keep draining the pack down to the UPS's low-voltage cutoff, which is
+   the calibration point.
+3. **Boot with mains connected** and read the first percentage `argond` logs.
+
+Step 3 is deliberate. Booting on a nearly empty pack is the single riskiest moment of the
+exercise: boot is the most write-heavy minute a system has, a Pi 5 draws large inrush spikes,
+and a pack at the knee is where the UPS can sag or trip under them -- an abrupt cut *during*
+boot writes is the classic corruption case. Booting with mains costs under a tenth of a
+percentage point of accuracy (charging is ~0.4 points per minute on a ~20 Wh pack, and
+`argond` logs its first reading within a second or two), which is well inside the gauge's own
+1 % resolution.
+
+Do not lower `critical_percent` to chase a deeper *clean* shutdown: near-empty is where an
+uncalibrated gauge is least trustworthy, which is the reason that threshold is 10 %.
+
+Two caveats: **recharge promptly** rather than leaving the pack empty, and expect the UPS's
+**RTC and wake schedule to be lost**, since they run off that same battery. The system clock
+may therefore be wrong on the first boot, so note the wall-clock times yourself --
+`t14-curve.sh` reconstructs the halt-drain interval from the log and the journal, and says so
+when the clock is suspect.
+
 ### When it comes back
 
 **Plug mains in before you power it on.** The battery will be at about 10 %, and booting on a
