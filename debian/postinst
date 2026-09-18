@@ -28,6 +28,17 @@ configure)
             --shell /usr/sbin/nologin --quiet argon
     fi
 
+    # The bus daemon reloads its policy the moment dpkg unpacks
+    # /usr/share/dbus-1/system.d/org.argonutils.Daemon1.conf -- on a first install, before the
+    # user above existed. It then drops the rule naming "argon" ("Unknown username") and argond,
+    # started below, is refused its bus name until something else triggers a reload. Seen on
+    # a fresh install on the ONE UP, 2026-09-19. So reload once the user exists. ReloadConfig
+    # answers when the reload is done; busctl comes with systemd, which the package depends on.
+    if [ -d /run/systemd/system ]; then
+        busctl call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus \
+            ReloadConfig >/dev/null 2>&1 || true
+    fi
+
     # The unit names i2c, gpio and dialout as supplementary groups. systemd refuses to
     # start a service whose supplementary group does not exist, and the failure message
     # does not explain why, so say it here where it can be understood.
