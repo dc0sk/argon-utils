@@ -76,6 +76,52 @@ Reading it:
   is latched, so a value could tear across an update; the three samples agree to within
   noise, and a driver should read both bytes in one transaction or read twice and compare.
 
+## On battery (2026-09-18T19:00:59Z)
+
+The operator unplugged the charger; six samples 2 s apart. Two-byte values were read in one
+`i2c_rdwr` transaction (`S 64+W reg Sr 64+R d0 d1 P`) and again byte by byte; every pair agreed.
+
+| Sample | VCELL | SOC | CURRENT (LSB) | CURRENT raw |
+|---|---|---|---|---|
+| 0 | 4.3597 V | 100.00 % | -3008 | `f440` |
+| 1 | 4.3684 V | 100.00 % | -2263 | `f729` |
+| 2 | 4.3700 V | 100.00 % | -2092 | `f7d4` |
+| 3 | 4.3678 V | 100.00 % | -2257 | `f72f` |
+| 4 | 4.3697 V | 100.00 % | -2103 | `f7c9` |
+| 5 | 4.3675 V | 100.00 % | -2266 | `f726` |
+
+- **Discharge reads negative on this board**, as documented. `ONEUP-CURRENT-SIGN` is
+  observed for discharge; charging (positive) is still to be seen.
+- About -2200 LSB is 3.5 mV across the sense resistor: 0.35 A if it is the datasheet's
+  typical 10 mΩ. With the resistor and the pack wiring unknown, no ampere or watt figure
+  is claimed.
+- The cell voltage sags about 30 mV under load (4.397 V at rest).
+- The auto-incrementing two-byte read the datasheet implies ("the number of bytes per
+  transfer is unrestricted") works: it returns the same pair as two single reads.
+
+## Charger back (2026-09-18T19:02:16Z)
+
+The operator plugged the charger back in, about a minute after the samples above; eight samples
+2 s apart, two-byte values in one transaction.
+
+| Sample | VCELL | SOC | CURRENT (LSB) | raw |
+|---|---|---|---|---|
+| 0 | 4.4316 V | 100.00 % | +2875 | `0b3b` |
+| 1 | 4.4319 V | 100.00 % | +2845 | `0b1d` |
+| 2 | 4.4319 V | 100.00 % | +2817 | `0b01` |
+| 3 | 4.4316 V | 100.00 % | +2796 | `0aec` |
+| 4 | 4.4316 V | 100.00 % | +2763 | `0acb` |
+| 5 | 4.4319 V | 100.00 % | +2736 | `0ab0` |
+| 6 | 4.4316 V | 100.00 % | +2708 | `0a94` |
+| 7 | 4.4313 V | 100.00 % | +2688 | `0a80` |
+
+- **Charging reads positive on this board**, as documented: the sign is now observed both ways.
+- The current falls steadily, about 1 % per sample, at a flat 4.432 V: the shape of a charger
+  topping up at constant voltage and tapering as the cell fills.
+- SOC stayed at 100.00 % throughout the discharge and recharge -- the gauge's percentage does
+  not move for a minute's draw, so the current is the only quick indicator of which way
+  power is flowing.
+
 ## Method
 
 All over SSH as the unprivileged login user (groups include `i2c`, `gpio`).
