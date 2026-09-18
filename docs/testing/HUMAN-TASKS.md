@@ -748,7 +748,12 @@ No `sudo`: the port is in group `dialout`, which your account is in.
 whether opening the port restarted the radio; the `heard` line is the raw evidence for the
 second.
 
-## 🟡 T17 — Does command 6 really set the wake schedule?
+## ✅ T17 — Does command 6 really set the wake schedule? — **DONE 2026-09-18: yes**
+
+**Result.** Confirmed: two far-future times, each read back exactly; the UPS answers with an
+empty command-6 frame. The schedule is left at 2097-03-21 17:42 UTC. Evidence:
+[`OBS-2026-09-18-t17-wake-set`](../protocol/captures/OBS-2026-09-18-t17-wake-set.md). Still
+unknown: how the wake works, and how to clear one.
 
 **Unblocks:** B4, scheduled wake -- the UPS powering the Pi back on at a set time.
 

@@ -1,0 +1,29 @@
+UPS on /dev/serial/by-id/usb-Argon_Argon_USB_XXXXXXXXXXXXXXXX-if00
+
+Baseline: three reads, nothing written
+  UPS clock        2026-09-18 13:52:57 UTC   system 2026-09-18 13:52:56 UTC   offset +1 s
+  UPS clock        2026-09-18 13:52:58 UTC   system 2026-09-18 13:52:57 UTC   offset +1 s
+  UPS clock        2026-09-18 13:52:59 UTC   system 2026-09-18 13:52:59 UTC   offset +0 s
+  wake schedule    none
+
+Step 1: set the wake schedule to 2098-07-13 06:29:00 UTC
+  target           2098-07-13 06:29:00 UTC
+  sent             FE 05 06 98 07 13 06 29 EA
+  received         FE 00 06 04 (4 bytes in 1500 ms)
+  decoded          frame: command 6, payload empty
+  read back        2098-07-13 06:29:00 UTC   ok
+  read back        2098-07-13 06:29:00 UTC   ok
+
+Step 2: set the wake schedule to 2097-03-21 17:42:00 UTC
+  target           2097-03-21 17:42:00 UTC
+  sent             FE 05 06 97 03 21 17 42 1D
+  received         FE 00 06 04 (4 bytes in 1500 ms)
+  decoded          frame: command 6, payload empty
+  read back        2097-03-21 17:42:00 UTC   ok
+  read back        2097-03-21 17:42:00 UTC   ok
+
+T17 RESULT
+  CONFIRMED: command 6 sets the wake schedule. Two different far-future times
+  were written and each read back exactly.
+  The schedule is LEFT at 2097-03-21 17:42:00 UTC -- decades away. No command to clear a schedule is
+  known, and guessing one could leave a near-term time behind.
