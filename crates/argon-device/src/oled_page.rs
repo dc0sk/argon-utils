@@ -51,7 +51,7 @@ pub struct PageInput<'a> {
 /// What the screen says, before it becomes pixels.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Page {
-    /// Top left, e.g. `UPS 87%`.
+    /// Top left, e.g. `BAT 87%`.
     pub title: String,
     /// Top right, e.g. `MAINS`.
     pub state: String,
@@ -67,7 +67,7 @@ pub struct Page {
 pub fn page(input: &PageInput<'_>, hhmm: &dyn Fn(SystemTime) -> String) -> Page {
     let mut p = match status::interpret(input.status, input.now) {
         Reading::NoData => Page {
-            title: "UPS".into(),
+            title: "BAT".into(),
             state: "NO DATA".into(),
             bar: None,
             lines: vec!["No status from".into(), "argond".into()],
@@ -75,7 +75,7 @@ pub fn page(input: &PageInput<'_>, hhmm: &dyn Fn(SystemTime) -> String) -> Page 
         // No percentage and no bar: the last number argond wrote is exactly the thing that
         // must not be shown once nobody is updating it.
         Reading::Stale { age } => Page {
-            title: "UPS".into(),
+            title: "BAT".into(),
             state: "STALE".into(),
             bar: None,
             lines: vec![
@@ -84,13 +84,13 @@ pub fn page(input: &PageInput<'_>, hhmm: &dyn Fn(SystemTime) -> String) -> Page 
             ],
         },
         Reading::Failed => Page {
-            title: "UPS".into(),
+            title: "BAT".into(),
             state: "READ FAIL".into(),
             bar: None,
-            lines: vec!["Last UPS read failed".into()],
+            lines: vec!["Battery read failed".into()],
         },
         Reading::PowerOffPending { percent, at } => Page {
-            title: format!("UPS {percent}%"),
+            title: format!("BAT {percent}%"),
             state: "CRITICAL".into(),
             bar: Some(percent),
             lines: vec![
@@ -100,7 +100,7 @@ pub fn page(input: &PageInput<'_>, hhmm: &dyn Fn(SystemTime) -> String) -> Page 
             ],
         },
         Reading::Current { percent, level } => Page {
-            title: format!("UPS {percent}%"),
+            title: format!("BAT {percent}%"),
             state: match level {
                 LevelName::OnMains => "MAINS",
                 LevelName::OnBattery => "BATTERY",
@@ -246,7 +246,7 @@ mod tests {
     fn a_current_reading_shows_charge_state_and_the_machine() {
         let s = ups("on-mains", Some(87), None);
         let p = page(&input(Some(&s)), &fixed);
-        assert_eq!(p.title, "UPS 87%");
+        assert_eq!(p.title, "BAT 87%");
         assert_eq!(p.state, "MAINS");
         assert_eq!(p.bar, Some(87));
         assert_eq!(p.lines, vec!["CPU 45C  FAN OFF".to_owned()]);
@@ -302,6 +302,12 @@ mod tests {
             (Some(ups("critical", Some(9), Some(2_000))), at(1_005)),
             (Some(ups("unknown", None, None)), at(1_005)),
             (Some(ups("on-mains", Some(100), None)), long_ago),
+            // The widest title with the widest states: critical at 100 % is not realistic, but
+            // the layout must not depend on a critical battery never reading three digits.
+            (Some(ups("critical", Some(100), None)), at(1_005)),
+            (Some(ups("critical", Some(100), Some(2_000))), at(1_005)),
+            (Some(ups("on-battery", Some(100), None)), at(1_005)),
+            (Some(ups("mystery", Some(100), None)), at(1_005)),
         ];
         for (status, now) in &cases {
             let mut i = input(status.as_ref());

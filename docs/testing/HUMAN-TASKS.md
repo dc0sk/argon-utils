@@ -891,9 +891,9 @@ so starting argond stopped it (seen on the ONE UP, 2026-09-19 00:43:56). After i
 
 ```sh
 # on the ONE V5, where the package is built:
-scp ~/git/argon-utils_0.1.10_arm64.deb dc0sk@one-up-pi:
+scp ~/git/argon-utils_0.1.11_arm64.deb dc0sk@one-up-pi:
 # on the ONE UP:
-sudo apt install -y ./argon-utils_0.1.10_arm64.deb
+sudo apt install -y ./argon-utils_0.1.11_arm64.deb
 sudo sed -i 's/^source = "serial"/source = "oneup"/' /etc/argon-utils/config.toml
 sudo systemctl restart argond
 argonctl battery

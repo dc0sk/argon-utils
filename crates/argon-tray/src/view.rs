@@ -74,25 +74,25 @@ fn render_ups(s: &Snapshot, hhmm: &dyn Fn(SystemTime) -> String) -> View {
         Reading::NoData => plain(
             MISSING,
             Urgency::Normal,
-            "UPS: no data".to_owned(),
+            "Battery: no data".to_owned(),
             "argond is not publishing status. Is it running?",
         ),
         Reading::Stale { age } => plain(
             MISSING,
             Urgency::Attention,
-            format!("UPS: no update for {} s", age.as_secs()),
+            format!("Battery: no update for {} s", age.as_secs()),
             "argond has stopped reporting: the battery is not being watched.",
         ),
         Reading::Failed => plain(
             MISSING,
             Urgency::Normal,
-            "UPS: reading failed".to_owned(),
-            "The last read from the UPS did not succeed.",
+            "Battery: reading failed".to_owned(),
+            "The last battery read did not succeed.",
         ),
         Reading::PowerOffPending { percent, at } => View {
             icon: CAUTION,
             urgency: Urgency::Attention,
-            headline: format!("UPS {percent} % · powering off at {}", hhmm(at)),
+            headline: format!("Battery {percent} % · powering off at {}", hhmm(at)),
             details: vec!["Restore mains power to cancel.".to_owned()],
             shutdown_pending: true,
         },
@@ -100,12 +100,8 @@ fn render_ups(s: &Snapshot, hhmm: &dyn Fn(SystemTime) -> String) -> View {
             let (icon, urgency, what) = match level {
                 LevelName::OnMains => (level_icon(percent, true), Urgency::Normal, "on mains"),
                 LevelName::OnBattery => (level_icon(percent, false), Urgency::Normal, "on battery"),
-                LevelName::Low => (
-                    level_icon(percent, false),
-                    Urgency::Attention,
-                    "battery low",
-                ),
-                LevelName::Critical => (CAUTION, Urgency::Attention, "battery critical"),
+                LevelName::Low => (level_icon(percent, false), Urgency::Attention, "low"),
+                LevelName::Critical => (CAUTION, Urgency::Attention, "critical"),
                 LevelName::Unrecognised(_) => (
                     level_icon(percent, false),
                     Urgency::Normal,
@@ -115,7 +111,7 @@ fn render_ups(s: &Snapshot, hhmm: &dyn Fn(SystemTime) -> String) -> View {
             View {
                 icon,
                 urgency,
-                headline: format!("UPS {percent} % · {what}"),
+                headline: format!("Battery {percent} % · {what}"),
                 details: Vec::new(),
                 shutdown_pending: false,
             }
@@ -203,7 +199,7 @@ mod tests {
     fn on_mains_shows_the_level_as_charging() {
         let v = render(&snap("on-mains", Some(87), None), &fixed);
         assert_eq!(v.icon, "battery-level-80-charging-symbolic");
-        assert_eq!(v.headline, "UPS 87 % · on mains");
+        assert_eq!(v.headline, "Battery 87 % · on mains");
         assert_eq!(v.urgency, Urgency::Normal);
         assert!(!v.shutdown_pending);
     }
@@ -226,13 +222,13 @@ mod tests {
         let crit = render(&snap("critical", Some(9), None), &fixed);
         assert_eq!(crit.urgency, Urgency::Attention);
         assert_eq!(crit.icon, CAUTION);
-        assert_eq!(crit.headline, "UPS 9 % · battery critical");
+        assert_eq!(crit.headline, "Battery 9 % · critical");
     }
 
     #[test]
     fn a_scheduled_poweroff_outranks_the_level_and_offers_the_cancel() {
         let v = render(&snap("critical", Some(9), Some(2_000)), &fixed);
-        assert_eq!(v.headline, "UPS 9 % · powering off at 10:38");
+        assert_eq!(v.headline, "Battery 9 % · powering off at 10:38");
         assert!(
             v.shutdown_pending,
             "no cancel offered for a pending poweroff"
@@ -270,10 +266,10 @@ mod tests {
     fn a_missing_file_and_a_failed_read_are_distinguished() {
         let mut s = snap("on-mains", Some(90), None);
         s.ups = None;
-        assert_eq!(render(&s, &fixed).headline, "UPS: no data");
+        assert_eq!(render(&s, &fixed).headline, "Battery: no data");
 
         let v = render(&snap("unknown", None, None), &fixed);
-        assert_eq!(v.headline, "UPS: reading failed");
+        assert_eq!(v.headline, "Battery: reading failed");
         assert_eq!(v.icon, MISSING);
     }
 
@@ -282,7 +278,7 @@ mod tests {
         // argond publishes the last percentage alongside level=unknown. The level is the
         // authority on whether the reading is current.
         let v = render(&snap("unknown", Some(80), None), &fixed);
-        assert_eq!(v.headline, "UPS: reading failed");
+        assert_eq!(v.headline, "Battery: reading failed");
     }
 
     #[test]
