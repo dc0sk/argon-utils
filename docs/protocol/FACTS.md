@@ -130,13 +130,14 @@ not contend with the serial port.
 |---|---|---|---|
 | `ZIGBEE-USB` | A CP2102N (`10c4:ea60`) with Silicon Labs' generic strings and serial `xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`, on port 2 of the case's internal hub (`1-1.2`, controller `1000480000.usb`) | `observed` | `udevadm info`, 2026-09-18 |
 | `ZIGBEE-CP2102N-GPIO` | The bridge exposes 7 GPIO lines (`gpiochip14`), all idle inputs | `observed` | `gpioinfo`, 2026-09-18 |
-| `ZIGBEE-LINES` | **Whether the bridge's DTR/RTS reach the radio's reset and bootloader pins** -- which decides whether opening the port restarts it | `unknown` | undocumented; T16 observes it |
-| `ZIGBEE-BAUD` | Z-Stack's serial interface runs at 115200 8N1, no flow control | `documented` | [DOC-TI-MT] |
-| `ZIGBEE-MT-FRAME` | Frames are `FE LEN CMD0 CMD1 DATA FCS`, FCS the XOR of LEN through the last data byte | `documented` | [DOC-TI-MT] |
-| `ZIGBEE-SYS-PING` | `SYS_PING` is `21 01`; the reply `61 01` carries 2 capability bytes, little-endian | `documented` | [DOC-TI-MT] |
-| `ZIGBEE-SYS-VERSION` | `SYS_VERSION` is `21 02`; the reply `61 02` carries transport rev, product, major, minor, maint, and in newer releases a 4-byte revision | `documented` | [DOC-TI-MT] |
+| `ZIGBEE-LINES` | Opening the port, with DTR then RTS released straight away, does **not** restart the radio: no `SYS_RESET_IND` within 3 s. Whether the lines are unwired, or wired but the pulse too short, is not established | `observed` (the practical fact); wiring `unknown` | OBS-2026-09-18-t16-zigbee-probe |
+| `ZIGBEE-BAUD` | Z-Stack's serial interface runs at 115200 8N1, no flow control | `documented`, confirmed working | [DOC-TI-MT], OBS-2026-09-18-t16-zigbee-probe |
+| `ZIGBEE-MT-FRAME` | Frames are `FE LEN CMD0 CMD1 DATA FCS`, FCS the XOR of LEN through the last data byte | `observed` | both replies in T16 carried valid FCS |
+| `ZIGBEE-SYS-PING` | `SYS_PING` is `21 01`; the reply `61 01` carries 2 capability bytes, little-endian. This module: `FE 02 61 01 59 06 3D`, capabilities `0x0659` (bits not decoded here) | `observed` | T16 |
+| `ZIGBEE-SYS-VERSION` | `SYS_VERSION` is `21 02`; the reply `61 02` carries transport rev, product, major, minor, maint and a 4-byte little-endian revision. This module: transport 2, product 1, release 2.7.1, revision 20230507 | `observed` | T16 |
+| `ZIGBEE-SYS-VERSION-TAIL` | The reply carries **10** data bytes, one more than the documented layout: a trailing `0x00` of unknown meaning | `observed`; meaning `unknown` | T16 |
 | `ZIGBEE-RESET-IND` | The firmware sends `41 80` (`SYS_RESET_IND`) unprompted after every restart | `documented` | [DOC-TI-MT] |
-| `ZIGBEE-FIRMWARE` | What firmware the module runs -- Z-Stack coordinator is expected but not established | `unknown` | T16 |
+| `ZIGBEE-FIRMWARE` | The radio runs firmware that speaks Z-Stack MT: it answers `SYS_PING` and `SYS_VERSION`. Which build it is beyond the version fields is not established here | `observed` | T16 |
 
 The module has no datasheet in Argon's published set (checked 2026-09-18), so nothing about
 its board-level wiring is `documented`.

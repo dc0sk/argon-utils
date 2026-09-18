@@ -688,7 +688,12 @@ so the log is yours.
 **Report:** `~/argon-t15.log`. The line that matters is `T15 RESULT`; the `received` lines are
 the other half -- what the UPS answers to a set is itself a new fact.
 
-## 🟡 T16 — Does the Zigbee module answer, and does opening its port restart it?
+## ✅ T16 — Does the Zigbee module answer, and does opening its port restart it? — **DONE 2026-09-18**
+
+**Result.** It answers: Z-Stack MT at 115200, release 2.7.1, revision 20230507. Opening the port
+as the probe does it did **not** restart the radio -- which makes the probe safe to repeat,
+though it does not prove the lines are unwired. Evidence:
+[`OBS-2026-09-18-t16-zigbee-probe`](../protocol/captures/OBS-2026-09-18-t16-zigbee-probe.md).
 
 **Unblocks:** B5, Zigbee health -- the scope you chose at the start: detect the module, report
 its firmware, and say whether it is healthy.

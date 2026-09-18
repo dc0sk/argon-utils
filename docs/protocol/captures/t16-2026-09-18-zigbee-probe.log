@@ -1,0 +1,19 @@
+Zigbee module on the internal hub, USB 1-1.2
+  bridge           Silicon Labs CP2102N USB to UART Bridge Controller (serial xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx)
+  port             /dev/ttyUSB0
+  in use by        nothing visible (run under sudo to see every process)
+
+Step 1: open at 115200 baud, then lower DTR and RTS, in that order
+Step 2: listen for 3 s, sending nothing
+  heard            nothing
+Step 3: SYS_PING
+  sent             FE 00 21 01 20 (5 bytes)
+  received         FE 02 61 01 59 06 3D (7 bytes)
+Step 4: SYS_VERSION
+  sent             FE 00 21 02 23 (5 bytes)
+  received         FE 0A 61 02 02 01 02 07 01 6B B1 34 01 00 81 (15 bytes)
+
+T16 RESULT
+  No restart announcement: opening the port did not visibly restart it.
+  Firmware ANSWERS: SYS_PING replied, capabilities 0x0659.
+  Firmware version: product 1, release 2.7.1, transport rev 2, revision 20230507
