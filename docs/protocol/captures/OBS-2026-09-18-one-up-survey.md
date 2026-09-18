@@ -41,7 +41,40 @@ operator's go-ahead, one register was read at 2026-09-18T18:36:17Z:
 `0xA0` is the value the datasheet fixes for the CW2217's VERSION register in every mode. The
 written byte only sets the register pointer: the datasheet's write needs a data byte after
 it. **The device at `0x64` is a CW2217** (`ONEUP-0x64-IDENTITY`, now `observed`). The vendor
-daemon was running; nothing else was read.
+daemon was running; nothing else was read at that point.
+
+## Battery registers (2026-09-18T18:55:33Z)
+
+With the operator's go-ahead: every register below read three times, 2 s apart, one SMBus
+read-byte-data each. Nothing written. Vendor daemon running. Charger state at the time not
+recorded.
+
+| Register | Raw (3 reads) | Decoded per [DS-CW2217] |
+|---|---|---|
+| `0x00` VERSION | `a0 a0 a0` | CW2217 |
+| `0x02`-`0x03` VCELL | `36f8 36f6 36f7` | 4.3975 / 4.3969 / 4.3972 V |
+| `0x04`-`0x05` SOC | `6400` ×3 | 100.00 % |
+| `0x06` TEMP | `82` ×3 | 25.0 °C -- **the register's power-on default**, see below |
+| `0x08` CONFIG | `00` ×3 | active: neither SLEEP nor RESTART set |
+| `0x0E`-`0x0F` CURRENT | `fffb fffe 0000` | -5, -2, 0 LSB: effectively zero, within noise |
+| `0xA4`-`0xA5` cycles | `0018` ×3 | 24 charge cycles |
+| `0xA6` SOH | `64` ×3 | 100 % |
+
+Reading it:
+
+- **Full and at rest.** 100 % with current at zero is a charged battery with charging finished,
+  or no charger and a near-zero load -- the second is unlikely with the machine running. The
+  current's sign convention (positive = charging) is documented but not yet seen on this board.
+- **The temperature is not trusted.** `0x82` is exactly the datasheet's reset value, and it did
+  not move. Either the pack is at 25.0 °C, or nothing drives the TS pin and the register
+  holds its default. Not reported as a measurement until it is seen to change.
+- **One cell, or a scaled one.** VCELL reads 4.40 V, a single Li-ion cell's range (and a high
+  one, suggesting a 4.4 V-class cell). Argon rates the pack at 55 Wh and 4800 mAh, which
+  implies about 11.5 V nominal -- three cells in series. The CW2217 measures one cell. How it
+  is wired to the pack is `unknown`.
+- Multi-byte values were read a byte at a time. The datasheet does not say whether the pair
+  is latched, so a value could tear across an update; the three samples agree to within
+  noise, and a driver should read both bytes in one transaction or read twice and compare.
 
 ## Method
 
@@ -63,8 +96,9 @@ to act on -- the reason it is the one operation discovery permits (plan, section
 
 ## What this does not tell us
 
-- The battery readings themselves: only VERSION has been read. The ONE UP's current-sense
-  resistor, which scales the current reading, is unknown.
+- Current in amperes: the ONE UP's sense resistor is unknown. Nor has the current been seen
+  away from zero, so its sign on this board is unconfirmed.
+- How the single-cell gauge relates to what is rated as a three-cell pack.
 - Whether GPIO27 is the lid switch. Watching it would need the vendor daemon stopped, since
   it holds the line.
 - Anything about charging, wake or the ONE UP's power path.

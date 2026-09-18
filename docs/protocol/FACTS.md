@@ -163,6 +163,9 @@ backs a write.
 |---|---|---|---|
 | `ONEUP-I2C-PRESENCE` | I2C bus 1 has exactly one device, at `0x64`. Nothing answers at `0x1a` | `observed` | presence scan, i2cdetect default mode |
 | `ONEUP-0x64-IDENTITY` | The `0x64` device is a Cellwise **CW2217** battery fuel gauge: the CW2217BAAD's fixed address is `0x64`, and its VERSION register (`0x00`) read `0xA0`, the value the datasheet fixes | `observed` | [FORUM-ONEUP-CW2217] (lead), [DS-CW2217], OBS-2026-09-18-one-up-survey |
+| `ONEUP-GAUGE-READS` | SOC, VCELL, CURRENT, CONFIG, cycles and SOH read back plausibly: 100 %, 4.397 V, ~0, active, 24, 100 % | `observed` | OBS-2026-09-18-one-up-survey |
+| `ONEUP-GAUGE-TEMP` | TEMP reads `0x82` = 25.0 °C, the reset default, unchanging. Whether a thermistor drives it is `unknown`; not to be reported as a measurement until seen to move | `observed` (value); meaning `unknown` | OBS-2026-09-18-one-up-survey |
+| `ONEUP-PACK` | VCELL is a single cell's voltage (4.40 V) while the pack is rated 55 Wh / 4800 mAh (~11.5 V, three cells). How the gauge sees the pack is `unknown` | `observed` / `unknown` | OBS-2026-09-18-one-up-survey |
 | `ONEUP-RSENSE` | The current-sense resistor, which scales CURRENT to amperes | `unknown` | -- |
 
 What the CW2217 datasheet documents [DS-CW2217] -- true of the chip, and so of the ONE UP's
