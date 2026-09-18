@@ -31,6 +31,7 @@ use std::sync::{Mutex, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, SystemTime};
 
+mod control;
 mod exporter;
 mod oled;
 mod startup;
@@ -106,34 +107,8 @@ fn run(cli: &Cli) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let fan = describe_fan_plan(bus_path.as_deref());
     let decision = announce_mode(&config, fan);
 
-    // UPS monitoring starts before anything to do with the fan. Fan setup can fail for
-    // reasons the UPS does not care about -- a renamed thermal zone, one transient sensor
-    // read error, an unopenable bus -- and each of those used to be a `?` that exited the
-    // process, taking battery protection with it and leaving Restart=always to loop on it.
     let stopping = Arc::new(AtomicBool::new(false));
-    let heartbeat = Arc::new(AtomicU64::new(unix_now()));
-    let ups_thread = if cli.once {
-        None
-    } else {
-        ups::spawn(
-            &config,
-            &startup::active_vendor_units(),
-            Arc::clone(&stopping),
-            Arc::clone(&heartbeat),
-        )
-    };
-    // The OLED thread starts here too, for the same reason: nothing about the fan should be
-    // able to keep the display from showing the battery.
-    let oled_thread = if cli.once {
-        None
-    } else {
-        oled::spawn(
-            &config,
-            &startup::active_vendor_units(),
-            Arc::clone(&stopping),
-        )
-    };
-    let watch = Workers::new(ups_thread, heartbeat, oled_thread, &config);
+    let watch = start_workers(cli, &config, &stopping);
 
     let (curve, source) = match prepare_fan(&config) {
         Ok(pair) => pair,
@@ -183,6 +158,60 @@ fn run(cli: &Cli) -> Result<ExitCode, Box<dyn std::error::Error>> {
             watch,
         )
     }
+}
+
+/// Starts the UPS, control and OLED threads.
+///
+/// UPS monitoring starts before anything to do with the fan. Fan setup can fail for reasons the
+/// UPS does not care about -- a renamed thermal zone, one transient sensor read error, an
+/// unopenable bus -- and each of those used to be a `?` that exited the process, taking battery
+/// protection with it and leaving Restart=always to loop on it.
+fn start_workers(cli: &Cli, config: &Config, stopping: &Arc<AtomicBool>) -> Workers {
+    let heartbeat = Arc::new(AtomicU64::new(unix_now()));
+    // Requests from `argonctl` reach the UPS thread over this channel: that thread owns the UPS
+    // port, so it is the only one that can act on them.
+    let (to_ups, from_control) = std::sync::mpsc::channel();
+    let request_waiting = Arc::new(AtomicBool::new(false));
+    let ups_thread = if cli.once {
+        None
+    } else {
+        ups::spawn(
+            config,
+            &startup::active_vendor_units(),
+            Arc::clone(stopping),
+            Arc::clone(&heartbeat),
+            ups::Requests {
+                rx: from_control,
+                waiting: Arc::clone(&request_waiting),
+            },
+        )
+    };
+    let control_thread = if cli.once {
+        None
+    } else {
+        control::spawn(
+            &control::socket_path(),
+            to_ups,
+            request_waiting,
+            Arc::clone(stopping),
+        )
+    };
+    // The OLED thread starts here too, for the same reason: nothing about the fan should be
+    // able to keep the display from showing the battery.
+    let oled_thread = if cli.once {
+        None
+    } else {
+        oled::spawn(
+            config,
+            &startup::active_vendor_units(),
+            Arc::clone(stopping),
+        )
+    };
+    let others = [oled_thread, control_thread]
+        .into_iter()
+        .flatten()
+        .collect();
+    Workers::new(ups_thread, heartbeat, others, config)
 }
 
 /// Works out what drives the fan, and says so.
@@ -253,20 +282,23 @@ fn unix_now() -> u64 {
 /// device read would leave the service `active` and apparently healthy with no battery
 /// protection at all. This makes that state loud and fatal instead.
 ///
-/// The OLED thread is held here only so that stopping joins it: it blanks the panel on its
-/// way out, and the process must not exit before that write has happened.
+/// The other threads are held here so that stopping joins them: the OLED thread blanks the
+/// panel on its way out and the control thread removes its socket, and the process must not
+/// exit before either has happened.
 struct Workers {
     thread: Option<JoinHandle<()>>,
     heartbeat: Arc<AtomicU64>,
     stale_after: Duration,
-    oled: Option<JoinHandle<()>>,
+    /// The OLED and control threads: joined on the way out, so the panel is blanked and the
+    /// control socket removed before the process exits.
+    others: Vec<JoinHandle<()>>,
 }
 
 impl Workers {
     fn new(
         thread: Option<JoinHandle<()>>,
         heartbeat: Arc<AtomicU64>,
-        oled: Option<JoinHandle<()>>,
+        others: Vec<JoinHandle<()>>,
         config: &Config,
     ) -> Self {
         // Several poll intervals, and never less than a minute: a reopen after a device
@@ -276,7 +308,7 @@ impl Workers {
             thread,
             heartbeat,
             stale_after: Duration::from_secs(interval.max(60)),
-            oled,
+            others,
         }
     }
 
@@ -289,7 +321,7 @@ impl Workers {
     }
 
     fn join(self) {
-        for t in [self.thread, self.oled].into_iter().flatten() {
+        for t in self.thread.into_iter().chain(self.others) {
             let _ = t.join();
         }
     }

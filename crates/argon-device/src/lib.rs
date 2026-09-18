@@ -7,6 +7,7 @@
 
 pub mod clock_sync;
 pub mod config;
+pub mod control;
 pub mod fan;
 pub mod fan_control;
 pub mod mcu;
@@ -17,3 +18,4 @@ pub mod safety;
 pub mod status;
 pub mod ups;
 pub mod ups_service;
+pub mod wake;

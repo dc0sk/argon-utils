@@ -1,3 +1,19 @@
+argon-utils (0.1.5) unstable; urgency=medium
+
+  * Scheduled wake: `argonctl poweroff --wake-at TIME` has argond set a UPS
+    wake, read it back, and only then power off a minute later. Needs root
+    and mode "full".
+  * argond parks any wake schedule that would come due, or has passed, on a
+    running machine -- a wake very likely works by cutting and restoring
+    power, which on a running machine would be an abrupt power cut.
+  * argond listens on /run/argon-utils/control.sock (root only) for these
+    requests: the first piece of its control interface.
+  * argonctl zigbee: identify the Zigbee module; --probe reads its firmware
+    version without disturbing it.
+  * argonctl rtc: read the UPS clock and wake schedule.
+
+ -- Simon Keimer <dc0sk@mailbox.org>  Fri, 18 Sep 2026 17:30:00 +0200
+
 argon-utils (0.1.4) unstable; urgency=medium
 
   * Manual pages: argond(8), argonctl(1), argon-tray(1), generated from the

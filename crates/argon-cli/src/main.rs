@@ -8,6 +8,7 @@ mod doctor;
 mod fan;
 mod notify;
 mod oled;
+mod poweroff;
 mod rtc;
 mod ups;
 mod zigbee;
@@ -62,6 +63,12 @@ enum Command {
     /// fact may not back a write path until it has been observed.
     Rtc(rtc::Args),
 
+    /// Power off now, and have the UPS power the machine on again at a set time.
+    ///
+    /// argond sets the wake, reads it back, and only then schedules the poweroff a minute out.
+    /// Needs root (the control socket is argond's) and mode "full".
+    Poweroff(poweroff::Args),
+
     /// Identify the Zigbee module. `--probe` runs the read-only health probe (task T16).
     ///
     /// Without --probe nothing is opened. The probe listens first, then sends only `SYS_PING`
@@ -102,5 +109,6 @@ fn main() -> std::process::ExitCode {
         Command::NotifyAgent(args) => notify::run(&args),
         Command::Rtc(args) => rtc::run(&args),
         Command::Zigbee(args) => zigbee::run(&args),
+        Command::Poweroff(args) => poweroff::run(&args),
     }
 }

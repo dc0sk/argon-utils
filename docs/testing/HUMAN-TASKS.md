@@ -808,6 +808,61 @@ systemctl is-active argond                                         # must say: a
 **Report:** `~/argon-t17.log`. The `T17 RESULT` line is the verdict; the `received` lines
 record what the UPS answers to a wake set.
 
+## 🔴 T18 — Does the UPS actually wake the Pi at the scheduled time?
+
+**Unblocks:** trusting `argonctl poweroff --wake-at`, and two unknowns: whether a wake works at
+all (`ARGON-UPS-WAKE-MECHANISM`), and whether the UPS clears a schedule after it fires
+(`ARGON-UPS-WAKE-CLEAR`).
+
+**This powers the machine off**, for about 20 minutes, and ends any session on it. Save your
+work first, and do it **on mains**.
+
+### What happens
+
+1. `argond` sets the wake about 20 minutes out, reads it back from the UPS, then schedules a
+   poweroff one minute later -- announced to logged-in users, cancellable with
+   `sudo shutdown -c`.
+2. The machine powers off.
+3. At the wake time the UPS should power it on again.
+4. On boot, `argond` checks the schedule straight away. Its log then answers the second
+   question: **"no wake schedule set"** means the UPS cleared the schedule when it fired;
+   **"... was Past on a running machine; the wake has been parked"** means it did not, and
+   `argond` moved it out of the way.
+
+Nothing in this test lets a schedule come due while the machine runs: the wake is always at
+least 15 minutes out when set, the poweroff comes first, and if the poweroff were cancelled
+`argond` would park the wake before it came due.
+
+### Run it
+
+First install 0.1.5 (your config is kept) and check `argond` is listening:
+
+```sh
+sudo apt install -y -o Dpkg::Options::=--force-confold ~/git/argon-utils_0.1.5_arm64.deb
+journalctl -u argond -n 20 --no-pager -o cat | grep -E 'control|wake'
+```
+
+Expect `control: listening on /run/argon-utils/control.sock` and the parked 2097 schedule from
+T17 reported as far enough away to leave. Then:
+
+```sh
+sudo argonctl poweroff --wake-at "now + 20 minutes" --dry-run      # look first
+sudo argonctl poweroff --wake-at "now + 20 minutes" | tee ~/argon-t18.log
+```
+
+It powers off a minute later. **Note the wake time it printed.**
+
+### When it comes back
+
+```sh
+{ echo "booted: $(uptime -s)"; journalctl -u argond -b --no-pager -o cat | grep -iE 'wake'; } | tee -a ~/argon-t18.log
+```
+
+**If it has not come back ten minutes after the wake time**, press the case's power button
+(the Pi's own; it starts a halted Pi 5) and report that the wake did not happen.
+
+**Report:** `~/argon-t18.log`.
+
 ## 🟡 T13 — Does the polkit rule work for the packaged daemon? — **step 1 DONE 2026-09-17: yes**
 
 **Unblocks:** trusting the low-battery poweroff when `argond` runs as the `argon` system user

@@ -506,7 +506,7 @@ fn t17(link: &mut SerialLink) -> WakeOutcome {
             std::thread::sleep(Duration::from_millis(500));
             match read_wake(link) {
                 Ok(Some(got)) => {
-                    let pass = same_minute(got, target);
+                    let pass = argon_device::wake::same_minute(got, target);
                     println!(
                         "  read back        {}   {}",
                         fmt(got),
@@ -529,15 +529,6 @@ fn t17(link: &mut SerialLink) -> WakeOutcome {
         first: results[0],
         second: results[1],
     }
-}
-
-/// Whether two schedule times name the same minute. A schedule has no seconds field.
-const fn same_minute(a: UpsTime, b: UpsTime) -> bool {
-    a.year == b.year
-        && a.month == b.month
-        && a.day == b.day
-        && a.hour == b.hour
-        && a.minute == b.minute
 }
 
 /// Reads the clock twice and checks it against what was set, `offset_s` from the system

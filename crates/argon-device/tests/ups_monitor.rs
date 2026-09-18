@@ -259,7 +259,8 @@ mod gate {
             | Command::GetRtc
             | Command::GetWake
             | Command::SetRtc => true,
-            // Still only `inferred`: never through, however the gate is built.
+            // Not permitted by a clock-only gate. SetWake is observed (T17) but needs its own
+            // permission; the other two are still only `inferred`.
             Command::SetWake | Command::Acknowledge | Command::ResetMeter => false,
         }
     }
@@ -270,6 +271,31 @@ mod gate {
         for cmd in ALL {
             assert_eq!(g.allows(cmd), expected_with_clock_writes(cmd), "{cmd:?}");
         }
+    }
+
+    #[test]
+    fn wake_writes_admit_the_wake_set_and_still_nothing_inferred() {
+        use argon_device::ups::Writes;
+        let g = Gate::with_writes(
+            (),
+            Writes {
+                clock: true,
+                wake: true,
+            },
+        );
+        for cmd in ALL {
+            let expected = expected_with_clock_writes(cmd) || cmd == Command::SetWake;
+            assert_eq!(g.allows(cmd), expected, "{cmd:?}");
+        }
+        // Wake without clock: the two are independent.
+        let g = Gate::with_writes(
+            (),
+            Writes {
+                clock: false,
+                wake: true,
+            },
+        );
+        assert!(g.allows(Command::SetWake) && !g.allows(Command::SetRtc));
     }
 
     #[test]
