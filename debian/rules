@@ -15,7 +15,7 @@ CARGO_FLAGS = --release --locked --offline
 	dh $@
 
 override_dh_auto_build:
-	cargo build $(CARGO_FLAGS) -p argon-daemon -p argon-cli
+	cargo build $(CARGO_FLAGS) -p argon-daemon -p argon-cli -p argon-tray
 
 # Skipped automatically when DEB_BUILD_OPTIONS contains nocheck.
 override_dh_auto_test:
@@ -27,6 +27,7 @@ override_dh_auto_clean:
 override_dh_auto_install:
 	install -D -m 0755 target/release/argond    debian/argon-utils/usr/bin/argond
 	install -D -m 0755 target/release/argonctl  debian/argon-utils/usr/bin/argonctl
+	install -D -m 0755 target/release/argon-tray debian/argon-utils/usr/bin/argon-tray
 
 	install -D -m 0644 packaging/systemd/argond.service \
 		debian/argon-utils/usr/lib/systemd/system/argond.service
@@ -38,9 +39,11 @@ override_dh_auto_install:
 	install -D -m 0644 packaging/polkit/50-argon-utils.rules \
 		debian/argon-utils/usr/share/polkit-1/rules.d/50-argon-utils.rules
 
-# These two are conffiles on purpose: the config carries the operator's thresholds and mode,
+# These are conffiles on purpose: the config carries the operator's thresholds and mode,
 # and the autostart entry is the kind of thing a desktop user disables locally.
 	install -D -m 0644 packaging/config/config.toml \
 		debian/argon-utils/etc/argon-utils/config.toml
 	install -D -m 0644 packaging/xdg/argon-notify-agent.desktop \
 		debian/argon-utils/etc/xdg/autostart/argon-notify-agent.desktop
+	install -D -m 0644 packaging/xdg/argon-tray.desktop \
+		debian/argon-utils/etc/xdg/autostart/argon-tray.desktop

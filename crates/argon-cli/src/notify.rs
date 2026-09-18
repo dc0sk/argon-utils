@@ -7,7 +7,7 @@
 use argon_device::status::{self, Notice, UpsStatus, Urgency, Watcher};
 use std::path::PathBuf;
 use std::process::{Command, ExitCode};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime};
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -48,7 +48,7 @@ pub fn run(args: &Args) -> ExitCode {
         let current = std::fs::read_to_string(&args.state)
             .ok()
             .and_then(|t| UpsStatus::parse(&t).ok());
-        if let Some(n) = watcher.observe(current, SystemTime::now(), &local_hhmm) {
+        if let Some(n) = watcher.observe(current, SystemTime::now(), &status::local_hhmm) {
             if let Err(e) = deliver(&n) {
                 // Keep going: a missed notification is bad, a dead agent is worse.
                 eprintln!("argonctl: could not deliver {:?}: {e}", n.text);
@@ -112,15 +112,4 @@ fn deliver(n: &Notice) -> Result<&'static str, String> {
     Err(format!(
         "no notification service accepted it (panel: {why})"
     ))
-}
-
-/// Local time as HH:MM, via `date`, to avoid a date library for one field.
-fn local_hhmm(t: SystemTime) -> String {
-    let secs = t.duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs());
-    Command::new("date")
-        .args(["-d", &format!("@{secs}"), "+%H:%M"])
-        .output()
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .map_or_else(|| format!("@{secs}"), |s| s.trim().to_owned())
 }

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=argon-utils tray icon
+Comment=Shows the UPS state, CPU temperature and fan in the panel
+Exec=argon-tray
+# So the entry skips itself if the package was removed without purging: this file is a
+# conffile and survives `apt remove`, and lxsession-xdg-autostart honours TryExec.
+TryExec=/usr/bin/argon-tray
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

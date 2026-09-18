@@ -103,6 +103,7 @@ Where things land, and why:
 | `/usr/share/polkit-1/rules.d/50-argon-utils.rules` | likewise: `/etc/polkit-1/rules.d` takes precedence if you need to change it |
 | `/etc/argon-utils/config.toml` | **conffile** -- your edits survive upgrades |
 | `/etc/xdg/autostart/argon-notify-agent.desktop` | **conffile** -- the notification agent, from your next login |
+| `/usr/bin/argon-tray`, `/etc/xdg/autostart/argon-tray.desktop` | the panel icon, from your next login (**conffile**) |
 
 ### Installing does not arm anything
 

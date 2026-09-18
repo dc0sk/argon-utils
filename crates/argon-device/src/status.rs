@@ -262,6 +262,23 @@ pub fn notice(
     Some(Notice { urgency, text })
 }
 
+/// Local time as HH:MM, via `date`, to avoid a date library for one field.
+///
+/// Shared by the notification agent and the tray, which both show when a scheduled poweroff
+/// will happen. Falls back to `@<unix seconds>` if `date` cannot be run, so the time is never
+/// silently dropped.
+#[must_use]
+pub fn local_hhmm(t: SystemTime) -> String {
+    let secs = t.duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    std::process::Command::new("date")
+        .args(["-d", &format!("@{secs}"), "+%H:%M"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map_or_else(|| format!("@{secs}"), |s| s.trim().to_owned())
+}
+
 /// The status-file name for a policy level.
 #[must_use]
 pub const fn level_name(level: argon_proto::ups::policy::Level) -> &'static str {
