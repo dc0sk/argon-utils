@@ -10,6 +10,9 @@ allow = [
     "GPL-3.0", "LGPL-3.0", "MPL-2.0",
     "Apache-2.0", "MIT", "BSD-2-Clause", "BSD-3-Clause",
     "ISC", "Unicode-3.0", "Zlib",
+    # A public-domain dedication; the FSF lists it as GPL-compatible. Needed by ksni, the
+    # StatusNotifierItem library the tray icon uses.
+    "Unlicense",
 ]
 confidence-threshold = 0.93
 

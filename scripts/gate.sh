@@ -36,6 +36,7 @@ run "no_std (bare ARM)" cargo build -p argon-proto --target thumbv7em-none-eabih
 run "panic strategy"     ./scripts/check-panic-strategy.sh
 run "cleanroom canary"  ./scripts/cleanroom-check.sh
 run "canary validation" ./scripts/test-cleanroom-check.sh
+run "licences"          ./scripts/check-licenses.py
 
 echo
 if [ ${#failed[@]} -eq 0 ]; then
