@@ -612,7 +612,13 @@ What it did establish:
 - `argond` reported `on battery -> on mains` within one poll of replugging, and published
   `on-mains` again, so the recovery path works at this end of the curve too.
 
-## 🟡 T15 — Does command 3 really set the UPS clock?
+## ✅ T15 — Does command 3 really set the UPS clock? — **DONE 2026-09-18: yes**
+
+**Result.** Confirmed: a distinctive wrong time read back within a second, then the correct
+time was restored. The UPS answers a set with an empty command-3 frame, `FE 00 03 01`. The
+clock had been 21-22 s slow. Evidence:
+[`OBS-2026-09-18-t15-rtc-set`](../protocol/captures/OBS-2026-09-18-t15-rtc-set.md). The steps
+below are kept as the procedure for re-running it.
 
 **Unblocks:** B4 -- keeping the UPS clock right, and scheduled wake. It matters more than it
 sounds: the UPS clock runs off the UPS battery, so a deep discharge like T14's can reset it.

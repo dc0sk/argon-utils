@@ -92,7 +92,8 @@ loop that drifts under load, so our measurement is expected to be the better spe
 | `ARGON-UPS-READSHORT` | A pure read is the 4-byte frame `FE 00 <cmd> <(cmd+0xFE)&0xFF>` | `observed` | same |
 | `ARGON-UPS-CMD0` | Command 0 returns `[percent, charging]`; `charging == 0` means on mains | `observed` | same — read 91% / on-mains, matching the vendor daemon |
 | `ARGON-UPS-CMD2` | Command 2 returns a 16-bit big-endian value; read 850 while charging at 91%. **Units still undetermined** | `observed` (framing) / `unknown` (units) | same |
-| `ARGON-UPS-CMD3` | Command 3 sets the RTC from 6 BCD bytes `YY MM DD HH MM SS`, UTC | `inferred` | — |
+| `ARGON-UPS-CMD3` | Command 3 sets the RTC from 6 BCD bytes `YY MM DD HH MM SS`, UTC | `observed` | T15, 2026-09-18: a distinctive wrong time (`FE 06 03 26 09 18 10 01 33 92`) read back within 1 s, then the correct time restored the same way -- `OBS-2026-09-18-t15-rtc-set` |
+| `ARGON-UPS-CMD3-REPLY` | **The device answers a set with an empty command-3 frame**, `FE 00 03 01` -- not a command-8 acknowledgement | `observed` | same, both sets |
 | `ARGON-UPS-CMD4` | Command 4 returns a 1-byte firmware version | `observed` | same — read 113 |
 | `ARGON-UPS-CMD5` | Command 5 returns the RTC as 6 BCD bytes, UTC | `observed` | same — read 2026-09-17 13:29:15 UTC |
 | `ARGON-UPS-CMD6` | Command 6 sets an absolute wake schedule from 5 BCD bytes `YY MM DD HH MM`, UTC | `inferred` | — |

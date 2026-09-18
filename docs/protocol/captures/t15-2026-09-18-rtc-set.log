@@ -1,0 +1,32 @@
+UPS on /dev/serial/by-id/usb-Argon_Argon_USB_XXXXXXXXXXXXXXXX-if00
+
+Baseline: three reads, nothing written
+  UPS clock        2026-09-18 11:18:38 UTC   system 2026-09-18 11:19:00 UTC   offset -22 s
+  UPS clock        2026-09-18 11:18:40 UTC   system 2026-09-18 11:19:01 UTC   offset -21 s
+  UPS clock        2026-09-18 11:18:41 UTC   system 2026-09-18 11:19:02 UTC   offset -21 s
+  wake schedule    none
+
+Step 1: set the clock 4649 s BEHIND (a deliberately wrong, distinctive time)
+  target           2026-09-18 10:01:33 UTC
+  sent             FE 06 03 26 09 18 10 01 33 92
+  received         FE 00 03 01 (4 bytes in 1500 ms)
+  decoded          frame: command 3, payload empty
+
+Step 2: read it back
+  read back        2026-09-18 10:01:35 UTC   expected 2026-09-18 10:01:36 UTC   error -1 s   ok
+  read back        2026-09-18 10:01:37 UTC   expected 2026-09-18 10:01:37 UTC   error +0 s   ok
+
+Step 3: set the clock to the correct time
+  target           2026-09-18 11:19:07 UTC
+  sent             FE 06 03 26 09 18 11 19 07 7F
+  received         FE 00 03 01 (4 bytes in 1500 ms)
+  decoded          frame: command 3, payload empty
+
+Step 4: read it back
+  read back        2026-09-18 11:19:10 UTC   expected 2026-09-18 11:19:09 UTC   error +1 s   ok
+  read back        2026-09-18 11:19:11 UTC   expected 2026-09-18 11:19:10 UTC   error +1 s   ok
+
+T15 RESULT
+  CONFIRMED: command 3 sets the UPS clock. A distinctive wrong time was written
+  and read back within 2 s of what was sent.
+  Clock restored to the correct time.
