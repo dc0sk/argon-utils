@@ -136,6 +136,88 @@ pub struct Notice {
 /// How old a status may be before it counts as stale.
 pub const STALE_AFTER: Duration = Duration::from_secs(60);
 
+/// What a status file means at a given moment.
+///
+/// Every display of UPS state -- the tray, the case OLED -- renders from this, so the rules
+/// about when a reading may be shown as current live in exactly one place. The one that
+/// matters most is staleness: a file argond stopped updating still says whatever it said
+/// last, and a display that showed "on mains, 95 %" from it would claim the machine is
+/// protected at the moment nothing is watching the battery.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Reading<'a> {
+    /// No status file, or one that could not be parsed.
+    NoData,
+    /// The file has not been updated for this long.
+    Stale {
+        /// How long since argond last wrote it.
+        age: Duration,
+    },
+    /// argond is running but its last read of the UPS failed.
+    Failed,
+    /// A poweroff is scheduled. Outranks the level: it is the one thing with a deadline.
+    PowerOffPending {
+        /// Charge, percent.
+        percent: u8,
+        /// When the machine goes off.
+        at: SystemTime,
+    },
+    /// A current reading.
+    Current {
+        /// Charge, percent.
+        percent: u8,
+        /// The level, as named in the status file.
+        level: LevelName<'a>,
+    },
+}
+
+/// A level from the status file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LevelName<'a> {
+    /// `on-mains`.
+    OnMains,
+    /// `on-battery`.
+    OnBattery,
+    /// `low`.
+    Low,
+    /// `critical`.
+    Critical,
+    /// A name this build does not know -- a newer argond. Shown as such rather than guessed.
+    Unrecognised(&'a str),
+}
+
+/// Interprets a status file at `now`.
+///
+/// Order matters and is the point of this function: absent, then stale, then failed, then a
+/// pending poweroff, then the level. A stale file's poweroff time cannot be vouched for either,
+/// so staleness is checked before anything it says is believed.
+#[must_use]
+pub fn interpret(status: Option<&UpsStatus>, now: SystemTime) -> Reading<'_> {
+    let Some(s) = status else {
+        return Reading::NoData;
+    };
+    // A file dated in the future (a clock step) is not old.
+    let age = now.duration_since(s.updated).unwrap_or_default();
+    if age > STALE_AFTER {
+        return Reading::Stale { age };
+    }
+    // argond keeps publishing the last percentage next to `level=unknown`; the level is the
+    // authority on whether that number is current.
+    let Some(percent) = s.percent.filter(|_| s.level != "unknown") else {
+        return Reading::Failed;
+    };
+    if let Some(at) = s.shutdown_at {
+        return Reading::PowerOffPending { percent, at };
+    }
+    let level = match s.level.as_str() {
+        "on-mains" => LevelName::OnMains,
+        "on-battery" => LevelName::OnBattery,
+        "low" => LevelName::Low,
+        "critical" => LevelName::Critical,
+        other => LevelName::Unrecognised(other),
+    };
+    Reading::Current { percent, level }
+}
+
 /// Watches successive reads of the status file and decides what to say.
 ///
 /// Staleness lives here rather than in [`notice`] because it cannot be derived from the

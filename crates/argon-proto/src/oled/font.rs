@@ -115,9 +115,9 @@ static FONT: [[u8; GLYPH_WIDTH]; 95] = [
 
 /// The columns for a character.
 ///
-/// Characters outside the printable ASCII range render as a filled box rather than vanishing.
-/// A missing glyph is a visible bug; a silently skipped one is a layout that mysteriously
-/// does not line up.
+/// Characters outside the printable ASCII range render as `?` rather than vanishing. A
+/// missing glyph is a visible bug; a silently skipped one is a layout that mysteriously does
+/// not line up. (There is no degree sign, so temperatures are written `45C`.)
 #[must_use]
 pub fn glyph(c: char) -> &'static [u8; GLYPH_WIDTH] {
     let code = if c.is_ascii() { c as u8 } else { b'?' };

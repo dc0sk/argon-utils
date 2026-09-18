@@ -71,6 +71,15 @@ impl<B: I2cBus> Oled<B> {
         Ok(())
     }
 
+    /// Sets the brightness, 0-255 (SSD1306 datasheet section 10.1.7).
+    ///
+    /// # Errors
+    ///
+    /// Fails on bus error, or if the transport forbids writes.
+    pub fn set_contrast(&mut self, level: u8) -> Result<()> {
+        self.command(&oled::contrast(level))
+    }
+
     /// Blanks the panel and switches it off.
     ///
     /// Clears the memory as well as switching off: a static image left on an OLED burns in,

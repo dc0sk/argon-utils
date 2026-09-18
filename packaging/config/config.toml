@@ -122,6 +122,26 @@ shutdown_delay_min = 2
 # Where argond publishes UPS status for `argonctl notify-agent` and the tray.
 state_file = "/run/argon-utils/ups.state"
 
+[oled]
+# Draw a status page on the case OLED: UPS charge and state, a charge bar, the CPU
+# temperature and the fan, and -- when one is scheduled -- the poweroff time.
+#
+# Off by default: it is a write to hardware, and needs mode = "managed" or "full" like every
+# other device write. The page follows the same rules as the tray icon, so a UPS reading
+# argond has stopped updating is shown as STALE, never as the last number it wrote.
+enabled = false
+
+# The panel is mounted upside down.
+flip = false
+
+# Brightness, 0-255. Below the controller's default of 127 on purpose: a status page is
+# static content, and an OLED wears with brightness as well as time. The whole page also
+# drifts by up to two pixels every five minutes for the same reason.
+contrast = 64
+
+# Seconds between redraws. The panel is only written when the page actually changes.
+refresh_s = 5
+
 [telemetry]
 # Serve Prometheus metrics at http://<listen>/metrics.
 enabled = false

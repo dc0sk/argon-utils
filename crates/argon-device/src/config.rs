@@ -35,6 +35,8 @@ pub struct Config {
     pub ups: UpsConfig,
     /// Metrics export.
     pub telemetry: TelemetryConfig,
+    /// The case OLED.
+    pub oled: OledConfig,
 }
 
 impl Default for Config {
@@ -45,6 +47,39 @@ impl Default for Config {
             mcu: McuConfig::default(),
             ups: UpsConfig::default(),
             telemetry: TelemetryConfig::default(),
+            oled: OledConfig::default(),
+        }
+    }
+}
+
+/// The case OLED status page.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct OledConfig {
+    /// Whether argond draws on the OLED at all.
+    ///
+    /// Off by default: it is a write to hardware, and a display that lights up after an
+    /// upgrade because a default changed is exactly the surprise this project avoids. It also
+    /// needs `mode` to be `managed` or `full`, like every other device write.
+    pub enabled: bool,
+    /// The panel is mounted upside down.
+    pub flip: bool,
+    /// Brightness, 0-255.
+    ///
+    /// Lower than the controller's power-on default of 127, because a status page is static
+    /// content and wear on an OLED scales with brightness as well as time.
+    pub contrast: u8,
+    /// Seconds between redraws. The panel is only written when the page actually changes.
+    pub refresh_s: u64,
+}
+
+impl Default for OledConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            flip: false,
+            contrast: 64,
+            refresh_s: 5,
         }
     }
 }
@@ -296,6 +331,14 @@ impl Config {
     fn validate(&self) -> Result<(), ConfigError> {
         self.mode()?;
         self.fan_curve()?;
+
+        if self.oled.refresh_s == 0 {
+            return Err(ConfigError::BadValue {
+                key: "oled.refresh_s",
+                got: "0".to_owned(),
+                expected: "at least 1 second; zero is a busy loop on a shared I2C bus",
+            });
+        }
 
         if self.mcu.dialect != "legacy" {
             // "auto" is rejected explicitly rather than falling into the generic message,

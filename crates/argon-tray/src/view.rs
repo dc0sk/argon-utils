@@ -4,7 +4,7 @@
 //! No D-Bus, no filesystem and no clock in here, so every rule about what the icon says --
 //! which is the whole point of the tray -- can be tested without a desktop.
 
-use argon_device::status::{STALE_AFTER, UpsStatus};
+use argon_device::status::{LevelName, Reading, UpsStatus, interpret};
 use argon_hal::fan_hwmon::FanReading;
 use std::time::SystemTime;
 
@@ -61,73 +61,65 @@ pub fn render(s: &Snapshot, hhmm: &dyn Fn(SystemTime) -> String) -> View {
 }
 
 fn render_ups(s: &Snapshot, hhmm: &dyn Fn(SystemTime) -> String) -> View {
-    let Some(ups) = &s.ups else {
-        return View {
-            icon: MISSING,
-            urgency: Urgency::Normal,
-            headline: "UPS: no data".to_owned(),
-            details: vec!["argond is not publishing status. Is it running?".to_owned()],
-            shutdown_pending: false,
-        };
-    };
-
-    // Stale before anything else. A file argond stopped updating still says whatever it said
-    // last -- "on mains, 95 %" -- and showing that as current would tell the user they are
-    // protected at exactly the moment nothing is watching the battery.
-    let age = s.now.duration_since(ups.updated).unwrap_or_default();
-    if age > STALE_AFTER {
-        return View {
-            icon: MISSING,
-            urgency: Urgency::Attention,
-            headline: format!("UPS: no update for {} s", age.as_secs()),
-            details: vec![
-                "argond has stopped reporting: the battery is not being watched.".to_owned(),
-            ],
-            shutdown_pending: false,
-        };
-    }
-
-    let Some(pct) = ups.percent.filter(|_| ups.level != "unknown") else {
-        return View {
-            icon: MISSING,
-            urgency: Urgency::Normal,
-            headline: "UPS: reading failed".to_owned(),
-            details: vec!["The last read from the UPS did not succeed.".to_owned()],
-            shutdown_pending: false,
-        };
-    };
-
-    // A scheduled poweroff outranks the level: it is the one thing on this screen with a
-    // deadline, and the one the user can still do something about.
-    if let Some(at) = ups.shutdown_at {
-        return View {
-            icon: CAUTION,
-            urgency: Urgency::Attention,
-            headline: format!("UPS {pct} % · powering off at {}", hhmm(at)),
-            details: vec!["Restore mains power to cancel.".to_owned()],
-            shutdown_pending: true,
-        };
-    }
-
-    let (icon, urgency, what) = match ups.level.as_str() {
-        "on-mains" => (level_icon(pct, true), Urgency::Normal, "on mains"),
-        "on-battery" => (level_icon(pct, false), Urgency::Normal, "on battery"),
-        "low" => (level_icon(pct, false), Urgency::Attention, "battery low"),
-        "critical" => (CAUTION, Urgency::Attention, "battery critical"),
-        // A level this tray does not know is a newer argond. Show the number, and say so
-        // rather than pretending it is one of the known states.
-        _ => (
-            level_icon(pct, false),
-            Urgency::Normal,
-            "unrecognised state",
-        ),
-    };
-    View {
+    // The rules about what may be shown as current live in `status::interpret`, shared with
+    // the case OLED, so the two displays cannot disagree about a stale file.
+    let plain = |icon, urgency, headline: String, detail: &str| View {
         icon,
         urgency,
-        headline: format!("UPS {pct} % · {what}"),
-        details: Vec::new(),
+        headline,
+        details: vec![detail.to_owned()],
         shutdown_pending: false,
+    };
+    match interpret(s.ups.as_ref(), s.now) {
+        Reading::NoData => plain(
+            MISSING,
+            Urgency::Normal,
+            "UPS: no data".to_owned(),
+            "argond is not publishing status. Is it running?",
+        ),
+        Reading::Stale { age } => plain(
+            MISSING,
+            Urgency::Attention,
+            format!("UPS: no update for {} s", age.as_secs()),
+            "argond has stopped reporting: the battery is not being watched.",
+        ),
+        Reading::Failed => plain(
+            MISSING,
+            Urgency::Normal,
+            "UPS: reading failed".to_owned(),
+            "The last read from the UPS did not succeed.",
+        ),
+        Reading::PowerOffPending { percent, at } => View {
+            icon: CAUTION,
+            urgency: Urgency::Attention,
+            headline: format!("UPS {percent} % · powering off at {}", hhmm(at)),
+            details: vec!["Restore mains power to cancel.".to_owned()],
+            shutdown_pending: true,
+        },
+        Reading::Current { percent, level } => {
+            let (icon, urgency, what) = match level {
+                LevelName::OnMains => (level_icon(percent, true), Urgency::Normal, "on mains"),
+                LevelName::OnBattery => (level_icon(percent, false), Urgency::Normal, "on battery"),
+                LevelName::Low => (
+                    level_icon(percent, false),
+                    Urgency::Attention,
+                    "battery low",
+                ),
+                LevelName::Critical => (CAUTION, Urgency::Attention, "battery critical"),
+                LevelName::Unrecognised(_) => (
+                    level_icon(percent, false),
+                    Urgency::Normal,
+                    "unrecognised state",
+                ),
+            };
+            View {
+                icon,
+                urgency,
+                headline: format!("UPS {percent} % · {what}"),
+                details: Vec::new(),
+                shutdown_pending: false,
+            }
+        }
     }
 }
 
@@ -182,6 +174,7 @@ fn level_icon(pct: u8, on_mains: bool) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use argon_device::status::STALE_AFTER;
     use std::time::{Duration, UNIX_EPOCH};
 
     fn at(secs: u64) -> SystemTime {

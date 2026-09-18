@@ -32,6 +32,7 @@ use std::thread::JoinHandle;
 use std::time::{Duration, SystemTime};
 
 mod exporter;
+mod oled;
 mod startup;
 mod ups;
 
@@ -102,7 +103,18 @@ fn run(cli: &Cli) -> Result<ExitCode, Box<dyn std::error::Error>> {
             Arc::clone(&heartbeat),
         )
     };
-    let watch = UpsWatch::new(ups_thread, heartbeat, &config);
+    // The OLED thread starts here too, for the same reason: nothing about the fan should be
+    // able to keep the display from showing the battery.
+    let oled_thread = if cli.once {
+        None
+    } else {
+        oled::spawn(
+            &config,
+            &startup::active_vendor_units(),
+            Arc::clone(&stopping),
+        )
+    };
+    let watch = Workers::new(ups_thread, heartbeat, oled_thread, &config);
 
     let (curve, source) = match prepare_fan(&config) {
         Ok(pair) => pair,
@@ -216,19 +228,28 @@ fn unix_now() -> u64 {
         .map_or(0, |d| d.as_secs())
 }
 
-/// Watches the UPS thread's liveness.
+/// The background threads, and the UPS thread's liveness.
 ///
 /// The fan loop feeds systemd's watchdog, so a UPS thread that panicked or wedged inside a
 /// device read would leave the service `active` and apparently healthy with no battery
 /// protection at all. This makes that state loud and fatal instead.
-struct UpsWatch {
+///
+/// The OLED thread is held here only so that stopping joins it: it blanks the panel on its
+/// way out, and the process must not exit before that write has happened.
+struct Workers {
     thread: Option<JoinHandle<()>>,
     heartbeat: Arc<AtomicU64>,
     stale_after: Duration,
+    oled: Option<JoinHandle<()>>,
 }
 
-impl UpsWatch {
-    fn new(thread: Option<JoinHandle<()>>, heartbeat: Arc<AtomicU64>, config: &Config) -> Self {
+impl Workers {
+    fn new(
+        thread: Option<JoinHandle<()>>,
+        heartbeat: Arc<AtomicU64>,
+        oled: Option<JoinHandle<()>>,
+        config: &Config,
+    ) -> Self {
         // Several poll intervals, and never less than a minute: a reopen after a device
         // re-enumeration legitimately takes a while.
         let interval = config.ups.poll_interval_s.max(1) * u64::from(ups::STALL_INTERVALS);
@@ -236,6 +257,7 @@ impl UpsWatch {
             thread,
             heartbeat,
             stale_after: Duration::from_secs(interval.max(60)),
+            oled,
         }
     }
 
@@ -248,7 +270,7 @@ impl UpsWatch {
     }
 
     fn join(self) {
-        if let Some(t) = self.thread {
+        for t in [self.thread, self.oled].into_iter().flatten() {
             let _ = t.join();
         }
     }
@@ -258,7 +280,7 @@ impl UpsWatch {
 fn ups_only_loop(
     cli: &Cli,
     stopping: &Arc<AtomicBool>,
-    watch: UpsWatch,
+    watch: Workers,
 ) -> Result<ExitCode, Box<dyn std::error::Error>> {
     install_signal_handlers(stopping, || ())?;
     let _ = sd_notify::notify(&[sd_notify::NotifyState::Ready]);
@@ -338,7 +360,7 @@ fn control_loop<B: I2cBus + Send + 'static, T: TemperatureSource>(
     mode: Mode,
     drive_fan: bool,
     stopping: &Arc<AtomicBool>,
-    watch: UpsWatch,
+    watch: Workers,
 ) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let (curve, source) = fan_stack;
     let mcu = Arc::new(Mutex::new(Mcu::new(bus, Dialect::default())));

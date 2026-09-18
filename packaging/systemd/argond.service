@@ -32,6 +32,10 @@ ExecStart=/usr/bin/argond
 # stopped executing. The daemon's signal handler and Drop guard cover every other case.
 # `-` so a failure here does not mask the real stop reason.
 ExecStopPost=-/usr/bin/argonctl fan --safe
+# Blank the case OLED if argond was drawing on it. argond does this itself on a clean stop;
+# this covers SIGKILL, where a status page left on the panel would go on claiming whatever it
+# last said. --if-enabled makes it a no-op on a machine that does not use the display.
+ExecStopPost=-/usr/bin/argonctl oled --off --if-enabled
 
 Restart=always
 RestartSec=2
