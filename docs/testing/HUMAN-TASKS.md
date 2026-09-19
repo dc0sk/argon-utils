@@ -21,20 +21,15 @@ several conclusions in this project came from negative results.
 
 ## Waiting on you
 
-In a sensible order. Everything on the ONE UP waits for its Wi-Fi to work again (it did not
-connect on 2026-09-19). Nothing argon-utils has installed there touches Wi-Fi: the ONE UP has
-0.1.15, which has no radio code at all -- switching radios arrived in 0.1.16, not installed there.
-
 | | Where | Task | Needs |
 |---|---|---|---|
-| 1 | ONE UP | Get its Wi-Fi back | -- |
-| 2 | ONE UP | Install 0.1.17 (`~/git/argon-utils_0.1.17_arm64.deb` on the ONE V5) | 1 |
-| 3 | ONE UP | **T19 step 2** — hand battery and lid over from `argononeupd`, reboot | 2, and your three decisions in T19 |
-| 4 | ONE UP | **T22** — the lid actions: power-save, radios, CPU, shutdown | 3 |
-| 5 | ONE UP | **T24** — does the keyboard's illumination key reach the system at all? | 1 |
-| 7 | ONE V5 | **T18** — does the UPS really wake the Pi at a set time? (machine off ~20 min) | 6 |
+| 1 | ONE V5 | **T18** — does the UPS really wake the Pi at a set time? (machine off ~20 min) | -- |
+| 2 | ONE UP | **T24** — does the keyboard's illumination key reach the system at all? | -- |
 | -- | ONE V2 + Pi 4 | T3, T5 — button pulses, MCU dialect | that machine |
 | -- | ONE V5 | T6 — is IR wired? | the IR remote |
+
+Done on 2026-09-19: the ONE UP hand-over (T19 step 2), its lid actions (T22), the CPU cap on the
+ONE V5 (T23) and a first install (T25).
 
 ## Safety legend
 
@@ -880,7 +875,7 @@ It powers off a minute later. **Note the wake time it printed.**
 
 **Report:** `~/argon-t18.log`.
 
-## 🟡 T19 — The ONE UP's battery through argond — **step 1 DONE 2026-09-19: works**
+## ✅ T19 — The ONE UP's battery through argond — **DONE 2026-09-19: handed over**
 
 **On the ONE UP** (`one-up-pi`), not the ONE V5. **Unblocks:** trusting argond with the ONE
 UP's battery. Already done by hand on 2026-09-18: the gauge identified, read on charger and on
@@ -924,7 +919,12 @@ should follow.
 
 **Report:** the `journalctl` output.
 
-### Step 2 — handing over: three decisions, then one script
+### Step 2 — handing over: three decisions, then one script — **done 2026-09-19**
+
+**Result:** decided -- `argononeupd` goes, the lid defaults to power-save (screen only), argond may
+power off (`--full`). `oneup-takeover --full` and a reboot: `argononeupd` disabled, the lid a kernel
+switch named "Argon ONE UP lid" (GPIO27, held by the kernel as `lid`), logind ignoring it, argond
+in mode full with "shutdown ENABLED" on the fuel gauge, the lid agent running in the desktop.
 
 The battery (step 1) and the lid (T20, T21) now have replacements. Deciding:
 
