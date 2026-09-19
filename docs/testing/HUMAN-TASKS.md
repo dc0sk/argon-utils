@@ -913,7 +913,7 @@ argond only acts on the battery with `mode = "full"` **and** `argononeupd` stopp
 gives up whatever else it does on the ONE UP -- at least the lid switch it holds on GPIO27,
 which argond does not handle. That is a decision for you, not a test step: see OPEN.md, B8.
 
-## 🟢 T21 — Does the lid overlay give logind a working lid switch?
+## ✅ T21 — Does the lid overlay give logind a working lid switch? — **DONE 2026-09-19: yes** (`OBS-2026-09-19-t21-lid-overlay`)
 
 **On the ONE UP.** **Unblocks:** enabling `argon-oneup-lid.dtbo` for good (packaging README), and
 with it T19 step 2.

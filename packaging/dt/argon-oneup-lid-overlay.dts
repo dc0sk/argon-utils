@@ -40,12 +40,15 @@
 		__overlay__ {
 			argon_lid: argon_lid {
 				compatible = "gpio-keys";
+				/* The input device's name. Without it the kernel uses the node name
+				 * (T21 saw "argon_lid"); the key's own label below does not name it. */
+				label = "Argon ONE UP lid";
 				pinctrl-names = "default";
 				pinctrl-0 = <&argon_lid_pins>;
 				status = "okay";
 
 				lid {
-					label = "Argon ONE UP lid";
+					label = "lid";
 					linux,input-type = <5>;	/* EV_SW */
 					linux,code = <0>;	/* SW_LID: 1 = closed */
 					/* Active low: closed pulls the line low, which reports the switch on. */

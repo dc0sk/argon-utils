@@ -1,0 +1,20 @@
+T21 2026-09-19T09:16:33+02:00
+--- loaded overlays
+Overlays (in load order):
+0:  argon-oneup-lid
+--- input device
+NO INPUT DEVICE
+--- logind
+Watching system buttons on /dev/input/event14 (argon_lid)
+LidClosed with the lid open: b false
+watching 60 s: close the lid, wait 5 s, open it; then once more
+09:16:33 LidClosed b false
+09:16:48 LidClosed b true
+09:16:54 LidClosed b false
+09:17:31 LidClosed b true
+--- logind during the watch
+2026-09-19T09:16:31+02:00 ONE-UP-PI systemd-logind[798]: Watching system buttons on /dev/input/event14 (argon_lid)
+2026-09-19T09:16:48+02:00 ONE-UP-PI systemd-logind[798]: Lid closed.
+2026-09-19T09:16:54+02:00 ONE-UP-PI systemd-logind[798]: Lid opened.
+2026-09-19T09:17:30+02:00 ONE-UP-PI systemd-logind[798]: Lid closed.
+overlay removed: 0 loaded; argononeupd: active
