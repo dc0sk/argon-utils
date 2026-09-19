@@ -25,6 +25,7 @@ h1 { font-size: 2.6rem; margin: 0 0 8px; letter-spacing: -0.02em; }
 .buttons a { display: inline-block; margin: 4px 8px 4px 0; padding: 9px 16px; border-radius: 8px;
              text-decoration: none; font-weight: 600; border: 1px solid var(--line); }
 .buttons a.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.buttons a.donate { background: #ffc439; color: #111; border-color: #ffc439; }
 .status { margin: 20px 0 0; padding: 12px 16px; border-left: 4px solid var(--accent);
           background: var(--accent-soft); border-radius: 6px; }
 section { padding: 28px 0; border-top: 1px solid var(--line); }
@@ -73,6 +74,7 @@ footer { padding: 28px 0 48px; color: var(--muted); font-size: 0.9rem; border-to
     <a class="primary" href="https://github.com/dc0sk/argon-utils">Source on GitHub</a>
     <a href="https://github.com/dc0sk/argon-utils/blob/main/packaging/README.md">Install</a>
     <a href="https://github.com/dc0sk/argon-utils/blob/main/docs/testing/HUMAN-TASKS.md">Hardware tests</a>
+    <a class="donate" href="https://www.paypal.com/donate/?hosted_button_id=WY9U4MQ3ZAQWC" rel="noopener">Donate via PayPal</a>
   </div>
   <p class="status"><strong>Status:</strong> in daily use on a Raspberry Pi 5 in an Argon ONE V5 with
     the PWR UPS, and on an Argon ONE UP laptop that it has taken over from the vendor's software.
@@ -179,6 +181,8 @@ sudo systemctl restart argond</code></pre>
 </section>
 
 <footer>
+  <p>argon-utils is built and tested in spare time. If it is useful to you, you can support it with a
+    <a href="https://www.paypal.com/donate/?hosted_button_id=WY9U4MQ3ZAQWC" rel="noopener">donation via PayPal</a>.</p>
   argon-utils is GPL-3.0-or-later; its protocol library <code>argon-proto</code> is
   GPL-3.0-or-later OR MPL-2.0. Argon40, ONE, EON, NEO, PWR, POLY, THRML, BLSTR and Industria are
   Argon40's names for their products; this project is not affiliated with Argon40.

@@ -14,6 +14,8 @@ machine-readable output, a panel icon, and a Debian package.
 
 **Project page: <https://dc0sk.github.io/argon-utils/>**
 
+[![Donate via PayPal](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://www.paypal.com/donate/?hosted_button_id=WY9U4MQ3ZAQWC)
+
 <p align="center">
   <img src="site/img/oled-mains.png" width="32%" alt="OLED page: BAT 92%, MAINS, charge bar, CPU and fan">
   <img src="site/img/oled-battery.png" width="32%" alt="OLED page: BAT 64%, BATTERY">
