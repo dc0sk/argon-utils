@@ -1010,6 +1010,11 @@ Restart it the same way after each change to `config.toml`.
   lid-triggered poweroff: watch the next boots before drawing a line between the two.
 - **Also found:** `argon-tray` exited at login because the panel was not up yet (fixed in
   0.1.19: it waits for the panel).
+- **A normal reboot afterwards (0.1.19) was clean:** both keyboard devices enumerated in the same
+  second, labwc reported no input errors, panel and desktop ran. So the late device is so far
+  tied to the one boot after a lid-triggered poweroff -- worth re-checking if it happens again.
+  The tray started before the panel on this boot too, logged that it was waiting, and showed its
+  icon when the panel came up: the 0.1.19 fix, confirmed.
 
 Afterwards set `[lid]` to what you want to keep. (Set back to the default, power-save with the
 screen only, on 2026-09-19.) **Report:** `~/argon-t22.log`, and anything that
