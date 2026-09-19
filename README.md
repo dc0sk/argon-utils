@@ -24,7 +24,7 @@ machine-readable output, a panel icon, and a Debian package.
 <p align="center"><sub>The ONE V5's case display, rendered by the same code argond runs, from example readings.</sub></p>
 
 <p align="center">
-  <img src="site/img/tray-menu.png" width="268" alt="The panel icon's menu: Battery 92 % on mains, CPU, fan, Power off now">
+  <img src="site/img/tray-menu.png" width="267" alt="The panel icon and its menu: Battery 94 % on mains, CPU, fan, Power off now">
   &nbsp;
   <img src="site/img/battery.svg" width="62%" alt="argonctl battery on an Argon ONE UP: charge, voltage, current and flow from its fuel gauge">
 </p>
