@@ -3,10 +3,11 @@
 GPLv3 Rust tooling for Argon40 Raspberry Pi enclosures and the Argon PWR UPS — a clean-room
 replacement for the vendor's Python stack.
 
-> **Status: working on one machine.** A Raspberry Pi 5 in an Argon ONE V5, with the Argon PWR
-> UPS, the OLED and the Industria Zigbee module, runs it daily as a Debian package. Everything
-> below says how it was verified -- see [Evidence tiers](#evidence-tiers). Other Argon
-> hardware is not supported yet.
+> **Status: working on two machines.** A Raspberry Pi 5 in an Argon ONE V5, with the Argon PWR
+> UPS, the OLED and the Industria Zigbee module, runs it daily as a Debian package; an Argon
+> ONE UP (the CM5 laptop) runs it alongside the vendor's daemon. Everything below says how it
+> was verified -- see [Evidence tiers](#evidence-tiers). Other Argon hardware is not
+> supported yet.
 
 ## What works today
 
@@ -27,6 +28,18 @@ The ONE V5 has no fan microcontroller when fitted with a Pi 5, and its button is
 power button, which the OS already handles. So on this machine the useful product is the UPS,
 the OLED and the Zigbee module.
 
+### Argon ONE UP
+
+On the CM5 laptop -- `observed` on one unit:
+
+| Feature | What it does | Verified |
+|---|---|---|
+| **Battery** | with `[ups] source = "oneup"`, `argond` reads the laptop's Cellwise CW2217 fuel gauge (reads only) into the same policy, poweroff, tray and notifications; `argonctl battery` prints it | identified and read on the unit; charger out and back in followed within a poll (T19 step 1) |
+| **Lid** | a device-tree overlay makes the lid a standard lid switch, so `logind` handles it (`HandleLidSwitch=`) | loaded at runtime, `logind` followed the lid (T20, T21) |
+| **Handover** | `oneup-takeover` moves battery and lid from the vendor's `argononeupd` to these, recorded; `oneup-restore` undoes it exactly | against a fake root in the gate; **not yet run on the unit** |
+
+No wake on the ONE UP: it has no UPS clock. Its fan and power key are the Pi's, as on the ONE V5.
+
 Install from the Debian package: see [`packaging/README.md`](packaging/README.md). Nothing is
 armed on install -- `mode = "read-only"` until you change it in `/etc/argon-utils/config.toml`.
 
@@ -42,8 +55,8 @@ your power supply.
 
 ## Other Argon hardware
 
-None of this is supported yet: the table is what the hardware can do, not what this project
-does with it. Derived by crawling [github.com/Argon40Tech](https://github.com/Argon40Tech) and by
+Apart from the ONE UP above, none of this is supported yet: the table is what the hardware can
+do, not what this project does with it. Derived by crawling [github.com/Argon40Tech](https://github.com/Argon40Tech) and by
 inspecting real hardware. Argon ships 14 SKUs; only five have any control software, and
 several products are passive enclosures with no controllable electronics at all.
 
@@ -53,7 +66,7 @@ several products are passive enclosures with no controllable electronics at all.
 | **ONE V5** | ✔\* | ✔\* | ✔ | ? | via PWR | via PWR |
 | EON | ✔ | ✔ | ✔ | ✔ | — | ✔ |
 | Fan HAT | ✔ | ✔ | — | — | — | — |
-| ONE UP | — | ✔ | — | — | ✔ | — |
+| ONE UP | — | — | — | — | ✔ | — |
 | **PWR UPS 5K/10K** | — | — | — | — | ✔ | ✔ |
 | NEO 5 | — | — | — | — | — | — |
 
