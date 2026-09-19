@@ -142,6 +142,9 @@ sync_clock = true
 # Draw a status page on the case OLED: UPS charge and state, a charge bar, the CPU
 # temperature and the fan, and -- when one is scheduled -- the poweroff time.
 #
+# While enabled, the tray's "Case display" checkbox switches it off and on (polkit action
+# org.argonutils.oled); switched off, it stays dark across restarts until switched on again.
+#
 # Off by default: it is a write to hardware, and needs mode = "managed" or "full" like every
 # other device write. The page follows the same rules as the tray icon, so a UPS reading
 # argond has stopped updating is shown as STALE, never as the last number it wrote.

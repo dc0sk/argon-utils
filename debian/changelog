@@ -1,3 +1,14 @@
+argon-utils (0.1.23) unstable; urgency=medium
+
+  * The tray gets a "Case display" checkbox that switches the OLED status
+    page off and on, through argond (D-Bus OledState/SetOled, polkit
+    action org.argonutils.oled: the active session may, without a
+    password). Switched off, the page stays dark across restarts and
+    reboots until switched on again. Offered only while argond is
+    driving a display.
+
+ -- Simon Keimer <dc0sk@mailbox.org>  Sat, 19 Sep 2026 22:30:00 +0200
+
 argon-utils (0.1.22) unstable; urgency=medium
 
   * Binaries no longer carry the builder's home directory. Rust embeds

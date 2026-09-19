@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Duration, SystemTime};
 
+mod display;
 mod tray;
 mod view;
 mod wake;
@@ -202,9 +203,11 @@ fn main() -> ExitCode {
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .map_or(0, |d| d.as_secs());
             let presets = wake::presets(now, wake::next_seven(now));
+            let oled = display::state();
             handle.update(|t| {
                 t.can_wake = can;
                 t.presets = presets;
+                t.oled = oled;
             });
             next_wake_refresh = std::time::Instant::now() + Duration::from_secs(60);
         }

@@ -25,6 +25,7 @@ several conclusions in this project came from negative results.
 |---|---|---|---|
 | 1 | ONE V5 | **T18** — does the UPS really wake the Pi at a set time? (machine off ~20 min) | -- |
 | 2 | ONE UP | **T24** — does the keyboard's illumination key reach the system at all? | -- |
+| 3 | ONE V5 | **T26** — the tray's "Case display" switch | 0.1.23 installed |
 | -- | ONE V2 + Pi 4 | T3, T5 — button pulses, MCU dialect | that machine |
 | -- | ONE V5 | T6 — is IR wired? | the IR remote |
 
@@ -1054,6 +1055,18 @@ sudo evtest      # pick each "AMIRA-KEYBOAR USB KEYBOARD" device in turn
 Press the key combination that changes the keyboard light, a few times, on each device.
 **Report:** whether any event appears, and which. Nothing at all means the light is the
 keyboard's own business, and the lid cannot switch it.
+
+## 🟢 T26 — The tray's "Case display" switch
+
+**On the ONE V5**, with 0.1.23 installed and `[oled] enabled = true` (mode `managed` or `full`).
+Restart the tray (`pkill -x argon-tray; setsid argon-tray >/dev/null 2>&1 &`).
+
+1. The tray menu shows a ticked **Case display** item. Untick it: the OLED goes dark within a
+   second; `journalctl -u argond -o cat | grep oled` says "switched off".
+2. `sudo systemctl restart argond`: the OLED stays dark (the choice is remembered).
+3. Tick it again: the status page comes back.
+
+**Report:** whether each step did what it says.
 
 ## ✅ T25 — A first install brings up argond's D-Bus service — **DONE 2026-09-19: yes**
 

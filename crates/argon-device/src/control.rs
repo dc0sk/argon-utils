@@ -28,6 +28,9 @@ pub const ACTION_POWEROFF_WITH_WAKE: &str = "org.argonutils.poweroff-with-wake";
 /// The polkit action that guards capping the CPU frequency.
 pub const ACTION_CPU_CAP: &str = "org.argonutils.cpu-cap";
 
+/// The polkit action that guards switching the case display on and off.
+pub const ACTION_OLED: &str = "org.argonutils.oled";
+
 /// A request to argond.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -129,6 +132,7 @@ mod tests {
         let policy = include_str!("../../../packaging/polkit/org.argonutils.policy");
         assert!(policy.contains(&format!("<action id=\"{ACTION_POWEROFF_WITH_WAKE}\">")));
         assert!(policy.contains(&format!("<action id=\"{ACTION_CPU_CAP}\">")));
+        assert!(policy.contains(&format!("<action id=\"{ACTION_OLED}\">")));
         let dbus = include_str!("../../../packaging/dbus/org.argonutils.Daemon1.conf");
         assert!(dbus.contains(&format!("own=\"{BUS_NAME}\"")));
         assert!(dbus.contains(&format!("send_interface=\"{INTERFACE}\"")));

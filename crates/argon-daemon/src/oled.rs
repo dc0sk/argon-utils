@@ -22,6 +22,98 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant, SystemTime};
 
+/// The status page's on/off switch, shared with the D-Bus service.
+///
+/// Switched from the tray. The choice survives restarts and reboots: switched off, a marker file
+/// sits in argond's state directory, and the page stays dark until switched on again.
+#[derive(Debug)]
+pub struct OledControl {
+    /// A panel is being driven -- the thread started. Otherwise there is nothing to switch.
+    available: AtomicBool,
+    /// The page is wanted on.
+    on: AtomicBool,
+    /// Where "switched off" is remembered.
+    record: Option<PathBuf>,
+}
+
+impl OledControl {
+    /// A switch remembered at `record`: on unless the file exists.
+    #[must_use]
+    pub fn new(record: Option<PathBuf>) -> Self {
+        let on = !record.as_deref().is_some_and(Path::exists);
+        Self {
+            available: AtomicBool::new(false),
+            on: AtomicBool::new(on),
+            record,
+        }
+    }
+
+    /// The switch as argond's systemd unit keeps it: `$STATE_DIRECTORY/oled-off`.
+    #[must_use]
+    pub fn from_state_directory() -> Self {
+        let record = std::env::var_os("STATE_DIRECTORY").and_then(|dirs| {
+            let first = dirs.to_string_lossy().split(':').next()?.to_owned();
+            (!first.is_empty()).then(|| PathBuf::from(first).join("oled-off"))
+        });
+        Self::new(record)
+    }
+
+    /// "on", "off", or "na" when no panel is being driven.
+    #[must_use]
+    pub fn state(&self) -> &'static str {
+        if !self.available.load(Ordering::Relaxed) {
+            "na"
+        } else if self.on.load(Ordering::Relaxed) {
+            "on"
+        } else {
+            "off"
+        }
+    }
+
+    /// Switches the page on or off.
+    ///
+    /// # Errors
+    ///
+    /// Fails when no panel is being driven. Failing to remember the choice is logged, not an
+    /// error: the switch itself has worked.
+    pub fn set(&self, on: bool) -> Result<(), String> {
+        if !self.available.load(Ordering::Relaxed) {
+            return Err("no case display is being driven (see [oled] in the config)".into());
+        }
+        self.on.store(on, Ordering::Relaxed);
+        if let Some(record) = &self.record {
+            let remembered = if on {
+                std::fs::remove_file(record).or_else(|e| {
+                    if e.kind() == std::io::ErrorKind::NotFound {
+                        Ok(())
+                    } else {
+                        Err(e)
+                    }
+                })
+            } else {
+                std::fs::write(record, "switched off from the desktop\n")
+            };
+            if let Err(e) = remembered {
+                eprintln!(
+                    "argond: oled: switched, but cannot remember it in {}: {e}",
+                    record.display()
+                );
+            }
+        }
+        Ok(())
+    }
+
+    fn is_on(&self) -> bool {
+        self.on.load(Ordering::Relaxed)
+    }
+
+    /// Marks a panel as driven, for other modules' tests.
+    #[cfg(test)]
+    pub fn mark_available_for_tests(&self) {
+        self.available.store(true, Ordering::Relaxed);
+    }
+}
+
 /// Starts the status page, if it is enabled and allowed.
 ///
 /// Returns `None` -- after saying why, unless the display is simply not enabled -- when the
@@ -30,6 +122,7 @@ pub fn spawn(
     config: &Config,
     active_units: &[String],
     stopping: Arc<AtomicBool>,
+    control: Arc<OledControl>,
 ) -> Option<JoinHandle<()>> {
     if !config.oled.enabled {
         return None;
@@ -98,8 +191,13 @@ pub fn spawn(
         contrast: config.oled.contrast,
         interval: Duration::from_secs(config.oled.refresh_s.max(1)),
     };
+    control.available.store(true, Ordering::Relaxed);
+    if !control.is_on() {
+        eprintln!("argond: oled: switched off from the desktop; staying dark until switched on");
+    }
     Some(std::thread::spawn(move || {
-        run(&mut panel, &settings, &stopping);
+        run(&mut panel, &settings, &stopping, &control);
+        control.available.store(false, Ordering::Relaxed);
     }))
 }
 
@@ -109,15 +207,38 @@ struct Settings {
     interval: Duration,
 }
 
-fn run(panel: &mut Oled<LinuxI2c>, settings: &Settings, stopping: &AtomicBool) {
+fn run(
+    panel: &mut Oled<LinuxI2c>,
+    settings: &Settings,
+    stopping: &AtomicBool,
+    control: &OledControl,
+) {
     let started = Instant::now();
     let mut sensor = ThermalZone::find_cpu().ok();
     let fan = PwmFan::find();
     let mut shown: Option<FrameBuffer> = None;
     let mut needs_init = true;
     let mut error_logged = false;
+    let mut dark = false;
 
     while !stopping.load(Ordering::Relaxed) {
+        if !control.is_on() {
+            if !dark {
+                match panel.off() {
+                    Ok(()) => eprintln!("argond: oled: switched off"),
+                    Err(e) => eprintln!("argond: oled: could not switch off: {e}"),
+                }
+                dark = true;
+                shown = None;
+            }
+            sleep_until(settings.interval, stopping, || control.is_on());
+            continue;
+        }
+        if dark {
+            eprintln!("argond: oled: switched on");
+            dark = false;
+            needs_init = true;
+        }
         let status = read_status(&settings.state_file);
         let input = PageInput {
             status: status.as_ref(),
@@ -152,7 +273,7 @@ fn run(panel: &mut Oled<LinuxI2c>, settings: &Settings, stopping: &AtomicBool) {
                 }
             }
         }
-        sleep_unless_stopping(settings.interval, stopping);
+        sleep_until(settings.interval, stopping, || !control.is_on());
     }
 
     // Blank on the way out. A daemon that has stopped must not leave a status page behind:
@@ -183,13 +304,51 @@ fn read_status(path: &Path) -> Option<UpsStatus> {
         .and_then(|t| UpsStatus::parse(&t).ok())
 }
 
-/// Sleeps in short slices so a stop request is honoured promptly.
-fn sleep_unless_stopping(total: Duration, stopping: &AtomicBool) {
+/// Sleeps in short slices, so a stop request -- or a flip of the switch -- is honoured promptly.
+fn sleep_until(total: Duration, stopping: &AtomicBool, wake: impl Fn() -> bool) {
     let slice = Duration::from_millis(250);
     let mut left = total;
-    while !left.is_zero() && !stopping.load(Ordering::Relaxed) {
+    while !left.is_zero() && !stopping.load(Ordering::Relaxed) && !wake() {
         let d = left.min(slice);
         std::thread::sleep(d);
         left = left.saturating_sub(d);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn record(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("argon-oled-{}-{tag}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir.join("oled-off")
+    }
+
+    #[test]
+    fn nothing_to_switch_without_a_panel() {
+        let c = OledControl::new(None);
+        assert_eq!(c.state(), "na");
+        assert!(c.set(false).is_err());
+    }
+
+    #[test]
+    fn switching_off_is_remembered_across_a_restart() {
+        let r = record("remember");
+        let _ = std::fs::remove_file(&r);
+        let c = OledControl::new(Some(r.clone()));
+        c.available.store(true, Ordering::Relaxed);
+        assert_eq!(c.state(), "on");
+        c.set(false).unwrap();
+        assert_eq!(c.state(), "off");
+        assert!(r.exists());
+        // A new argond reads it back.
+        let again = OledControl::new(Some(r.clone()));
+        again.available.store(true, Ordering::Relaxed);
+        assert_eq!(again.state(), "off");
+        again.set(true).unwrap();
+        assert!(!r.exists());
+        assert!(OledControl::new(Some(r.clone())).is_on());
+        let _ = std::fs::remove_dir_all(r.parent().unwrap());
     }
 }

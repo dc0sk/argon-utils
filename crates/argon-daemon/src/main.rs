@@ -181,6 +181,8 @@ fn start_workers(cli: &Cli, config: &Config, stopping: &Arc<AtomicBool>) -> Work
         rx: from_control,
         waiting: Arc::clone(&request_waiting),
     };
+    // The case display's switch: the OLED thread obeys it, the D-Bus service flips it.
+    let oled_control = Arc::new(oled::OledControl::from_state_directory());
     // Only the PWR UPS has a clock to wake the machine by.
     let oneup = config.ups.source == "oneup";
     let ups_thread = if cli.once {
@@ -207,7 +209,12 @@ fn start_workers(cli: &Cli, config: &Config, stopping: &Arc<AtomicBool>) -> Work
     let bus = if cli.once {
         None
     } else {
-        dbus::serve(to_ups.clone(), Arc::clone(&request_waiting), !oneup)
+        dbus::serve(
+            to_ups.clone(),
+            Arc::clone(&request_waiting),
+            !oneup,
+            Arc::clone(&oled_control),
+        )
     };
     let control_thread = if cli.once {
         None
@@ -228,6 +235,7 @@ fn start_workers(cli: &Cli, config: &Config, stopping: &Arc<AtomicBool>) -> Work
             config,
             &startup::active_vendor_units(),
             Arc::clone(stopping),
+            Arc::clone(&oled_control),
         )
     };
     let others = [oled_thread, control_thread]

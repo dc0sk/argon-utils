@@ -19,7 +19,10 @@ use zbus::message::Header;
 use zbus::zvariant::Value;
 
 use crate::cpu_cap::{CapControl, CpuCap};
-use argon_device::control::{ACTION_CPU_CAP, ACTION_POWEROFF_WITH_WAKE, BUS_NAME, OBJECT_PATH};
+use crate::oled::OledControl;
+use argon_device::control::{
+    ACTION_CPU_CAP, ACTION_OLED, ACTION_POWEROFF_WITH_WAKE, BUS_NAME, OBJECT_PATH,
+};
 use std::sync::Mutex;
 
 /// What polkit said about a caller.
@@ -91,6 +94,8 @@ pub struct Daemon1 {
     wake_supported: bool,
     /// The CPU frequency cap. Dropped with the object, which lifts any cap still in force.
     cpu: Mutex<Box<dyn CapControl>>,
+    /// The case display's on/off switch, shared with the OLED thread.
+    oled: Arc<OledControl>,
 }
 
 // The interface macro fixes these signatures: a method takes `&self` whether it needs it or
@@ -122,6 +127,16 @@ impl Daemon1 {
         })
     }
 
+    /// The case display: "on", "off", or "na" when argond is not driving one. Changes nothing.
+    fn oled_state(&self) -> String {
+        self.oled.state().to_owned()
+    }
+
+    /// Switches the case display on (`true`) or off. Never prompts, like the CPU cap.
+    fn set_oled(&self, #[zbus(header)] header: Header<'_>, on: bool) -> zbus::fdo::Result<()> {
+        set_oled(self.auth.as_ref(), &sender_of(&header), on, &self.oled)
+    }
+
     /// Caps the CPU at its lowest frequency (`true`), or puts back the limit in force before
     /// (`false`). For the lid agent while a laptop lid is closed. Never prompts: the agent asks
     /// with nobody looking at the screen.
@@ -141,6 +156,29 @@ impl Daemon1 {
             cpu.as_mut(),
         )
     }
+}
+
+/// `SetOled`, without the bus.
+fn set_oled(
+    auth: &dyn Authorize,
+    sender: &str,
+    on: bool,
+    oled: &OledControl,
+) -> zbus::fdo::Result<()> {
+    match auth.check(sender, ACTION_OLED, false) {
+        Ok(Verdict::Yes) => {}
+        Ok(Verdict::Challenge | Verdict::No) => {
+            return Err(zbus::fdo::Error::AccessDenied(
+                "not authorised by polkit to switch the case display".into(),
+            ));
+        }
+        Err(e) => {
+            return Err(zbus::fdo::Error::AccessDenied(format!(
+                "could not check authorisation, so refusing: {e}"
+            )));
+        }
+    }
+    oled.set(on).map_err(zbus::fdo::Error::Failed)
 }
 
 /// `SetCpuCap`, without the bus.
@@ -231,6 +269,7 @@ pub fn serve(
     to_ups: Sender<Message>,
     waiting: Arc<AtomicBool>,
     wake_supported: bool,
+    oled: Arc<OledControl>,
 ) -> Option<zbus::blocking::Connection> {
     let object = Daemon1 {
         to_ups,
@@ -238,6 +277,7 @@ pub fn serve(
         auth: Box::new(Polkit),
         wake_supported,
         cpu: Mutex::new(Box::new(CpuCap::default())),
+        oled,
     };
     let built = zbus::blocking::connection::Builder::system()
         .and_then(|b| b.name(BUS_NAME))
@@ -272,7 +312,7 @@ mod tests {
     impl Authorize for Fixed {
         fn check(&self, _: &str, action: &str, interactive: bool) -> Result<Verdict, String> {
             assert!(
-                action == ACTION_POWEROFF_WITH_WAKE || action == ACTION_CPU_CAP,
+                [ACTION_POWEROFF_WITH_WAKE, ACTION_CPU_CAP, ACTION_OLED].contains(&action),
                 "{action}"
             );
             self.1.lock().unwrap().push(interactive);
@@ -327,6 +367,24 @@ mod tests {
             assert!(
                 cpu.0.is_empty(),
                 "an unauthorised caller changed the CPU limit"
+            );
+        }
+    }
+
+    #[test]
+    fn the_display_is_switched_only_for_an_authorised_caller_and_never_prompts() {
+        let oled = OledControl::new(None);
+        oled.mark_available_for_tests();
+        let auth = Fixed::new(Ok(Verdict::Yes));
+        set_oled(&auth, ":1.5", false, &oled).unwrap();
+        assert_eq!(oled.state(), "off");
+        assert_eq!(*auth.1.lock().unwrap(), vec![false], "the check prompted");
+        for verdict in [Ok(Verdict::No), Ok(Verdict::Challenge), Err("gone".into())] {
+            assert!(set_oled(&Fixed::new(verdict), ":1.5", true, &oled).is_err());
+            assert_eq!(
+                oled.state(),
+                "off",
+                "an unauthorised caller switched the display"
             );
         }
     }

@@ -60,7 +60,7 @@ machine-readable output, a panel icon, and a Debian package.
 - **Panel icon** for the Raspberry Pi desktop (and any StatusNotifierItem panel): charge, CPU
   temperature and fan; shows and cancels a scheduled shutdown.
 - **Desktop notifications** when on battery, low, critical, or a shutdown is scheduled.
-- **OLED status page** on the ONE V5's case display.
+- **OLED status page** on the ONE V5's case display, switched on and off from the panel icon.
 - **`argonctl`** — `doctor`, `ups`, `battery`, `rtc`, `poweroff`, `zigbee`, `oled`, … with
   manual pages.
 - **D-Bus service** `org.argonutils.Daemon1`, guarded by polkit: the desktop's own rules apply.

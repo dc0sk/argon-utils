@@ -20,6 +20,8 @@ pub struct ArgonTray {
     pub pending: Option<Pending>,
     /// `(wake, poweroff)` of this tray's last successful "power off and wake", so the menu can
     /// say when the machine comes back.
+    /// The case display: on, off, or `None` when argond is not driving one.
+    pub oled: Option<bool>,
     /// Shared with the poll loop, which matches it against what logind reports.
     pub ours: std::sync::Arc<std::sync::Mutex<Option<(u64, u64)>>>,
 }
@@ -33,6 +35,7 @@ impl ArgonTray {
             can_wake: None,
             presets: Vec::new(),
             pending: None,
+            oled: None,
             ours: std::sync::Arc::default(),
         }
     }
@@ -51,6 +54,50 @@ impl ArgonTray {
                 at_unix: poweroff_unix,
                 wake_unix: Some(wake_unix),
             });
+        }
+    }
+
+    /// "Power off now…" with its wake presets, when it may be offered.
+    ///
+    /// The submenu is the confirmation: every item in it states the consequence -- power off
+    /// now -- in its label, and argond still announces the poweroff a minute ahead with
+    /// `shutdown -c` to cancel.
+    fn power_off_menu(&self) -> Option<ksni::MenuItem<Self>> {
+        use ksni::menu::{StandardItem, SubMenu};
+        let offered = wake::offer(
+            self.can_wake.as_deref(),
+            self.view.shutdown_pending || self.pending.is_some(),
+        ) && !self.presets.is_empty();
+        offered.then(|| {
+            SubMenu {
+                label: "Power off now…".into(),
+                icon_name: "system-shutdown-symbolic".into(),
+                submenu: self
+                    .presets
+                    .iter()
+                    .map(|p| {
+                        let at = p.at_unix;
+                        StandardItem {
+                            label: p.label.clone(),
+                            activate: Box::new(move |this: &mut Self| {
+                                this.power_off_and_wake(at);
+                            }),
+                            ..Default::default()
+                        }
+                        .into()
+                    })
+                    .collect(),
+                ..Default::default()
+            }
+            .into()
+        })
+    }
+
+    /// Switches the case display, and shows the result.
+    fn switch_display(&mut self, on: bool) {
+        match crate::display::set(on) {
+            Ok(()) => self.oled = Some(on),
+            Err(e) => self.last_action = Some(format!("Case display not switched: {e}")),
         }
     }
 
@@ -173,34 +220,18 @@ impl ksni::Tray for ArgonTray {
             );
         }
 
-        if wake::offer(
-            self.can_wake.as_deref(),
-            self.view.shutdown_pending || self.pending.is_some(),
-        ) && !self.presets.is_empty()
-        {
+        if let Some(submenu) = self.power_off_menu() {
             items.push(MenuItem::Separator);
-            // The submenu is the confirmation: every item in it states the consequence --
-            // power off now -- in its label, and argond still announces the poweroff a minute
-            // ahead with `shutdown -c` to cancel.
+            items.push(submenu);
+        }
+
+        if let Some(on) = self.oled {
+            items.push(MenuItem::Separator);
             items.push(
-                SubMenu {
-                    label: "Power off now…".into(),
-                    icon_name: "system-shutdown-symbolic".into(),
-                    submenu: self
-                        .presets
-                        .iter()
-                        .map(|p| {
-                            let at = p.at_unix;
-                            StandardItem {
-                                label: p.label.clone(),
-                                activate: Box::new(move |this: &mut Self| {
-                                    this.power_off_and_wake(at);
-                                }),
-                                ..Default::default()
-                            }
-                            .into()
-                        })
-                        .collect(),
+                ksni::menu::CheckmarkItem {
+                    label: "Case display".into(),
+                    checked: on,
+                    activate: Box::new(move |this: &mut Self| this.switch_display(!on)),
                     ..Default::default()
                 }
                 .into(),
