@@ -26,7 +26,10 @@ machine-readable output, a panel icon, and a Debian package.
 <p align="center">
   <img src="site/img/tray-menu.png" width="267" alt="The panel icon and its menu: Battery 94 % on mains, CPU, fan, Power off now">
   &nbsp;
-  <img src="site/img/battery.svg" width="62%" alt="argonctl battery on an Argon ONE UP: charge, voltage, current and flow from its fuel gauge">
+  <img src="site/img/tray-tooltip.png" width="343" alt="The panel icon's tooltip: Battery 94 % on mains, CPU 56 °C, fan 2985 rpm">
+</p>
+<p align="center">
+  <img src="site/img/battery.svg" width="80%" alt="argonctl battery on an Argon ONE UP: charge, voltage, current and flow from its fuel gauge">
 </p>
 
 ## Features

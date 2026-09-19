@@ -35,6 +35,11 @@ figure { margin: 0; background: var(--card); border: 1px solid var(--line); bord
          padding: 12px; }
 figure img { width: 100%; height: auto; display: block; border-radius: 6px; }
 figcaption { font-size: 0.9rem; color: var(--muted); margin-top: 8px; }
+.panel-shots { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+.panel-shots figure { flex: 0 1 auto; max-width: 100%; }
+.panel-shots figure.w-menu { width: 293px; }
+.panel-shots figure.w-tip { width: 369px; }
+.panel-shots img { width: auto; max-width: 100%; }
 .terms { display: grid; grid-template-columns: 1fr; gap: 16px; max-width: 900px; }
 .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
@@ -96,9 +101,13 @@ footer { padding: 28px 0 48px; color: var(--muted); font-size: 0.9rem; border-to
 
 <section>
   <h2>In the panel</h2>
-  <figure style="max-width: 320px"><img src="img/tray-menu.png" alt="The argon-utils panel icon, a colour battery with a charging plug, and its menu: Battery 94 % on mains, CPU 56 °C, fan 2982 rpm, Power off now, Quit">
-    <figcaption>The panel icon on the Raspberry Pi desktop, with its menu open: charge, CPU, fan, and
-      "Power off now…" with a UPS wake where polkit allows it.</figcaption></figure>
+  <div class="panel-shots">
+    <figure class="w-menu"><img src="img/tray-menu.png" alt="The argon-utils panel icon, a colour battery with a charging plug, and its menu: Battery 94 % on mains, CPU 56 °C, fan 2982 rpm, Power off now, Quit">
+      <figcaption>The menu: charge, CPU and fan, and "Power off now…" with a UPS wake where polkit
+        allows it.</figcaption></figure>
+    <figure class="w-tip"><img src="img/tray-tooltip.png" alt="The panel icon's tooltip: Battery 94 % on mains, CPU 56 °C, fan 2985 rpm">
+      <figcaption>Hovering: the same at a glance.</figcaption></figure>
+  </div>
 </section>
 
 <section>
