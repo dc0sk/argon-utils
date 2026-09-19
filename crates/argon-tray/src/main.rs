@@ -47,14 +47,54 @@ struct Cli {
     #[arg(long)]
     once: bool,
 
+    /// Which battery icons to use. `auto` takes the full-colour set when an installed theme has
+    /// it -- visible on dark panels too -- and the symbolic set otherwise.
+    #[arg(long, value_enum, default_value = "auto")]
+    icons: IconChoice,
+
     /// Print this program's manual page (roff) and exit. Used by the package build.
     #[arg(long, hide = true)]
     man: bool,
 }
 
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum IconChoice {
+    Auto,
+    Colour,
+    Symbolic,
+}
+
+/// The icon directories a desktop looks in: `$XDG_DATA_HOME/icons`, `~/.icons`, and
+/// `<dir>/icons` for each of `$XDG_DATA_DIRS`.
+fn icon_bases() -> Vec<PathBuf> {
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let data_home = std::env::var_os("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .or_else(|| home.as_ref().map(|h| h.join(".local/share")));
+    let data_dirs = std::env::var("XDG_DATA_DIRS")
+        .ok()
+        .filter(|d| !d.is_empty())
+        .unwrap_or_else(|| "/usr/local/share:/usr/share".into());
+    data_home
+        .map(|d| d.join("icons"))
+        .into_iter()
+        .chain(home.map(|h| h.join(".icons")))
+        .chain(data_dirs.split(':').map(|d| PathBuf::from(d).join("icons")))
+        .collect()
+}
+
+fn choose_icons(choice: IconChoice) -> view::Icons {
+    match choice {
+        IconChoice::Colour => view::Icons::Colour,
+        IconChoice::Auto if view::colour_icons_installed(&icon_bases()) => view::Icons::Colour,
+        IconChoice::Symbolic | IconChoice::Auto => view::Icons::Symbolic,
+    }
+}
+
 /// The things the tray reads, found once at startup.
 struct Sources {
     state: PathBuf,
+    icons: view::Icons,
     sensor: Option<ThermalZone>,
     fan: Option<PwmFan>,
 }
@@ -66,6 +106,7 @@ impl Sources {
             now: SystemTime::now(),
             cpu_decicelsius: self.sensor.as_mut().and_then(|s| s.read_decicelsius().ok()),
             fan: self.fan.as_ref().and_then(PwmFan::read),
+            icons: self.icons,
         }
     }
 }
@@ -91,6 +132,7 @@ fn main() -> ExitCode {
     }
     let mut sources = Sources {
         state: cli.state,
+        icons: choose_icons(cli.icons),
         sensor: ThermalZone::find_cpu().ok(),
         fan: PwmFan::find(),
     };
@@ -98,7 +140,7 @@ fn main() -> ExitCode {
 
     let first = render(&sources.read());
     if cli.once {
-        println!("icon      {}", first.icon);
+        println!("icon      {} ({:?} set)", first.icon, sources.icons);
         println!("urgency   {:?}", first.urgency);
         println!("headline  {}", first.headline);
         for d in &first.details {

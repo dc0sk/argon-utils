@@ -19,6 +19,20 @@ pub struct Snapshot {
     pub cpu_decicelsius: Option<i32>,
     /// The kernel fan, if there is one.
     pub fan: Option<FanReading>,
+    /// Which icon set to name.
+    pub icons: Icons,
+}
+
+/// Which battery icons to use.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Icons {
+    /// The freedesktop `battery-level-N-symbolic` set: eleven levels, but drawn in one dark
+    /// colour that a panel may not recolour -- nearly invisible on a dark panel, as the Raspberry
+    /// Pi panel showed.
+    Symbolic,
+    /// The full-colour legacy set (`battery-good`, `battery-low-charging`, ...): five levels, and
+    /// visible on light and dark panels alike. Needs a theme that has them (`AdwaitaLegacy`).
+    Colour,
 }
 
 /// How loudly the tray should present itself.
@@ -72,25 +86,25 @@ fn render_ups(s: &Snapshot, hhmm: &dyn Fn(SystemTime) -> String) -> View {
     };
     match interpret(s.ups.as_ref(), s.now) {
         Reading::NoData => plain(
-            MISSING,
+            missing(s.icons),
             Urgency::Normal,
             "Battery: no data".to_owned(),
             "argond is not publishing status. Is it running?",
         ),
         Reading::Stale { age } => plain(
-            MISSING,
+            missing(s.icons),
             Urgency::Attention,
             format!("Battery: no update for {} s", age.as_secs()),
             "argond has stopped reporting: the battery is not being watched.",
         ),
         Reading::Failed => plain(
-            MISSING,
+            missing(s.icons),
             Urgency::Normal,
             "Battery: reading failed".to_owned(),
             "The last battery read did not succeed.",
         ),
         Reading::PowerOffPending { percent, at } => View {
-            icon: CAUTION,
+            icon: caution(s.icons),
             urgency: Urgency::Attention,
             headline: format!("Battery {percent} % · powering off at {}", hhmm(at)),
             details: vec!["Restore mains power to cancel.".to_owned()],
@@ -98,12 +112,24 @@ fn render_ups(s: &Snapshot, hhmm: &dyn Fn(SystemTime) -> String) -> View {
         },
         Reading::Current { percent, level } => {
             let (icon, urgency, what) = match level {
-                LevelName::OnMains => (level_icon(percent, true), Urgency::Normal, "on mains"),
-                LevelName::OnBattery => (level_icon(percent, false), Urgency::Normal, "on battery"),
-                LevelName::Low => (level_icon(percent, false), Urgency::Attention, "low"),
-                LevelName::Critical => (CAUTION, Urgency::Attention, "critical"),
+                LevelName::OnMains => (
+                    level_icon(percent, true, s.icons),
+                    Urgency::Normal,
+                    "on mains",
+                ),
+                LevelName::OnBattery => (
+                    level_icon(percent, false, s.icons),
+                    Urgency::Normal,
+                    "on battery",
+                ),
+                LevelName::Low => (
+                    level_icon(percent, false, s.icons),
+                    Urgency::Attention,
+                    "low",
+                ),
+                LevelName::Critical => (caution(s.icons), Urgency::Attention, "critical"),
                 LevelName::Unrecognised(_) => (
-                    level_icon(percent, false),
+                    level_icon(percent, false, s.icons),
                     Urgency::Normal,
                     "unrecognised state",
                 ),
@@ -135,7 +161,69 @@ const CAUTION: &str = "battery-caution-symbolic";
 ///
 /// Down, not to nearest: an icon that shows more charge than there is errs in the direction
 /// that matters. At 95 % the icon shows 90.
-fn level_icon(pct: u8, on_mains: bool) -> &'static str {
+const fn missing(icons: Icons) -> &'static str {
+    match icons {
+        Icons::Symbolic => MISSING,
+        Icons::Colour => "battery-missing",
+    }
+}
+
+const fn caution(icons: Icons) -> &'static str {
+    match icons {
+        Icons::Symbolic => CAUTION,
+        Icons::Colour => "battery-caution",
+    }
+}
+
+fn level_icon(pct: u8, on_mains: bool, icons: Icons) -> &'static str {
+    match icons {
+        Icons::Symbolic => symbolic_level(pct, on_mains),
+        Icons::Colour => colour_level(pct, on_mains),
+    }
+}
+
+/// The legacy colour set's five levels. There is no `battery-empty-charging`: an empty battery
+/// on the charger shows as caution, charging.
+const fn colour_level(pct: u8, on_mains: bool) -> &'static str {
+    match (pct, on_mains) {
+        (100.., true) => "battery-full-charged",
+        (80.., true) => "battery-full-charging",
+        (40.., true) => "battery-good-charging",
+        (20.., true) => "battery-low-charging",
+        (_, true) => "battery-caution-charging",
+        (80.., false) => "battery-full",
+        (40.., false) => "battery-good",
+        (20.., false) => "battery-low",
+        (10.., false) => "battery-caution",
+        (_, false) => "battery-empty",
+    }
+}
+
+/// Whether an installed icon theme has the legacy colour battery icons, looked for as
+/// `<theme>/<size>/<context>/battery-good.png` in the usual icon directories.
+#[must_use]
+pub fn colour_icons_installed(bases: &[std::path::PathBuf]) -> bool {
+    let dirs = |p: &std::path::Path| {
+        std::fs::read_dir(p)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.is_dir())
+            .collect::<Vec<_>>()
+    };
+    bases.iter().any(|base| {
+        dirs(base).iter().any(|theme| {
+            dirs(theme).iter().any(|size| {
+                dirs(size)
+                    .iter()
+                    .any(|ctx| ctx.join("battery-good.png").is_file())
+            })
+        })
+    })
+}
+
+fn symbolic_level(pct: u8, on_mains: bool) -> &'static str {
     const ON_BATTERY: [&str; 11] = [
         "battery-level-0-symbolic",
         "battery-level-10-symbolic",
@@ -188,7 +276,35 @@ mod tests {
             now: at(1_005),
             cpu_decicelsius: None,
             fan: None,
+            icons: Icons::Symbolic,
         }
+    }
+
+    #[test]
+    fn the_colour_set_names_its_five_levels() {
+        assert_eq!(colour_level(100, true), "battery-full-charged");
+        assert_eq!(colour_level(92, true), "battery-full-charging");
+        assert_eq!(colour_level(50, true), "battery-good-charging");
+        assert_eq!(colour_level(5, true), "battery-caution-charging");
+        assert_eq!(colour_level(64, false), "battery-good");
+        assert_eq!(colour_level(19, false), "battery-caution");
+        assert_eq!(colour_level(9, false), "battery-empty");
+        let mut s = snap("critical", Some(9), None);
+        s.icons = Icons::Colour;
+        assert_eq!(render(&s, &fixed).icon, "battery-caution");
+    }
+
+    #[test]
+    fn the_colour_set_is_found_only_where_a_theme_has_it() {
+        let root = std::env::temp_dir().join(format!("argon-icons-{}", std::process::id()));
+        let legacy = root.join("AdwaitaLegacy/24x24/legacy");
+        std::fs::create_dir_all(&legacy).unwrap();
+        std::fs::create_dir_all(root.join("Adwaita/symbolic/status")).unwrap();
+        assert!(!colour_icons_installed(std::slice::from_ref(&root)));
+        std::fs::write(legacy.join("battery-good.png"), b"").unwrap();
+        assert!(colour_icons_installed(std::slice::from_ref(&root)));
+        let _ = std::fs::remove_dir_all(&root);
+        assert!(!colour_icons_installed(&[root]));
     }
 
     fn fixed(_: SystemTime) -> String {
@@ -207,10 +323,22 @@ mod tests {
     #[test]
     fn the_icon_rounds_down_never_up() {
         // Showing more charge than there is errs in the direction that matters.
-        assert_eq!(level_icon(99, false), "battery-level-90-symbolic");
-        assert_eq!(level_icon(9, false), "battery-level-0-symbolic");
-        assert_eq!(level_icon(100, true), "battery-level-100-charged-symbolic");
-        assert_eq!(level_icon(250, false), "battery-level-100-symbolic");
+        assert_eq!(
+            level_icon(99, false, Icons::Symbolic),
+            "battery-level-90-symbolic"
+        );
+        assert_eq!(
+            level_icon(9, false, Icons::Symbolic),
+            "battery-level-0-symbolic"
+        );
+        assert_eq!(
+            level_icon(100, true, Icons::Symbolic),
+            "battery-level-100-charged-symbolic"
+        );
+        assert_eq!(
+            level_icon(250, false, Icons::Symbolic),
+            "battery-level-100-symbolic"
+        );
     }
 
     #[test]

@@ -1,3 +1,13 @@
+argon-utils (0.1.21) unstable; urgency=medium
+
+  * argon-tray uses the full-colour battery icons when an installed theme
+    has them (AdwaitaLegacy, which the Raspberry Pi's PiXtrix inherits):
+    the symbolic ones are drawn in one dark colour the Pi panel does not
+    recolour, and all but vanished on a dark panel. --icons colour|symbolic
+    overrides the choice; --once says which set is in use.
+
+ -- Simon Keimer <dc0sk@mailbox.org>  Sat, 19 Sep 2026 21:00:00 +0200
+
 argon-utils (0.1.20) unstable; urgency=medium
 
   * argonctl and argon-tray end quietly (status 141) when a pipe's reader
