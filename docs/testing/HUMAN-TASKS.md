@@ -2,7 +2,7 @@
 project: argon-utils
 doc: testing/HUMAN-TASKS
 status: living
-last_updated: 2026-09-15
+last_updated: 2026-09-19
 ---
 
 # Tasks that need a human at the machine
@@ -18,6 +18,26 @@ in any order, whenever convenient.
 evidence (a capture, a photo, a log) drop it in `docs/protocol/captures/` with a short
 provenance note. A task whose result is "didn't work" is as valuable as one that succeeds —
 several conclusions in this project came from negative results.
+
+## Waiting on you
+
+In a sensible order. Everything on the ONE UP waits for its Wi-Fi to work again (it did not
+connect on 2026-09-19). Nothing argon-utils has installed there touches Wi-Fi: the ONE UP has
+0.1.15, which has no radio code at all -- switching radios arrived in 0.1.16, not installed there.
+
+| | Where | Task | Needs |
+|---|---|---|---|
+| 1 | ONE UP | Get its Wi-Fi back | -- |
+| 2 | ONE UP | Install 0.1.16 (`~/git/argon-utils_0.1.16_arm64.deb` on the ONE V5) | 1 |
+| 3 | ONE UP | **T19 step 2** — hand battery and lid over from `argononeupd`, reboot | 2, and your three decisions in T19 |
+| 4 | ONE UP | **T22** — the lid actions: power-save, radios, CPU, shutdown | 3 |
+| 5 | ONE UP | **T24** — does the keyboard's illumination key reach the system at all? | 1 |
+| 6 | ONE V5 | **T23** — install 0.1.16; then I check the CPU cap and the new labels | -- |
+| 7 | ONE V5 | **T18** — does the UPS really wake the Pi at a set time? (machine off ~20 min) | 6 |
+| 8 | either | **T25** — a first install brings up argond's D-Bus service | a machine without argon-utils |
+| -- | ONE V2 + Pi 4 | T3, T5 — button pulses, MCU dialect | that machine |
+| -- | ONE V5 | T6 — is IR wired? | the IR remote |
+| -- | decisions | T10, T11; D1, S1 in OPEN.md | -- |
 
 ## Safety legend
 
@@ -928,6 +948,86 @@ sudo reboot
 org.freedesktop.login1.Manager LidClosed` follows the lid; closing it does what you chose;
 `journalctl -u argond -b -o cat | grep ups` shows the gauge and, with `--full`, "shutdown
 ENABLED". Undo exactly with `sudo /usr/libexec/argon-utils/oneup-restore` and a reboot.
+
+## 🟡 T22 — The lid actions on the ONE UP
+
+**On the ONE UP**, after T19 step 2 (0.1.16, lid overlay enabled, `argononeupd` disabled,
+rebooted). **Unblocks:** calling the lid actions supported.
+
+`argonctl lid-agent` starts with the desktop session and acts as `[lid]` in
+`/etc/argon-utils/config.toml` says. For the test, run it in a terminal **on the ONE UP's own
+desktop** (not over SSH: it needs the session's screen and sound), so its log is visible, and stop
+the autostarted one first so only one acts:
+
+```sh
+pkill -f 'argonctl lid-agent'; argonctl lid-agent 2>&1 | tee ~/argon-t22.log
+```
+
+Restart it the same way after each change to `config.toml`.
+
+1. **power-save, defaults.** Close the lid for about 5 s, open it. Expect the screen off while
+   closed and back on after, and `ScreenOff` / `ScreenOn` in the log.
+2. **power-save with extras.** Set `radios_off = true` and `cpu_throttle = true`. Close for about
+   10 s, open. Expect `RadiosOff` / `CpuCap(true)`, then `ScreenOn` / `RadiosRestore` /
+   `CpuCap(false)`; afterwards Wi-Fi reconnects on its own, and
+   `cat /sys/devices/system/cpu/cpufreq/policy0/scaling_max_freq` shows the limit it had before
+   (2400000 unless you changed it). The SSH session drops while the radios are off -- expected.
+3. **shutdown, cancelled.** Set `action = "shutdown"` and, for this step, `shutdown_delay_s = 10`.
+   Close the lid: expect a warning sound and a notification "powering off in 10 s". Open it within
+   10 s: expect "the poweroff is cancelled", and nothing else.
+4. **shutdown, for real.** 🔴 **Save your work: this powers the ONE UP off.** Set
+   `shutdown_delay_s = 1` (the default). Close the lid and leave it closed: expect the sound, and a
+   clean poweroff about a second later.
+
+Afterwards set `[lid]` to what you want to keep. **Report:** `~/argon-t22.log`, and anything that
+did not look or sound right.
+
+## 🟢 T23 — 0.1.16 on the ONE V5, and the CPU cap
+
+**On the ONE V5.** **Unblocks:** trusting `SetCpuCap` (argond's CPU cap) outside the lid.
+
+```sh
+sudo apt install -y -o Dpkg::Options::=--force-confold ~/git/argon-utils_0.1.16_arm64.deb
+pkill -x argon-tray; setsid argon-tray >/dev/null 2>&1 &
+```
+
+Then tell me. From here I call `SetCpuCap(true)`, read the frequency limit, and call
+`SetCpuCap(false)` -- a few seconds at the lowest frequency, then exactly the previous limit.
+That checks the unit's narrow grant (`scaling_max_freq` only) and polkit's answer for your
+session. The tray should read "Battery … %".
+
+## 🟢 T24 — Does the ONE UP's keyboard illumination reach the system?
+
+**On the ONE UP.** **Unblocks:** a decision on keyboard illumination for the lid's power-save.
+
+The ONE UP shows no keyboard-light control anywhere the system could use: no LED in
+`/sys/class/leds` besides the lock keys. Most likely the keyboard switches its light itself, on
+Fn plus a key. If so, the system never sees the key press. This checks:
+
+```sh
+sudo apt install evtest
+sudo evtest      # pick each "AMIRA-KEYBOAR USB KEYBOARD" device in turn
+```
+
+Press the key combination that changes the keyboard light, a few times, on each device.
+**Report:** whether any event appears, and which. Nothing at all means the light is the
+keyboard's own business, and the lid cannot switch it.
+
+## 🟢 T25 — A first install brings up argond's D-Bus service
+
+**On a machine without argon-utils** -- or after `sudo apt purge argon-utils`, which also removes
+the `argon` user. **Unblocks:** trusting the 0.1.12 fix: on a first install the bus daemon used
+to drop argond's policy (the `argon` user did not exist yet), so argond was refused its bus name
+until the next restart.
+
+```sh
+sudo apt install ./argon-utils_0.1.16_arm64.deb
+journalctl -u argond -b --no-pager -o cat | grep dbus
+```
+
+**Expect** `dbus: serving org.argonutils.Daemon1`, not `not allowed to own the service`.
+On the ONE UP, do this **before** T19 step 2 -- a purge after the takeover hands the laptop back
+to `argononeupd` first.
 
 ## ✅ T21 — Does the lid overlay give logind a working lid switch? — **DONE 2026-09-19: yes** (`OBS-2026-09-19-t21-lid-overlay`)
 
