@@ -73,8 +73,20 @@ pub fn run(args: &Args) -> ExitCode {
     let mut act = Actor {
         dry_run: args.dry_run,
         conn,
-        blocked: Vec::new(),
+        record: radio_record_path(),
     };
+    // Radios a previous run turned off and never turned back on -- it was killed, or the
+    // machine powered off with the lid shut. systemd-rfkill would otherwise keep them off across
+    // the reboot, and the user would find Wi-Fi gone for no visible reason.
+    if !args.dry_run {
+        match act.restore_radios() {
+            Ok(0) => {}
+            Ok(n) => eprintln!(
+                "argonctl: lid-agent: turned {n} radio(s) back on, left off by a previous run"
+            ),
+            Err(e) => eprintln!("argonctl: lid-agent: could not turn leftover radios back on: {e}"),
+        }
+    }
     match logind.get_property::<bool>("LidClosed") {
         Ok(closed) => {
             eprintln!(
@@ -194,15 +206,85 @@ fn logind(conn: &zbus::blocking::Connection) -> zbus::Result<zbus::blocking::Pro
     )
 }
 
-/// Carries out effects, and remembers what it turned off.
+/// Where the agent records the radios it turned off: `$XDG_STATE_HOME/argon-utils/lid-radios`,
+/// or `~/.local/state/argon-utils/lid-radios`.
+fn radio_record_path() -> Option<PathBuf> {
+    let base = std::env::var_os("XDG_STATE_HOME")
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/state")))?;
+    Some(base.join("argon-utils/lid-radios"))
+}
+
+const fn kind_name(kind: Kind) -> Option<&'static str> {
+    match kind {
+        Kind::Wlan => Some("wlan"),
+        Kind::Bluetooth => Some("bluetooth"),
+        Kind::Other => None,
+    }
+}
+
+/// The radios to switch off: Wi-Fi and Bluetooth that are on. A radio the user had off stays
+/// off when the lid opens, because it is never recorded.
+fn to_block(radios: &[rfkill::Radio]) -> Vec<(u32, String)> {
+    radios
+        .iter()
+        .filter(|r| !r.soft_blocked && !r.hard_blocked)
+        .filter_map(|r| kind_name(r.kind).map(|k| (r.index, format!("{k} {}", r.name))))
+        .collect()
+}
+
+/// The indices, now, of the recorded radios that are still switched off in software. Matched by
+/// type and name: rfkill's indices are not stable across reboots.
+fn to_unblock(record: &str, radios: &[rfkill::Radio]) -> Vec<u32> {
+    let wanted: Vec<&str> = record
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect();
+    radios
+        .iter()
+        .filter(|r| r.soft_blocked)
+        .filter(|r| {
+            kind_name(r.kind).is_some_and(|k| wanted.contains(&format!("{k} {}", r.name).as_str()))
+        })
+        .map(|r| r.index)
+        .collect()
+}
+
+/// Carries out effects.
 struct Actor {
     dry_run: bool,
     conn: zbus::blocking::Connection,
-    /// The rfkill indices this agent blocked, to unblock exactly those.
-    blocked: Vec<u32>,
+    /// The record of radios this agent turned off, which survives it.
+    record: Option<PathBuf>,
 }
 
 impl Actor {
+    /// Turns back on the radios on the record, and removes the record. Returns how many.
+    fn restore_radios(&self) -> Result<usize, String> {
+        let Some(record) = self.record.as_ref() else {
+            return Ok(0);
+        };
+        let Ok(text) = std::fs::read_to_string(record) else {
+            return Ok(0);
+        };
+        let indices = to_unblock(&text, &rfkill::radios());
+        let mut failed = Vec::new();
+        for index in &indices {
+            if let Err(e) = rfkill::set_soft_block(*index, false) {
+                failed.push(format!("rfkill{index}: {e}"));
+            }
+        }
+        if failed.is_empty() {
+            let _ = std::fs::remove_file(record);
+            Ok(indices.len())
+        } else {
+            // The record stays, so the next start tries again.
+            Err(failed.join("; "))
+        }
+    }
+
     fn all(&mut self, effects: Vec<Effect>) {
         for e in effects {
             if self.dry_run {
@@ -221,29 +303,27 @@ impl Actor {
             Effect::ScreenOff => screens("--off"),
             Effect::ScreenOn => screens("--on"),
             Effect::RadiosOff => {
-                for r in rfkill::radios() {
-                    let ours = matches!(r.kind, Kind::Wlan | Kind::Bluetooth);
-                    // Only what is on: a radio the user had off stays off when the lid opens.
-                    if ours && !r.soft_blocked && !r.hard_blocked {
-                        rfkill::set_soft_block(r.index, true).map_err(|e| e.to_string())?;
-                        self.blocked.push(r.index);
-                    }
+                let targets = to_block(&rfkill::radios());
+                // Recorded before anything is switched: whatever interrupts this, nothing can
+                // end up off without being on the record.
+                let record = self
+                    .record
+                    .as_ref()
+                    .ok_or("no place to record the radios")?;
+                if let Some(dir) = record.parent() {
+                    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+                }
+                let text = targets.iter().fold(String::new(), |mut t, (_, id)| {
+                    let _ = writeln!(t, "{id}");
+                    t
+                });
+                std::fs::write(record, text).map_err(|e| format!("{}: {e}", record.display()))?;
+                for (index, _) in targets {
+                    rfkill::set_soft_block(index, true).map_err(|e| e.to_string())?;
                 }
                 Ok(())
             }
-            Effect::RadiosRestore => {
-                let mut failed = Vec::new();
-                for index in self.blocked.drain(..) {
-                    if let Err(e) = rfkill::set_soft_block(index, false) {
-                        failed.push(format!("rfkill{index}: {e}"));
-                    }
-                }
-                if failed.is_empty() {
-                    Ok(())
-                } else {
-                    Err(failed.join("; "))
-                }
-            }
+            Effect::RadiosRestore => self.restore_radios().map(|_| ()),
             Effect::CpuCap(capped) => {
                 zbus::blocking::Proxy::new(&self.conn, BUS_NAME, OBJECT_PATH, INTERFACE)
                     .and_then(|p| p.call::<_, _, ()>("SetCpuCap", &(capped,)))
@@ -312,6 +392,46 @@ fn screens(how: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn radio(index: u32, kind: Kind, name: &str, soft: bool, hard: bool) -> rfkill::Radio {
+        rfkill::Radio {
+            index,
+            kind,
+            name: name.into(),
+            soft_blocked: soft,
+            hard_blocked: hard,
+        }
+    }
+
+    #[test]
+    fn only_radios_that_are_on_are_switched_off_and_recorded() {
+        let got = to_block(&[
+            radio(0, Kind::Bluetooth, "hci0", false, false),
+            radio(1, Kind::Wlan, "phy0", true, false),
+            radio(2, Kind::Wlan, "phy1", false, true),
+            radio(3, Kind::Other, "nfc0", false, false),
+        ]);
+        assert_eq!(got, vec![(0, "bluetooth hci0".to_owned())]);
+    }
+
+    #[test]
+    fn the_record_finds_radios_by_name_after_their_indices_change() {
+        // Recorded as bluetooth hci0 and wlan phy0; after a reboot the indices are swapped.
+        let now = [
+            radio(0, Kind::Wlan, "phy0", true, false),
+            radio(1, Kind::Bluetooth, "hci0", true, false),
+            radio(2, Kind::Wlan, "phy9", true, false),
+        ];
+        let mut got = to_unblock("bluetooth hci0\nwlan phy0\n", &now);
+        got.sort_unstable();
+        assert_eq!(got, vec![0, 1], "phy9 was never recorded, so it stays off");
+    }
+
+    #[test]
+    fn a_recorded_radio_already_back_on_is_left_alone() {
+        let now = [radio(0, Kind::Wlan, "phy0", false, false)];
+        assert!(to_unblock("wlan phy0\n", &now).is_empty());
+    }
 
     #[test]
     fn finds_a_lid_switch_by_its_capability_bit() {

@@ -183,7 +183,8 @@ listen = "127.0.0.1:9843"
 action = "power-save"
 
 # power-save: Wi-Fi and Bluetooth off while closed. Only radios that were on are turned off,
-# and only those are turned back on.
+# and only those are turned back on -- also at the next login, if the agent was stopped or the
+# machine powered off with the lid shut (they are recorded in ~/.local/state/argon-utils).
 radios_off = false
 
 # power-save: the CPU capped at its lowest frequency while closed, through argond (polkit

@@ -1,3 +1,13 @@
+argon-utils (0.1.17) unstable; urgency=medium
+
+  * lid-agent: radios it turns off are recorded, by type and name, before
+    they are switched; the next start turns back on whatever a killed
+    agent or a poweroff with the lid shut left off. systemd-rfkill would
+    otherwise carry them across the reboot, leaving Wi-Fi off for no
+    visible reason.
+
+ -- Simon Keimer <dc0sk@mailbox.org>  Sat, 19 Sep 2026 14:00:00 +0200
+
 argon-utils (0.1.16) unstable; urgency=medium
 
   * argonctl lid-agent, autostarted in the desktop session, acts on a
