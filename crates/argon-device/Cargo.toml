@@ -25,7 +25,7 @@ argon-proto = { path = "../argon-proto", version = "0.1.0" }
 serde_json = "1"
 
 [dev-dependencies]
-argon-sim  = { path = "../argon-sim" }
+argon-sim  = { path = "../argon-sim", version = "0.1.0" }
 serialport = "4.10.1"
 
 [lints]

@@ -21,7 +21,7 @@ rustix      = { version = "1", features = ["event"] }
 serialport  = "4.10.1"
 
 [dev-dependencies]
-argon-sim = { path = "../argon-sim" }
+argon-sim = { path = "../argon-sim", version = "0.1.0" }
 
 [lints]
 workspace = true

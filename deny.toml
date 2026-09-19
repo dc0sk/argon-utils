@@ -7,7 +7,9 @@ targets = [
 [licenses]
 # GPL-3.0-or-later project: only GPL-compatible licenses may appear in the tree.
 allow = [
-    "GPL-3.0", "LGPL-3.0", "MPL-2.0",
+    # The -or-later ids are what this workspace's own crates declare; cargo-deny 0.20 does not
+    # read the deprecated "GPL-3.0" as covering them.
+    "GPL-3.0", "GPL-3.0-or-later", "LGPL-3.0", "LGPL-3.0-or-later", "MPL-2.0",
     "Apache-2.0", "MIT", "BSD-2-Clause", "BSD-3-Clause",
     "ISC", "Unicode-3.0", "Zlib",
     # A public-domain dedication; the FSF lists it as GPL-compatible. Needed by ksni, the
