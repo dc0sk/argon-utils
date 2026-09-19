@@ -913,6 +913,26 @@ argond only acts on the battery with `mode = "full"` **and** `argononeupd` stopp
 gives up whatever else it does on the ONE UP -- at least the lid switch it holds on GPIO27,
 which argond does not handle. That is a decision for you, not a test step: see OPEN.md, B8.
 
+## 🟢 T21 — Does the lid overlay give logind a working lid switch?
+
+**On the ONE UP.** **Unblocks:** enabling `argon-oneup-lid.dtbo` for good (packaging README), and
+with it T19 step 2.
+
+**Nothing permanent.** The overlay is loaded at runtime from `~/argon-oneup-lid.dtbo`, not
+through `config.txt`. The script stops `argononeupd` (the kernel needs GPIO27), and on exit --
+however it exits -- removes the overlay and starts `argononeupd` again. While it watches, it
+holds a `handle-lid-switch` inhibitor, so logind sees the lid but does not act on it (its
+default action is suspend, which this Pi cannot do anyway).
+
+```sh
+ssh -t dc0sk@one-up-pi ./t21-lid-overlay.sh
+```
+
+When it says *watching*: close the lid, wait about 5 s, open it; then once more.
+
+**Expect:** an input device named "Argon ONE UP lid", logind logging that it watches it, and
+`LidClosed` going `b true` and `b false` in step with the lid. **Report:** `~/argon-t21.log`.
+
 ## ✅ T20 — Is GPIO27 the ONE UP's lid switch? — **DONE 2026-09-19: yes** (high open, low closed; `OBS-2026-09-19-t20-one-up-lid`)
 
 **On the ONE UP.** **Unblocks:** T19 step 2 -- argond can only take over from `argononeupd` if
