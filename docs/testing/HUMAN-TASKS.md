@@ -913,6 +913,30 @@ argond only acts on the battery with `mode = "full"` **and** `argononeupd` stopp
 gives up whatever else it does on the ONE UP -- at least the lid switch it holds on GPIO27,
 which argond does not handle. That is a decision for you, not a test step: see OPEN.md, B8.
 
+## 🟢 T20 — Is GPIO27 the ONE UP's lid switch?
+
+**On the ONE UP.** **Unblocks:** T19 step 2 -- argond can only take over from `argononeupd` if
+what it does is understood, and the lid is the part known to matter (`ONEUP-GPIO27`:
+held by the vendor daemon, purpose only `inferred`).
+
+**Read-only.** It watches the line and writes nothing. `argononeupd` holds the line, so the
+script stops it for up to 90 s and **always starts it again**, even if interrupted. While it is
+stopped, closing the lid does whatever the ONE UP does without it -- the point of the test.
+
+Run it from the ONE V5 (or anywhere), so the terminal stays readable with the lid shut:
+
+```sh
+ssh -t dc0sk@one-up-pi ./t20-lid.sh
+```
+
+When it says *watching*: close the lid, wait about 5 s, open it; then once more. It stops by
+itself after four edges.
+
+**Expect**, if GPIO27 is the lid: the level reads one way with the lid open, and four events
+alternate falling / rising, seconds apart, in step with closing and opening. **Report:**
+`~/argon-t20.log` on the ONE UP, and whether anything else happened when the lid closed (screen
+off, suspend, nothing).
+
 ## 🟡 T13 — Does the polkit rule work for the packaged daemon? — **step 1 DONE 2026-09-17: yes**
 
 **Unblocks:** trusting the low-battery poweroff when `argond` runs as the `argon` system user
