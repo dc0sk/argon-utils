@@ -65,6 +65,17 @@ impl ArgonTray {
 }
 
 impl ksni::Tray for ArgonTray {
+    /// No panel is hosting tray icons -- at login, before the panel has started, or because it
+    /// was stopped. Keep waiting: ksni registers the icon as soon as a panel appears.
+    fn watcher_offline(&self, reason: ksni::OfflineReason) -> bool {
+        eprintln!("argon-tray: no panel is hosting tray icons ({reason:?}); waiting for one");
+        true
+    }
+
+    fn watcher_online(&self) {
+        eprintln!("argon-tray: a panel is hosting tray icons again; showing the icon");
+    }
+
     fn id(&self) -> String {
         "argon-utils".into()
     }

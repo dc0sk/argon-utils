@@ -1,3 +1,12 @@
+argon-utils (0.1.19) unstable; urgency=medium
+
+  * argon-tray waits for a panel instead of exiting when none is hosting
+    tray icons yet. Started from autostart before the panel, it exited
+    for good (seen on the ONE UP); it now logs that it is waiting and
+    shows the icon once the panel is up.
+
+ -- Simon Keimer <dc0sk@mailbox.org>  Sat, 19 Sep 2026 17:45:00 +0200
+
 argon-utils (0.1.18) unstable; urgency=medium
 
   * lid-agent: waking the screen power-cycles the output (off, then on).

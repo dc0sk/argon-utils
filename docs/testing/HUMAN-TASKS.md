@@ -947,7 +947,7 @@ org.freedesktop.login1.Manager LidClosed` follows the lid; closing it does what 
 `journalctl -u argond -b -o cat | grep ups` shows the gauge and, with `--full`, "shutdown
 ENABLED". Undo exactly with `sudo /usr/libexec/argon-utils/oneup-restore` and a reboot.
 
-## 🟡 T22 — The lid actions on the ONE UP — **step 1 DONE 2026-09-19: works**
+## ✅ T22 — The lid actions on the ONE UP — **DONE 2026-09-19: all four steps work**
 
 **On the ONE UP**, after T19 step 2 (0.1.17, lid overlay enabled, `argononeupd` disabled,
 rebooted). **Unblocks:** calling the lid actions supported.
@@ -992,7 +992,27 @@ Restart it the same way after each change to `config.toml`.
   every opening (a cancelled shutdown included), and finds the Wayland socket when the agent was
   started outside the desktop; `t22-lid.sh` refuses to run outside the desktop.
 
-Afterwards set `[lid]` to what you want to keep. **Report:** `~/argon-t22.log`, and anything that
+- **Step 2 passed, from the desktop (0.1.18):** `ScreenOff`/`RadiosOff`/`CpuCap(true)` on
+  closing, `ScreenOn`/`RadiosRestore`/`CpuCap(false)` on opening; argond logged the cap set and
+  lifted; the screen came back by itself; radios on and the CPU limit at exactly 2400000 after.
+- **Step 3 passed:** `ShutdownAlert(10s)` with the sound on closing (the notification is shown
+  while the lid is shut, so it is the sound that reaches the user); opening logged `ScreenOn`,
+  `ShutdownCancelled`; nothing was scheduled, the machine stayed up.
+- **Step 4 passed:** the sound, then a clean poweroff about a second after closing.
+- **The boot after step 4 went wrong, and not visibly because of argon-utils:** the keyboard's
+  second USB device (`6080:8060`, port 1-1.7: system, radio and media keys) failed four
+  descriptor reads (`error -110`) and only enumerated a minute late; at that moment labwc lost
+  the other device's keyboard and touchpad (`6080:8061`, 1-1.6: `Failed to open device …
+  Resource temporarily unavailable`), leaving no input; and neither `wf-panel-pi` nor
+  `pcmanfm-pi` (nor their `lwrespawn`) was running, with nothing logged. Input came back after
+  re-binding 1-1.6; the desktop after starting `lwrespawn /usr/bin/wf-panel-pi` and
+  `lwrespawn /usr/bin/pcmanfm-pi` by hand. One occurrence, on the only boot so far after a
+  lid-triggered poweroff: watch the next boots before drawing a line between the two.
+- **Also found:** `argon-tray` exited at login because the panel was not up yet (fixed in
+  0.1.19: it waits for the panel).
+
+Afterwards set `[lid]` to what you want to keep. (Set back to the default, power-save with the
+screen only, on 2026-09-19.) **Report:** `~/argon-t22.log`, and anything that
 did not look or sound right.
 
 ## 🟢 T23 — 0.1.17 on the ONE V5, and the CPU cap

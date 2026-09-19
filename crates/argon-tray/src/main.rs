@@ -126,7 +126,10 @@ fn main() -> ExitCode {
 
     let tray = tray::ArgonTray::new(first.clone());
     let ours = std::sync::Arc::clone(&tray.ours);
-    let handle = match tray.spawn() {
+    // Autostart can run before the panel is up: on the ONE UP the tray was started, found no
+    // StatusNotifierWatcher, and exited for good. Treat a missing panel as "not yet" -- ksni
+    // then registers the icon when the panel appears (see ArgonTray::watcher_offline).
+    let handle = match tray.assume_sni_available(true).spawn() {
         Ok(h) => h,
         Err(e) => {
             // No StatusNotifierWatcher on the session bus: a panel without tray support, or
