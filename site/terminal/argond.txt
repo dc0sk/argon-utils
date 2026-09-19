@@ -1,0 +1,7 @@
+$ journalctl -u argond -o cat | grep argond:
+argond: mode full (configured full)
+argond: ups: ONE UP battery: shutdown ENABLED: poweroff 2 min after the battery is confirmed critical, cancelled once it stops discharging
+argond: ups: ONE UP fuel gauge: CW2217 at /dev/i2c-1 @ 0x64; 28 charge cycles, health 100%
+argond: ups: unknown -> on mains at 100%
+argond: ups: ONE UP battery resting on the charger at 100% (4.401 V, current -1)
+argond: dbus: serving org.argonutils.Daemon1 at /org/argonutils/Daemon1

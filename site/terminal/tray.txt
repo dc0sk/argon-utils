@@ -1,0 +1,7 @@
+$ argon-tray --once
+icon      battery-level-90-charging-symbolic
+urgency   Normal
+headline  Battery 92 % · on mains
+          CPU 55 °C
+          Fan 2910 rpm (29 %)
+logind    no shutdown scheduled

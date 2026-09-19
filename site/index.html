@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>argon-utils</title>
+<meta name="description" content="Open, safe control software for Argon40 Raspberry Pi cases, the Argon PWR UPS and the Argon ONE UP laptop.">
+<style>
+:root {
+  --bg: #f7f8fa; --fg: #1a1d23; --muted: #5b6270; --card: #ffffff; --line: #e1e4ea;
+  --accent: #0b6bcb; --accent-soft: #e6f0fb; --ok: #1a7f37; --code: #eef1f5;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0f1216; --fg: #e6e9ee; --muted: #9aa3b2; --card: #171b21; --line: #2a3039;
+          --accent: #5aa9f5; --accent-soft: #15283d; --ok: #56d364; --code: #1d232b; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg);
+       font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+a { color: var(--accent); }
+.wrap { max-width: 1040px; margin: 0 auto; padding: 0 16px; }
+header { padding: 56px 0 32px; }
+h1 { font-size: 2.6rem; margin: 0 0 8px; letter-spacing: -0.02em; }
+.tagline { font-size: 1.2rem; color: var(--muted); max-width: 46em; margin: 0 0 20px; }
+.buttons a { display: inline-block; margin: 4px 8px 4px 0; padding: 9px 16px; border-radius: 8px;
+             text-decoration: none; font-weight: 600; border: 1px solid var(--line); }
+.buttons a.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.status { margin: 20px 0 0; padding: 12px 16px; border-left: 4px solid var(--accent);
+          background: var(--accent-soft); border-radius: 6px; }
+section { padding: 28px 0; border-top: 1px solid var(--line); }
+h2 { font-size: 1.5rem; margin: 0 0 16px; }
+.gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+figure { margin: 0; background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+         padding: 12px; }
+figure img { width: 100%; height: auto; display: block; border-radius: 6px; }
+figcaption { font-size: 0.9rem; color: var(--muted); margin-top: 8px; }
+.terms { display: grid; grid-template-columns: 1fr; gap: 16px; max-width: 900px; }
+.features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+.card h3 { margin: 0 0 8px; font-size: 1.05rem; }
+.card ul { margin: 0; padding-left: 18px; }
+.card li { margin: 4px 0; }
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; background: var(--card); border: 1px solid var(--line);
+        border-radius: 10px; overflow: hidden; font-size: 0.95rem; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { background: var(--code); }
+tr:last-child td { border-bottom: 0; }
+td.s { white-space: nowrap; }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 0.82rem;
+         font-weight: 600; margin-right: 6px; border: 1px solid var(--line); }
+.b-ok { color: var(--ok); border-color: var(--ok); }
+.b-part { color: #b26a00; border-color: #b26a00; }
+.b-plan { color: var(--accent); border-color: var(--accent); }
+.b-none { color: var(--muted); }
+td.s .note { color: var(--muted); font-size: 0.88rem; white-space: normal; }
+code, pre { background: var(--code); border-radius: 6px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+code { padding: 1px 5px; font-size: 0.92em; }
+pre { padding: 14px 16px; overflow-x: auto; }
+.legend { color: var(--muted); font-size: 0.92rem; margin: 10px 0 0; }
+footer { padding: 28px 0 48px; color: var(--muted); font-size: 0.9rem; border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>argon-utils</h1>
+  <p class="tagline">Open, safe control software for Argon40's Raspberry Pi cases, the Argon PWR UPS
+    and the Argon ONE UP laptop &mdash; written in Rust, GPL-licensed, and built clean-room from
+    published documentation and measurements of real hardware.</p>
+  <div class="buttons">
+    <a class="primary" href="https://github.com/dc0sk/argon-utils">Source on GitHub</a>
+    <a href="https://github.com/dc0sk/argon-utils/blob/main/packaging/README.md">Install</a>
+    <a href="https://github.com/dc0sk/argon-utils/blob/main/docs/testing/HUMAN-TASKS.md">Hardware tests</a>
+  </div>
+  <p class="status"><strong>Status:</strong> in daily use on a Raspberry Pi 5 in an Argon ONE V5 with
+    the PWR UPS, and on an Argon ONE UP laptop that it has taken over from the vendor's software.
+    Every claim here says how it was verified.</p>
+</header>
+
+<section>
+  <h2>The case display</h2>
+  <div class="gallery">
+    <figure><img src="img/oled-mains.png" alt="OLED page: BAT 92%, MAINS, a full charge bar, CPU and fan">
+      <figcaption>On mains: charge, state, CPU temperature and fan.</figcaption></figure>
+    <figure><img src="img/oled-battery.png" alt="OLED page: BAT 64%, BATTERY">
+      <figcaption>Running on the battery.</figcaption></figure>
+    <figure><img src="img/oled-critical.png" alt="OLED page: BAT 9%, CRITICAL, power off at 21:42, plug in mains to cancel">
+      <figcaption>Battery critical: the poweroff time, and how to cancel it.</figcaption></figure>
+  </div>
+  <p class="legend">Rendered by the same drawing code argond runs on the ONE V5's OLED, from example readings.</p>
+</section>
+
+<section>
+  <h2>At the command line</h2>
+  <div class="terms">
+    <figure><img src="img/battery.svg" alt="argonctl battery: charge, voltage, current and flow read from the ONE UP's fuel gauge">
+      <figcaption><code>argonctl battery</code> on an Argon ONE UP: its fuel gauge, read-only.</figcaption></figure>
+    <figure><img src="img/argond.svg" alt="argond's log on the ONE UP: shutdown enabled, fuel gauge found, on mains">
+      <figcaption>argond taking over the ONE UP's battery.</figcaption></figure>
+    <figure><img src="img/tray.svg" alt="argon-tray --once: Battery 92 % on mains, CPU, fan, no shutdown scheduled">
+      <figcaption>What the panel icon shows, as text.</figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <h2>Features</h2>
+  <div class="features">
+    <div class="card"><h3>Power</h3><ul>
+      <li>UPS monitoring over the PWR UPS's serial protocol</li>
+      <li>Safe low-battery shutdown: confirmed, delayed, cancelled when mains returns</li>
+      <li>Power off and wake at a set time</li>
+      <li>UPS clock kept in step, drift recorded</li>
+      <li>ONE UP battery from its fuel gauge</li></ul></div>
+    <div class="card"><h3>Laptop lid (ONE UP)</h3><ul>
+      <li>A standard Linux lid switch, via a device-tree overlay</li>
+      <li>Power-save: screen off; optionally radios off and CPU capped &mdash; all undone on opening</li>
+      <li>Or: an alert with a sound, then power off</li></ul></div>
+    <div class="card"><h3>Desktop and tools</h3><ul>
+      <li>Panel icon with charge, temperature and fan</li>
+      <li>Desktop notifications</li>
+      <li>OLED status page</li>
+      <li><code>argonctl</code> with manual pages</li>
+      <li>D-Bus service, guarded by polkit</li></ul></div>
+    <div class="card"><h3>Built to be trusted</h3><ul>
+      <li>Read-only until you set <code>mode = "full"</code></li>
+      <li>Writes gated by type, not by <code>if</code>s</li>
+      <li>Unprivileged, sandboxed daemon</li>
+      <li>Everything reversible, vendor software restored on removal</li></ul></div>
+  </div>
+</section>
+
+<section>
+  <h2>Supported Argon products</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Product</th><th>What argon-utils does</th><th>Status</th></tr>
+    <tr><td><strong>Argon PWR UPS</strong> (27 W, 5000 / 10000 mAh)</td><td>Battery and mains monitoring, low-battery shutdown, UPS clock</td><td class="s"><span class="badge b-ok">tested</span></td></tr>
+    <tr><td></td><td>Power off and wake at a set time</td><td class="s"><span class="badge b-part">partly</span><span class="note">wake set and read back; the wake itself not yet seen</span></td></tr>
+    <tr><td><strong>Argon ONE V5</strong> with Raspberry Pi 5</td><td>OLED status page; fan reported (the kernel drives it)</td><td class="s"><span class="badge b-ok">tested</span></td></tr>
+    <tr><td><strong>Argon Industria Zigbee module</strong></td><td>Detection and a non-disruptive firmware probe</td><td class="s"><span class="badge b-ok">tested</span></td></tr>
+    <tr><td><strong>Argon ONE UP</strong> (CM5 laptop)</td><td>Battery, lid switch, lid actions, hand-over from the vendor daemon</td><td class="s"><span class="badge b-ok">tested</span></td></tr>
+    <tr><td></td><td>Keyboard illumination</td><td class="s"><span class="badge b-none">no</span><span class="note">no host control found</span></td></tr>
+    <tr><td><strong>Argon ONE V2 / V3</strong> with Raspberry Pi 4</td><td>Fan control and power button through the case's microcontroller</td><td class="s"><span class="badge b-plan">planned</span></td></tr>
+    <tr><td><strong>Argon EON</strong>, <strong>Fan HAT</strong></td><td>Fan, clock, OLED</td><td class="s"><span class="badge b-plan">planned</span><span class="note">only with hardware to test</span></td></tr>
+    <tr><td><strong>NEO 5</strong>, NVMe boards, <strong>POLY+</strong>, <strong>THRML</strong>, Mini Fan, HMI displays, <strong>BLSTR DAC</strong></td><td>Passive, or handled by standard Linux drivers</td><td class="s"><span class="badge b-none">n/a</span><span class="note">nothing to control</span></td></tr>
+  </table></div>
+  <p class="legend">The project supports hardware it can test, and says so; nothing ships as blind support.</p>
+</section>
+
+<section>
+  <h2>Install</h2>
+  <p>Build the Debian package on the Pi, then install it. It starts read-only; nothing is switched
+    on until you choose.</p>
+<pre><code>dpkg-buildpackage -b -us -uc
+sudo apt install ../argon-utils_*_arm64.deb
+sudoedit /etc/argon-utils/config.toml     # mode, [ups] source, [oled], [lid]
+sudo systemctl restart argond</code></pre>
+  <p>On an Argon ONE UP, <code>/usr/libexec/argon-utils/oneup-takeover --full</code> hands the battery
+    and lid over from the vendor's daemon; <code>oneup-restore</code> gives them back. Details in the
+    <a href="https://github.com/dc0sk/argon-utils/blob/main/packaging/README.md">packaging README</a>.</p>
+</section>
+
+<section>
+  <h2>Clean room</h2>
+  <p>Argon40's own software carries no licence, so this project does not copy or translate it.
+    Everything is written against specifications from published documentation, component datasheets
+    and our own captures &mdash; each fact with its provenance &mdash; and nothing unverified may
+    drive a write to hardware. See
+    <a href="https://github.com/dc0sk/argon-utils/blob/main/CLEANROOM.md">CLEANROOM.md</a> and
+    <a href="https://github.com/dc0sk/argon-utils/blob/main/docs/protocol/FACTS.md">the protocol facts</a>.</p>
+</section>
+
+<footer>
+  argon-utils is GPL-3.0-or-later; its protocol library <code>argon-proto</code> is
+  GPL-3.0-or-later OR MPL-2.0. Argon40, ONE, EON, NEO, PWR, POLY, THRML, BLSTR and Industria are
+  Argon40's names for their products; this project is not affiliated with Argon40.
+</footer>
+
+</div>
+</body>
+</html>

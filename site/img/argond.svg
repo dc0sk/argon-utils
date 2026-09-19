@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="838" height="214" viewBox="0 0 838 214" role="img" aria-label="$ journalctl -u argond -o cat | grep argond:">
+<rect width="838" height="214" rx="10" fill="#0f1419"/>
+<rect width="838" height="30" rx="10" fill="#1d232b"/>
+<rect y="20" width="838" height="10" fill="#1d232b"/>
+<circle cx="18" cy="15" r="6" fill="#ff5f57"/>
+<circle cx="38" cy="15" r="6" fill="#febc2e"/>
+<circle cx="58" cy="15" r="6" fill="#28c840"/>
+<g font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="14" xml:space="preserve">
+<text x="16" y="60" fill="#7ee787">$ journalctl -u argond -o cat | grep argond:</text>
+<text x="16" y="79" fill="#d6deeb">argond: mode full (configured full)</text>
+<text x="16" y="98" fill="#d6deeb">argond: ups: ONE UP battery: shutdown ENABLED: poweroff 2 min after the battery is confirmed</text>
+<text x="16" y="117" fill="#d6deeb">    critical, cancelled once it stops discharging</text>
+<text x="16" y="136" fill="#d6deeb">argond: ups: ONE UP fuel gauge: CW2217 at /dev/i2c-1 @ 0x64; 28 charge cycles, health 100%</text>
+<text x="16" y="155" fill="#d6deeb">argond: ups: unknown -&gt; on mains at 100%</text>
+<text x="16" y="174" fill="#d6deeb">argond: ups: ONE UP battery resting on the charger at 100% (4.401 V, current -1)</text>
+<text x="16" y="193" fill="#d6deeb">argond: dbus: serving org.argonutils.Daemon1 at /org/argonutils/Daemon1</text>
+</g></svg>

@@ -8,9 +8,22 @@ Argon40's own tools are Python scripts installed by a `curl | bash` script, with
 all. `argon-utils` replaces them with a daemon you can trust around your power supply, a CLI with
 machine-readable output, a panel icon, and a Debian package.
 
-> **Status:** in daily use on a Raspberry Pi 5 in an Argon ONE V5 with the PWR UPS, and running on
-> an Argon ONE UP. Every claim below says how it was verified — see
-> [Evidence tiers](#evidence-tiers).
+> **Status:** in daily use on a Raspberry Pi 5 in an Argon ONE V5 with the PWR UPS, and on an Argon
+> ONE UP laptop that it has taken over from the vendor's software. Every claim below says how it
+> was verified — see [Evidence tiers](#evidence-tiers).
+
+**Project page: <https://dc0sk.github.io/argon-utils/>**
+
+<p align="center">
+  <img src="site/img/oled-mains.png" width="32%" alt="OLED page: BAT 92%, MAINS, charge bar, CPU and fan">
+  <img src="site/img/oled-battery.png" width="32%" alt="OLED page: BAT 64%, BATTERY">
+  <img src="site/img/oled-critical.png" width="32%" alt="OLED page: BAT 9%, CRITICAL, power off at 21:42">
+</p>
+<p align="center"><sub>The ONE V5's case display, rendered by the same code argond runs, from example readings.</sub></p>
+
+<p align="center">
+  <img src="site/img/battery.svg" width="80%" alt="argonctl battery on an Argon ONE UP: charge, voltage, current and flow from its fuel gauge">
+</p>
 
 ## Features
 
@@ -69,12 +82,11 @@ machine-readable output, a panel icon, and a Debian package.
 | Product | What argon-utils does | Status |
 |---|---|---|
 | **Argon PWR UPS** (27 W, 5000 / 10000 mAh) | Battery and mains monitoring, low-battery shutdown, UPS clock and drift record | ✅ one unit |
-| | Power off and wake at a set time | 🧪 wake set and read back; the wake itself not yet seen |
+| | Power off and wake at a set time | 🧪 wake set and read back; the wake itself not yet seen (T18) |
 | **Argon ONE V5** with Raspberry Pi 5 | OLED status page; fan reported (the Pi's kernel drives it) | ✅ |
 | **Argon ONE V5 OLED module** | Status page: charge, state, CPU temperature, fan | ✅ |
 | **Argon Industria Zigbee module** | Detection and a non-disruptive firmware-version probe | ✅ |
-| **Argon ONE UP** (CM5 laptop) | Battery from the fuel gauge; the lid as a lid switch | ✅ |
-| | Lid actions (power-save / shutdown); hand-over from the vendor daemon | 🧪 |
+| **Argon ONE UP** (CM5 laptop) | Battery from the fuel gauge; the lid as a lid switch; lid actions (power-save / shutdown); hand-over from the vendor daemon | ✅ (T19–T22) |
 | | Keyboard illumination | — no host control found |
 | **Argon ONE V2 / V3** with Raspberry Pi 4 | Fan control and power button through the case's microcontroller | 🗓 hardware available |
 | **Argon EON** Pi NAS | Fan, real-time clock, OLED | 🗓 no hardware to test |
@@ -154,6 +166,10 @@ and their results as captures in [`docs/protocol/captures/`](docs/protocol/captu
 ```sh
 ./scripts/gate.sh     # everything CI runs: fmt, clippy, tests, no_std, clean-room canary, …
 ```
+
+The images in `site/img/` are generated, not screen captures: `./scripts/screenshots.py` renders
+the OLED pages with argond's own drawing code and the terminal images from `site/terminal/`. The
+project page is `site/`, published to GitHub Pages by `.github/workflows/pages.yml`.
 
 The gate reports each command's real exit status. That is worth stating because a piped
 `cargo clippy | grep error | head` reports the status of `head`, so a failing lint reads as a

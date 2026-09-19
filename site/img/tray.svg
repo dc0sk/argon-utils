@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="838" height="195" viewBox="0 0 838 195" role="img" aria-label="$ argon-tray --once">
+<rect width="838" height="195" rx="10" fill="#0f1419"/>
+<rect width="838" height="30" rx="10" fill="#1d232b"/>
+<rect y="20" width="838" height="10" fill="#1d232b"/>
+<circle cx="18" cy="15" r="6" fill="#ff5f57"/>
+<circle cx="38" cy="15" r="6" fill="#febc2e"/>
+<circle cx="58" cy="15" r="6" fill="#28c840"/>
+<g font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="14" xml:space="preserve">
+<text x="16" y="60" fill="#7ee787">$ argon-tray --once</text>
+<text x="16" y="79" fill="#d6deeb">icon      battery-level-90-charging-symbolic</text>
+<text x="16" y="98" fill="#d6deeb">urgency   Normal</text>
+<text x="16" y="117" fill="#d6deeb">headline  Battery 92 % · on mains</text>
+<text x="16" y="136" fill="#d6deeb">          CPU 55 °C</text>
+<text x="16" y="155" fill="#d6deeb">          Fan 2910 rpm (29 %)</text>
+<text x="16" y="174" fill="#d6deeb">logind    no shutdown scheduled</text>
+</g></svg>

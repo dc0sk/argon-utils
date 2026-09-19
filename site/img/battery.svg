@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="838" height="271" viewBox="0 0 838 271" role="img" aria-label="$ argonctl battery --count 3 --interval 1">
+<rect width="838" height="271" rx="10" fill="#0f1419"/>
+<rect width="838" height="30" rx="10" fill="#1d232b"/>
+<rect y="20" width="838" height="10" fill="#1d232b"/>
+<circle cx="18" cy="15" r="6" fill="#ff5f57"/>
+<circle cx="38" cy="15" r="6" fill="#febc2e"/>
+<circle cx="58" cy="15" r="6" fill="#28c840"/>
+<g font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="14" xml:space="preserve">
+<text x="16" y="60" fill="#7ee787">$ argonctl battery --count 3 --interval 1</text>
+<text x="16" y="79" fill="#d6deeb">CW2217 fuel gauge at /dev/i2c-1 @ 0x64</text>
+<text x="16" y="98" fill="#d6deeb">  28 charge cycles, state of health 100 %</text>
+<text x="16" y="117" fill="#d6deeb"></text>
+<text x="16" y="136" fill="#d6deeb">  charge   voltage    current  flow          policy sees</text>
+<text x="16" y="155" fill="#d6deeb">    100 %  4.4013 V       -5  idle          on mains</text>
+<text x="16" y="174" fill="#d6deeb">    100 %  4.4009 V       -5  idle          on mains</text>
+<text x="16" y="193" fill="#d6deeb">    100 %  4.4013 V       -5  idle          on mains</text>
+<text x="16" y="212" fill="#d6deeb"></text>
+<text x="16" y="231" fill="#d6deeb">Current is the raw register: positive charging, negative discharging. It is not in</text>
+<text x="16" y="250" fill="#d6deeb">amperes, because the ONE UP&#x27;s sense resistor is not known.</text>
+</g></svg>

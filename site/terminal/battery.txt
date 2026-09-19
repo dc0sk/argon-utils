@@ -1,0 +1,11 @@
+$ argonctl battery --count 3 --interval 1
+CW2217 fuel gauge at /dev/i2c-1 @ 0x64
+  28 charge cycles, state of health 100 %
+
+  charge   voltage    current  flow          policy sees
+    100 %  4.4013 V       -5  idle          on mains
+    100 %  4.4009 V       -5  idle          on mains
+    100 %  4.4013 V       -5  idle          on mains
+
+Current is the raw register: positive charging, negative discharging. It is not in
+amperes, because the ONE UP's sense resistor is not known.
