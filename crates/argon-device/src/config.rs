@@ -37,6 +37,8 @@ pub struct Config {
     pub telemetry: TelemetryConfig,
     /// The case OLED.
     pub oled: OledConfig,
+    /// What closing a laptop lid does (the Argon ONE UP).
+    pub lid: LidConfig,
 }
 
 impl Default for Config {
@@ -48,7 +50,57 @@ impl Default for Config {
             ups: UpsConfig::default(),
             telemetry: TelemetryConfig::default(),
             oled: OledConfig::default(),
+            lid: LidConfig::default(),
         }
+    }
+}
+
+/// What closing the lid does. Acted on by `argonctl lid-agent` in the desktop session.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct LidConfig {
+    /// `power-save`: save power while closed, undone when opened. `shutdown`: alert, then power
+    /// off after `shutdown_delay_s` unless the lid is opened first.
+    pub action: String,
+    /// With `power-save`: Wi-Fi and Bluetooth off while closed, restored as they were.
+    pub radios_off: bool,
+    /// With `power-save`: the CPU capped at its lowest frequency while closed, through argond.
+    pub cpu_throttle: bool,
+    /// With `shutdown`: seconds from the alert to the poweroff.
+    pub shutdown_delay_s: u64,
+}
+
+impl Default for LidConfig {
+    fn default() -> Self {
+        Self {
+            action: "power-save".to_owned(),
+            radios_off: false,
+            cpu_throttle: false,
+            shutdown_delay_s: 1,
+        }
+    }
+}
+
+impl LidConfig {
+    /// The upper bound on `shutdown_delay_s`. Past a minute the laptop is in a bag, warming.
+    pub const MAX_SHUTDOWN_DELAY_S: u64 = 60;
+
+    fn validate(&self) -> Result<(), ConfigError> {
+        if !matches!(self.action.as_str(), "power-save" | "shutdown") {
+            return Err(ConfigError::BadValue {
+                key: "lid.action",
+                got: self.action.clone(),
+                expected: "power-save or shutdown",
+            });
+        }
+        if self.shutdown_delay_s > Self::MAX_SHUTDOWN_DELAY_S {
+            return Err(ConfigError::BadValue {
+                key: "lid.shutdown_delay_s",
+                got: self.shutdown_delay_s.to_string(),
+                expected: "0 to 60 seconds",
+            });
+        }
+        Ok(())
     }
 }
 
@@ -336,6 +388,7 @@ impl Config {
     fn validate(&self) -> Result<(), ConfigError> {
         self.mode()?;
         self.fan_curve()?;
+        self.lid.validate()?;
 
         if self.oled.refresh_s == 0 {
             return Err(ConfigError::BadValue {

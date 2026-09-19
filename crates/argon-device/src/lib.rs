@@ -12,6 +12,7 @@ pub mod drift;
 pub mod fan;
 pub mod fan_control;
 pub mod gauge;
+pub mod lid;
 pub mod mcu;
 pub mod oled;
 pub mod oled_page;

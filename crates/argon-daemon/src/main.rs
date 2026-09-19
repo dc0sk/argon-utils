@@ -32,6 +32,7 @@ use std::thread::JoinHandle;
 use std::time::{Duration, SystemTime};
 
 mod control;
+mod cpu_cap;
 mod dbus;
 mod exporter;
 mod gauge;

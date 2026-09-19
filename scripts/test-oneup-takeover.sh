@@ -25,17 +25,16 @@ export ARGON_ROOT="$R" SYSTEMCTL="$R/bin/systemctl"
 t="$here/packaging/oneup/takeover.sh"
 r="$here/packaging/oneup/restore.sh"
 
-"$t" suspend >/dev/null 2>&1 && fail "suspend accepted"
-"$t" >/dev/null 2>&1 && fail "no action accepted"
+"$t" lock >/dev/null 2>&1 && fail "an unknown argument was accepted"
 [ -e "$R/var/lib/argon-utils/oneup-takeover" ] && fail "a refused run left a record"
 
-"$t" lock --full >/dev/null
+"$t" --full >/dev/null
 grep -q '^dtoverlay=argon-oneup-lid$' "$R/boot/firmware/config.txt" || fail "no overlay line"
 [ -e "$R/boot/firmware/overlays/argon-oneup-lid.dtbo" ] || fail "overlay not installed"
-grep -q '^HandleLidSwitch=lock$' "$R/etc/systemd/logind.conf.d/50-argon-oneup-lid.conf" || fail "no drop-in"
+grep -q '^HandleLidSwitch=ignore$' "$R/etc/systemd/logind.conf.d/50-argon-oneup-lid.conf" || fail "no drop-in"
 grep -q '^mode = "full"$' "$R/etc/argon-utils/config.toml" || fail "mode not full"
 grep -q '^disable --now argononeupd$' "$R/systemctl.log" || fail "argononeupd not disabled"
-"$t" lock >/dev/null 2>&1 && fail "a second takeover was accepted"
+"$t" >/dev/null 2>&1 && fail "a second takeover was accepted"
 
 "$r" >/dev/null
 cmp -s "$R/original-config.txt" "$R/boot/firmware/config.txt" || fail "config.txt not restored: $(diff "$R/original-config.txt" "$R/boot/firmware/config.txt")"
@@ -46,7 +45,7 @@ grep -q '^enable argononeupd$' "$R/systemctl.log" || fail "argononeupd not re-en
 [ -e "$R/var/lib/argon-utils/oneup-takeover" ] && fail "record left behind"
 
 # Without --full the mode is left as it was.
-"$t" ignore >/dev/null
+"$t" >/dev/null
 grep -q '^mode = "read-only"$' "$R/etc/argon-utils/config.toml" || fail "mode changed without --full"
 "$r" >/dev/null
 cmp -s "$R/original-config.txt" "$R/boot/firmware/config.txt" || fail "second restore not exact"

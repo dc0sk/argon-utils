@@ -169,3 +169,28 @@ enabled = false
 # Port 9843 is not registered with the Prometheus project; it was picked to avoid the
 # commonly-used exporter ports. Change it freely.
 listen = "127.0.0.1:9843"
+
+[lid]
+# What closing a laptop lid does -- the Argon ONE UP, once its lid overlay is enabled
+# (/usr/libexec/argon-utils/oneup-takeover). Carried out by `argonctl lid-agent` in the desktop
+# session; logind is set to ignore the lid so the two do not both act. Nothing here applies to a
+# machine without a lid.
+#
+#   "power-save"  the screen off while closed, and on again when opened. The options below add
+#                 to it; everything is undone when the lid opens.
+#   "shutdown"    an alert with a sound, then power off after shutdown_delay_s -- cancelled if
+#                 the lid is opened first.
+action = "power-save"
+
+# power-save: Wi-Fi and Bluetooth off while closed. Only radios that were on are turned off,
+# and only those are turned back on.
+radios_off = false
+
+# power-save: the CPU capped at its lowest frequency while closed, through argond (polkit
+# action org.argonutils.cpu-cap). The previous limit is put back exactly.
+cpu_throttle = false
+
+# shutdown: seconds from the alert to the poweroff, 0 to 60.
+shutdown_delay_s = 1
+
+# The keyboard's illumination is not controlled: on the ONE UP the host sees no control for it.

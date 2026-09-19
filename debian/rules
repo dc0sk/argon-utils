@@ -68,3 +68,5 @@ override_dh_auto_install:
 		debian/argon-utils/etc/xdg/autostart/argon-notify-agent.desktop
 	install -D -m 0644 packaging/xdg/argon-tray.desktop \
 		debian/argon-utils/etc/xdg/autostart/argon-tray.desktop
+	install -D -m 0644 packaging/xdg/argon-lid-agent.desktop \
+		debian/argon-utils/etc/xdg/autostart/argon-lid-agent.desktop

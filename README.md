@@ -35,7 +35,7 @@ On the CM5 laptop -- `observed` on one unit:
 | Feature | What it does | Verified |
 |---|---|---|
 | **Battery** | with `[ups] source = "oneup"`, `argond` reads the laptop's Cellwise CW2217 fuel gauge (reads only) into the same policy, poweroff, tray and notifications; `argonctl battery` prints it | identified and read on the unit; charger out and back in followed within a poll (T19 step 1) |
-| **Lid** | a device-tree overlay makes the lid a standard lid switch, so `logind` handles it (`HandleLidSwitch=`) | loaded at runtime, `logind` followed the lid (T20, T21) |
+| **Lid** | a device-tree overlay makes the lid a standard lid switch; `argonctl lid-agent` then saves power while it is closed, or alerts and powers off, per `[lid]` | loaded at runtime, `logind` followed the lid (T20, T21) |
 | **Handover** | `oneup-takeover` moves battery and lid from the vendor's `argononeupd` to these, recorded; `oneup-restore` undoes it exactly | against a fake root in the gate; **not yet run on the unit** |
 
 No wake on the ONE UP: it has no UPS clock. Its fan and power key are the Pi's, as on the ONE V5.

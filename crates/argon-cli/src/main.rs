@@ -7,6 +7,7 @@ mod battery;
 mod button;
 mod doctor;
 mod fan;
+mod lid_agent;
 mod notify;
 mod oled;
 mod poweroff;
@@ -63,6 +64,12 @@ enum Command {
     /// Show desktop notifications for UPS events. Runs inside a desktop session.
     NotifyAgent(notify::Args),
 
+    /// Act on a laptop lid: power-save or shutdown, per the `[lid]` configuration.
+    ///
+    /// Runs inside a desktop session, started from /etc/xdg/autostart. Exits at once on a
+    /// machine without a lid switch.
+    LidAgent(lid_agent::Args),
+
     /// Read the UPS clock. `--t15 --write` runs the experiment that confirms how to set it.
     ///
     /// Without those flags this only queries. The write exists solely as task T15 in
@@ -115,6 +122,7 @@ fn main() -> std::process::ExitCode {
         Command::Fan(args) => fan::run(&args),
         Command::Oled(args) => oled::run(&args),
         Command::NotifyAgent(args) => notify::run(&args),
+        Command::LidAgent(args) => lid_agent::run(&args),
         Command::Rtc(args) => rtc::run(&args),
         Command::Zigbee(args) => zigbee::run(&args),
         Command::Poweroff(args) => poweroff::run(&args),

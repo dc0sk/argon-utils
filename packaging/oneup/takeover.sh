@@ -3,11 +3,11 @@
 #
 # Argon ONE UP: hand the battery and the lid from the vendor's argononeupd to argon-utils.
 #
-#   sudo /usr/libexec/argon-utils/oneup-takeover LID_ACTION [--full]
+#   sudo /usr/libexec/argon-utils/oneup-takeover [--full]
 #
-# LID_ACTION is what closing the lid does, for logind's HandleLidSwitch=: ignore, lock or
-# poweroff. (suspend and hibernate are refused: this Pi cannot sleep -- /sys/power/state is
-# empty -- so logind would try and fail on every close.)
+# What closing the lid then does is `[lid]` in /etc/argon-utils/config.toml, carried out by
+# `argonctl lid-agent` in the desktop session; logind is set to ignore the lid, so the two do not
+# both act on it.
 #
 # --full also sets argond's mode to "full", which lets it power the machine off when the
 # battery is confirmed critical. Without it argond keeps monitoring in its current mode.
@@ -23,15 +23,12 @@ die() { echo "takeover: $*" >&2; exit 1; }
 R=${ARGON_ROOT:-}
 SYSTEMCTL=${SYSTEMCTL:-systemctl}
 [ -n "$R" ] || [ "$(id -u)" = 0 ] || die "run as root (sudo)"
-action=${1:-}
-case "$action" in
-    ignore|lock|poweroff) ;;
-    suspend|hibernate|hybrid-sleep|suspend-then-hibernate)
-        die "$action needs sleep states this Pi does not have; use ignore, lock or poweroff" ;;
-    *) die "usage: oneup-takeover ignore|lock|poweroff [--full]" ;;
-esac
 full=no
-[ "${2:-}" = --full ] && full=yes
+case "${1:-}" in
+    "") ;;
+    --full) full=yes ;;
+    *) die "usage: oneup-takeover [--full]" ;;
+esac
 
 overlay_src=$R/usr/share/argon-utils/overlays/argon-oneup-lid.dtbo
 overlay_dst=$R/boot/firmware/overlays/argon-oneup-lid.dtbo
@@ -66,10 +63,11 @@ if ! grep -q '^dtoverlay=argon-oneup-lid$' "$config_txt"; then
     printf '[all]\n# argon-utils: the lid as a lid switch (undo with oneup-restore)\ndtoverlay=argon-oneup-lid\n' >> "$config_txt"
 fi
 
-# 3. What closing the lid does. HandleLidSwitchExternalPower= follows it when unset.
+# 3. logind leaves the lid to the lid agent. All three variants: logind thinks this laptop is
+#    always docked -- its own screen is on HDMI -- and would otherwise pick the docked one.
 mkdir -p "$(dirname "$dropin")"
-printf '# argon-utils: the Argon ONE UP lid (undo with oneup-restore)\n[Login]\nHandleLidSwitch=%s\n' \
-    "$action" > "$dropin"
+printf '# argon-utils: the Argon ONE UP lid is handled by argonctl lid-agent (undo with oneup-restore)\n[Login]\nHandleLidSwitch=ignore\nHandleLidSwitchExternalPower=ignore\nHandleLidSwitchDocked=ignore\n' \
+    > "$dropin"
 
 # 4. Optionally, let argond power off on a critical battery.
 if [ "$full" = yes ]; then
@@ -81,7 +79,7 @@ echo "Done. Changed:"
 echo "  argononeupd        disabled and stopped"
 echo "  $overlay_dst  installed; config.txt backed up to $config_txt.argon-$stamp"
 echo "  $config_txt  + dtoverlay=argon-oneup-lid"
-echo "  $dropin  HandleLidSwitch=$action"
+echo "  $dropin  logind ignores the lid; [lid] in $argon_conf decides"
 echo "  argond mode        $(sed -n 's/^mode = "\(.*\)"/\1/p' "$argon_conf")"
 echo
 echo "Reboot for the lid to work. Until then the lid does nothing."

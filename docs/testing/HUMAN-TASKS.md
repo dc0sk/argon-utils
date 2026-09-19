@@ -913,13 +913,14 @@ The battery (step 1) and the lid (T20, T21) now have replacements. Deciding:
 
 1. **Nothing else of `argononeupd`'s is missed** -- it is disabled for good. What else it does is
    not observed (clean room: its code is not read).
-2. **What closing the lid does:** `ignore`, `lock` or `poweroff` (`HandleLidSwitch=`).
+2. **What closing the lid does:** `[lid]` in `/etc/argon-utils/config.toml` -- `power-save`
+   (screen off; optionally radios and CPU) or `shutdown` (alert with a sound, poweroff 1 s later).
 3. **Whether argond may power off** on a critical battery: `--full`.
 
 Then, on the ONE UP (0.1.15 or later):
 
 ```sh
-sudo /usr/libexec/argon-utils/oneup-takeover lock --full    # your choices
+sudo /usr/libexec/argon-utils/oneup-takeover --full    # --full: argond may power off
 sudo reboot
 ```
 

@@ -54,7 +54,7 @@ dependencies = [
 
 [[package]]
 name = "argon-cli"
-version = "0.1.15"
+version = "0.1.16"
 dependencies = [
  "argon-device",
  "argon-hal",
@@ -63,11 +63,13 @@ dependencies = [
  "clap",
  "clap_mangen",
  "serialport",
+ "signal-hook",
+ "zbus",
 ]
 
 [[package]]
 name = "argon-daemon"
-version = "0.1.15"
+version = "0.1.16"
 dependencies = [
  "argon-device",
  "argon-hal",
@@ -84,7 +86,7 @@ dependencies = [
 
 [[package]]
 name = "argon-device"
-version = "0.1.15"
+version = "0.1.16"
 dependencies = [
  "argon-hal",
  "argon-proto",
@@ -97,7 +99,7 @@ dependencies = [
 
 [[package]]
 name = "argon-hal"
-version = "0.1.15"
+version = "0.1.16"
 dependencies = [
  "argon-proto",
  "argon-sim",
@@ -109,14 +111,14 @@ dependencies = [
 
 [[package]]
 name = "argon-proto"
-version = "0.1.15"
+version = "0.1.16"
 dependencies = [
  "proptest",
 ]
 
 [[package]]
 name = "argon-sim"
-version = "0.1.15"
+version = "0.1.16"
 dependencies = [
  "argon-proto",
  "serialport",
@@ -124,7 +126,7 @@ dependencies = [
 
 [[package]]
 name = "argon-telemetry"
-version = "0.1.15"
+version = "0.1.16"
 dependencies = [
  "argon-device",
  "argon-hal",
@@ -132,7 +134,7 @@ dependencies = [
 
 [[package]]
 name = "argon-tray"
-version = "0.1.15"
+version = "0.1.16"
 dependencies = [
  "argon-device",
  "argon-hal",

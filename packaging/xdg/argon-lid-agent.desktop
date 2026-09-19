@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=argon-utils lid agent
+Comment=Acts on a laptop lid (the Argon ONE UP): saves power, or powers off, per /etc/argon-utils/config.toml
+Exec=argonctl lid-agent
+# Exits at once on a machine without a lid switch, so the entry is harmless elsewhere.
+TryExec=/usr/bin/argonctl
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

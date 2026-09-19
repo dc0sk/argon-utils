@@ -86,6 +86,14 @@ DeviceAllow=char-hidraw rw
 
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 
+# The lid agent may ask argond to cap the CPU while a laptop lid is closed (SetCpuCap, under
+# polkit). For that, and only that: this one privileged step ("+") hands each cpufreq policy's
+# scaling_max_freq -- no other file -- to the argon group, and ReadWritePaths= reopens just the
+# cpufreq directory inside the read-only /sys that ProtectKernelTunables= makes. "-": a machine
+# without cpufreq starts anyway, it just cannot be capped.
+ExecStartPre=-+/bin/sh -c 'for f in /sys/devices/system/cpu/cpufreq/policy*/scaling_max_freq; do [ -e "$$f" ] && chgrp argon "$$f" && chmod g+w "$$f"; done; exit 0'
+ReadWritePaths=-/sys/devices/system/cpu/cpufreq
+
 # StateDirectory= holds the UPS clock drift record (clock.log), which has to survive reboots
 # because the journal here does not. systemd chowns this directory to the daemon, which is why
 # the package's rollback record is deliberately NOT in it: that lives in

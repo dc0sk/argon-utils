@@ -64,6 +64,11 @@ pub fn run(args: &Args) -> ExitCode {
 /// session bus, which is how the Pi desktop shows notifications (it has no standard
 /// notification daemon). Then the freedesktop `notify-send`, for other desktops.
 fn deliver(n: &Notice) -> Result<&'static str, String> {
+    deliver_titled("Battery", n)
+}
+
+/// [`deliver`], with a title for desktops that show one (the Pi panel does not).
+pub fn deliver_titled(title: &str, n: &Notice) -> Result<&'static str, String> {
     let panel_cmd = match n.urgency {
         Urgency::Normal => "notify",
         Urgency::Critical => "critical",
@@ -97,7 +102,7 @@ fn deliver(n: &Notice) -> Result<&'static str, String> {
             urgency,
             "--app-name",
             "argon-utils",
-            "Battery",
+            title,
             &n.text,
         ])
         .output();

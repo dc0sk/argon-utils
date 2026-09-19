@@ -85,23 +85,30 @@ retire, because it also handles the lid. `argonctl battery` shows what the gauge
 ### The ONE UP's lid
 
 The package ships `/usr/share/argon-utils/overlays/argon-oneup-lid.dtbo`, a device-tree overlay
-that hands the lid (GPIO27: high open, low closed) to the kernel as a standard lid switch. Then
-`logind` handles it like any laptop's, and what closing the lid does is `HandleLidSwitch=` in
-`/etc/systemd/logind.conf` -- see `logind.conf(5)`. The Pi cannot suspend, so the useful values
-are `ignore`, `lock` and `poweroff`.
+that hands the lid (GPIO27: high open, low closed) to the kernel as a standard lid switch.
+`logind` reports it, and `argonctl lid-agent` -- started in the desktop session from
+`/etc/xdg/autostart` -- acts on it as `[lid]` in `/etc/argon-utils/config.toml` says:
+
+- `action = "power-save"` (default): the screen off while closed; optionally the radios
+  (`radios_off`) and the CPU (`cpu_throttle`, through argond) too. All undone when it opens.
+- `action = "shutdown"`: an alert with a sound, then power off after `shutdown_delay_s`
+  (default 1), unless the lid is opened first.
+
+The keyboard's illumination is not among them: the host sees no control for it.
 
 It is not enabled by the package. The kernel then owns GPIO27, which `argononeupd` also takes,
 so that daemon has to go -- and with it, the vendor's battery handling, which argond takes
 over. One script does all of it, and records what it changed:
 
 ```sh
-sudo /usr/libexec/argon-utils/oneup-takeover lock --full   # or ignore / poweroff; --full optional
+sudo /usr/libexec/argon-utils/oneup-takeover --full   # --full optional: argond may power off
 sudo reboot
 ```
 
 It disables `argononeupd`, installs the overlay into `/boot/firmware/overlays/` and adds
 `dtoverlay=argon-oneup-lid` to `config.txt` (backing it up first), writes
-`/etc/systemd/logind.conf.d/50-argon-oneup-lid.conf` with `HandleLidSwitch=`, and with `--full`
+`/etc/systemd/logind.conf.d/50-argon-oneup-lid.conf` so logind leaves the lid to the agent, and
+with `--full`
 sets argond's mode to `full`, so it may power off on a critical battery.
 
 Afterwards `busctl get-property org.freedesktop.login1 /org/freedesktop/login1

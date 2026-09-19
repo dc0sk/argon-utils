@@ -31,4 +31,20 @@
     </defaults>
     <annotate key="org.freedesktop.policykit.owner">unix-user:argon</annotate>
   </action>
+
+  <!--
+    Capping the CPU at its lowest frequency, and lifting the cap: what the lid agent asks for
+    while a laptop lid is closed. Harmless and reversible, so an active session may without a
+    password; anyone else needs an administrator, like the rest.
+  -->
+  <action id="org.argonutils.cpu-cap">
+    <description>Cap the CPU frequency to save power</description>
+    <message>Authentication is required to change the CPU frequency limit.</message>
+    <defaults>
+      <allow_any>auth_admin_keep</allow_any>
+      <allow_inactive>auth_admin_keep</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.owner">unix-user:argon</annotate>
+  </action>
 </policyconfig>

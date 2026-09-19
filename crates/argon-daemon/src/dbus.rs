@@ -18,7 +18,9 @@ use std::sync::mpsc::Sender;
 use zbus::message::Header;
 use zbus::zvariant::Value;
 
-use argon_device::control::{ACTION_POWEROFF_WITH_WAKE, BUS_NAME, OBJECT_PATH};
+use crate::cpu_cap::{CapControl, CpuCap};
+use argon_device::control::{ACTION_CPU_CAP, ACTION_POWEROFF_WITH_WAKE, BUS_NAME, OBJECT_PATH};
+use std::sync::Mutex;
 
 /// What polkit said about a caller.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,6 +89,8 @@ pub struct Daemon1 {
     auth: Box<dyn Authorize>,
     /// Whether the battery argond watches can wake the machine. The ONE UP's cannot.
     wake_supported: bool,
+    /// The CPU frequency cap. Dropped with the object, which lifts any cap still in force.
+    cpu: Mutex<Box<dyn CapControl>>,
 }
 
 // The interface macro fixes these signatures: a method takes `&self` whether it needs it or
@@ -117,6 +121,59 @@ impl Daemon1 {
             relay(req, &self.to_ups, &self.waiting)
         })
     }
+
+    /// Caps the CPU at its lowest frequency (`true`), or puts back the limit in force before
+    /// (`false`). For the lid agent while a laptop lid is closed. Never prompts: the agent asks
+    /// with nobody looking at the screen.
+    fn set_cpu_cap(
+        &self,
+        #[zbus(header)] header: Header<'_>,
+        capped: bool,
+    ) -> zbus::fdo::Result<()> {
+        let mut cpu = self
+            .cpu
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        set_cpu_cap(
+            self.auth.as_ref(),
+            &sender_of(&header),
+            capped,
+            cpu.as_mut(),
+        )
+    }
+}
+
+/// `SetCpuCap`, without the bus.
+fn set_cpu_cap(
+    auth: &dyn Authorize,
+    sender: &str,
+    capped: bool,
+    cpu: &mut dyn CapControl,
+) -> zbus::fdo::Result<()> {
+    match auth.check(sender, ACTION_CPU_CAP, false) {
+        Ok(Verdict::Yes) => {}
+        Ok(Verdict::Challenge | Verdict::No) => {
+            return Err(zbus::fdo::Error::AccessDenied(
+                "not authorised by polkit to change the CPU frequency limit".into(),
+            ));
+        }
+        Err(e) => {
+            return Err(zbus::fdo::Error::AccessDenied(format!(
+                "could not check authorisation, so refusing: {e}"
+            )));
+        }
+    }
+    let result = if capped { cpu.cap() } else { cpu.lift() };
+    result.map_err(zbus::fdo::Error::Failed)?;
+    eprintln!(
+        "argond: cpu: {} at {sender}'s request",
+        if capped {
+            "capped at its lowest frequency"
+        } else {
+            "cap lifted"
+        }
+    );
+    Ok(())
 }
 
 fn sender_of(header: &Header<'_>) -> String {
@@ -180,6 +237,7 @@ pub fn serve(
         waiting,
         auth: Box::new(Polkit),
         wake_supported,
+        cpu: Mutex::new(Box::new(CpuCap::default())),
     };
     let built = zbus::blocking::connection::Builder::system()
         .and_then(|b| b.name(BUS_NAME))
@@ -213,7 +271,10 @@ mod tests {
 
     impl Authorize for Fixed {
         fn check(&self, _: &str, action: &str, interactive: bool) -> Result<Verdict, String> {
-            assert_eq!(action, ACTION_POWEROFF_WITH_WAKE);
+            assert!(
+                action == ACTION_POWEROFF_WITH_WAKE || action == ACTION_CPU_CAP,
+                "{action}"
+            );
             self.1.lock().unwrap().push(interactive);
             self.0.clone()
         }
@@ -231,6 +292,43 @@ mod tests {
             can(&Fixed::new(Err("no polkitd".into())), ":1.5", true),
             "no"
         );
+    }
+
+    /// Records what it was asked to do.
+    #[derive(Default)]
+    struct FakeCap(Vec<bool>);
+
+    impl CapControl for FakeCap {
+        fn cap(&mut self) -> Result<(), String> {
+            self.0.push(true);
+            Ok(())
+        }
+        fn lift(&mut self) -> Result<(), String> {
+            self.0.push(false);
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn the_cpu_cap_is_set_and_lifted_only_for_an_authorised_caller() {
+        let mut cpu = FakeCap::default();
+        let auth = Fixed::new(Ok(Verdict::Yes));
+        set_cpu_cap(&auth, ":1.5", true, &mut cpu).unwrap();
+        set_cpu_cap(&auth, ":1.5", false, &mut cpu).unwrap();
+        assert_eq!(cpu.0, vec![true, false]);
+        assert_eq!(
+            *auth.1.lock().unwrap(),
+            vec![false, false],
+            "the cap check prompted"
+        );
+        for verdict in [Ok(Verdict::No), Ok(Verdict::Challenge), Err("gone".into())] {
+            let mut cpu = FakeCap::default();
+            assert!(set_cpu_cap(&Fixed::new(verdict), ":1.5", true, &mut cpu).is_err());
+            assert!(
+                cpu.0.is_empty(),
+                "an unauthorised caller changed the CPU limit"
+            );
+        }
     }
 
     #[test]

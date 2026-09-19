@@ -8,6 +8,7 @@
 //! desynchronise. Identity therefore comes from USB descriptors in sysfs, not from talking
 //! to the device.
 
+pub mod cpufreq;
 pub mod discovery;
 pub mod fan_hwmon;
 pub mod foreign;
@@ -16,6 +17,7 @@ pub mod hidraw;
 pub mod i2c;
 pub mod mode;
 pub mod platform;
+pub mod rfkill;
 pub mod serial;
 pub mod thermal;
 

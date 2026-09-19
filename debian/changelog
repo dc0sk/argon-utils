@@ -1,3 +1,21 @@
+argon-utils (0.1.16) unstable; urgency=medium
+
+  * argonctl lid-agent, autostarted in the desktop session, acts on a
+    laptop lid per the new [lid] section: "power-save" (default) turns
+    the screen off while closed, optionally the Wi-Fi and Bluetooth that
+    were on and the CPU frequency, and undoes exactly that when opened;
+    "shutdown" raises a notification with a sound and powers off after
+    shutdown_delay_s (default 1) unless the lid is opened first. It exits
+    at once on a machine without a lid switch.
+  * argond: SetCpuCap on D-Bus, under the new polkit action
+    org.argonutils.cpu-cap, caps the CPU at its lowest frequency and puts
+    the previous limit back exactly, also when argond stops. The unit
+    grants argond scaling_max_freq, and nothing else under /sys.
+  * oneup-takeover takes no lid action any more: logind is set to ignore
+    the lid, and [lid] decides.
+
+ -- Simon Keimer <dc0sk@mailbox.org>  Sat, 19 Sep 2026 12:00:00 +0200
+
 argon-utils (0.1.15) unstable; urgency=medium
 
   * /usr/libexec/argon-utils/oneup-takeover LID_ACTION [--full] hands an
