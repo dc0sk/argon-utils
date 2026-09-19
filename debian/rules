@@ -35,6 +35,13 @@ override_dh_auto_install:
 	target/release/argonctl --man   > debian/argon-utils/usr/share/man/man1/argonctl.1
 	target/release/argon-tray --man > debian/argon-utils/usr/share/man/man1/argon-tray.1
 
+# The ONE UP's lid overlay. Shipped, not enabled: turning it on means a line in config.txt,
+# a reboot and the vendor's argononeupd stopped, which are the administrator's to decide.
+	install -d debian/argon-utils/usr/share/argon-utils/overlays
+	dtc -q -@ -W no-unit_address_vs_reg -I dts -O dtb \
+		-o debian/argon-utils/usr/share/argon-utils/overlays/argon-oneup-lid.dtbo \
+		packaging/dt/argon-oneup-lid-overlay.dts
+
 	install -D -m 0644 packaging/systemd/argond.service \
 		debian/argon-utils/usr/lib/systemd/system/argond.service
 

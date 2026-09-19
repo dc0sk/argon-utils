@@ -38,6 +38,7 @@ run "cleanroom canary"  ./scripts/cleanroom-check.sh
 run "canary validation" ./scripts/test-cleanroom-check.sh
 run "licences"          ./scripts/check-licenses.py
 run "packaging XML"     ./scripts/check-packaging-xml.sh
+run "lid overlay"       ./scripts/check-overlay.sh
 
 echo
 if [ ${#failed[@]} -eq 0 ]; then

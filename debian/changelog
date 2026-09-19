@@ -1,3 +1,13 @@
+argon-utils (0.1.13) unstable; urgency=medium
+
+  * Ship /usr/share/argon-utils/overlays/argon-oneup-lid.dtbo: a
+    device-tree overlay that makes the Argon ONE UP's lid (GPIO27) a
+    standard SW_LID switch, so logind handles it like any laptop lid.
+    Not enabled by the package; see the packaging README.
+  * Build-Depends: device-tree-compiler.
+
+ -- Simon Keimer <dc0sk@mailbox.org>  Sat, 19 Sep 2026 09:30:00 +0200
+
 argon-utils (0.1.12) unstable; urgency=medium
 
   * postinst asks the bus daemon to reload its policy once the argon user

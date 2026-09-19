@@ -4,6 +4,7 @@ Priority: optional
 Maintainer: Simon Keimer <dc0sk@mailbox.org>
 Build-Depends: debhelper-compat (= 13),
                cargo,
+               device-tree-compiler,
                rustc
 Standards-Version: 4.7.0
 Homepage: https://github.com/dc0sk/argon-utils

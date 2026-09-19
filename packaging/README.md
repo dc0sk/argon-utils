@@ -82,6 +82,28 @@ from its CW2217 fuel gauge on the I2C bus instead, with the same policy, delay a
 notifications. There the vendor unit to stop is `argononeupd`, which the package does **not**
 retire, because it also handles the lid. `argonctl battery` shows what the gauge reads.
 
+### The ONE UP's lid
+
+The package ships `/usr/share/argon-utils/overlays/argon-oneup-lid.dtbo`, a device-tree overlay
+that hands the lid (GPIO27: high open, low closed) to the kernel as a standard lid switch. Then
+`logind` handles it like any laptop's, and what closing the lid does is `HandleLidSwitch=` in
+`/etc/systemd/logind.conf` -- see `logind.conf(5)`. The Pi cannot suspend, so the useful values
+are `ignore`, `lock` and `poweroff`.
+
+It is not enabled by the package. The kernel then owns GPIO27, which `argononeupd` also takes,
+so that daemon has to go first:
+
+```sh
+sudo systemctl disable --now argononeupd
+sudo cp /usr/share/argon-utils/overlays/argon-oneup-lid.dtbo /boot/firmware/overlays/
+echo 'dtoverlay=argon-oneup-lid' | sudo tee -a /boot/firmware/config.txt
+sudo reboot
+```
+
+Afterwards `busctl get-property org.freedesktop.login1 /org/freedesktop/login1
+org.freedesktop.login1.Manager LidClosed` follows the lid. To undo: remove the line from
+`config.txt`, re-enable `argononeupd`, reboot.
+
 
 ## Building and installing the Debian package
 
