@@ -34,7 +34,6 @@ connect on 2026-09-19). Nothing argon-utils has installed there touches Wi-Fi: t
 | 5 | ONE UP | **T24** — does the keyboard's illumination key reach the system at all? | 1 |
 | 6 | ONE V5 | **T23** — install 0.1.17; then I check the CPU cap and the new labels | -- |
 | 7 | ONE V5 | **T18** — does the UPS really wake the Pi at a set time? (machine off ~20 min) | 6 |
-| 8 | either | **T25** — a first install brings up argond's D-Bus service | a machine without argon-utils |
 | -- | ONE V2 + Pi 4 | T3, T5 — button pulses, MCU dialect | that machine |
 | -- | ONE V5 | T6 — is IR wired? | the IR remote |
 
@@ -1012,7 +1011,7 @@ Press the key combination that changes the keyboard light, a few times, on each 
 **Report:** whether any event appears, and which. Nothing at all means the light is the
 keyboard's own business, and the lid cannot switch it.
 
-## 🟢 T25 — A first install brings up argond's D-Bus service
+## ✅ T25 — A first install brings up argond's D-Bus service — **DONE 2026-09-19: yes**
 
 **On a machine without argon-utils** -- or after `sudo apt purge argon-utils`, which also removes
 the `argon` user. **Unblocks:** trusting the 0.1.12 fix: on a first install the bus daemon used
@@ -1025,6 +1024,12 @@ journalctl -u argond -b --no-pager -o cat | grep dbus
 ```
 
 **Expect** `dbus: serving org.argonutils.Daemon1`, not `not allowed to own the service`.
+
+**Result 2026-09-19, on the ONE UP, 0.1.17:** purged (the `argon` user was gone), installed
+fresh -- argond's first start logged `dbus: serving org.argonutils.Daemon1 at
+/org/argonutils/Daemon1`. The same first start on 0.1.9 had been refused. Back on
+`source = "oneup"` it found the gauge (24 cycles, health 100 %) and reported the laptop on battery
+at 94 %; `argononeupd` ran throughout.
 On the ONE UP, do this **before** T19 step 2 -- a purge after the takeover hands the laptop back
 to `argononeupd` first.
 
