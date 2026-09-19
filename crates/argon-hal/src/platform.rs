@@ -113,3 +113,52 @@ pub fn uptime() -> Result<std::time::Duration> {
         })?;
     Ok(std::time::Duration::from_secs_f64(secs))
 }
+
+/// Makes `argonctl … | head` end quietly when the reader stops, as a C program would.
+///
+/// Rust ignores `SIGPIPE`, so a write to a closed pipe fails with `EPIPE` and `println!` panics
+/// with "failed printing to stdout: Broken pipe". This catches exactly that panic and exits with
+/// the status a shell reports for a process ended by `SIGPIPE` (128 + 13). Every other panic goes
+/// to the default hook unchanged.
+///
+/// Deliberately not the usual fix of restoring `SIGPIPE`'s default action: that applies to
+/// every write, and a closed Unix socket -- argond's control socket -- would then end the process
+/// silently instead of being reported as an error.
+pub fn exit_quietly_on_broken_stdout() {
+    let default = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let payload = info.payload();
+        let message = payload
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| payload.downcast_ref::<&str>().copied());
+        if message.is_some_and(is_broken_stdout) {
+            std::process::exit(141);
+        }
+        default(info);
+    }));
+}
+
+/// Whether a panic message is `println!`'s for a closed stdout.
+fn is_broken_stdout(message: &str) -> bool {
+    message.starts_with("failed printing to stdout") && message.contains("Broken pipe")
+}
+
+#[cfg(test)]
+mod broken_pipe_tests {
+    use super::is_broken_stdout;
+
+    #[test]
+    fn only_a_closed_stdout_is_caught() {
+        assert!(is_broken_stdout(
+            "failed printing to stdout: Broken pipe (os error 32)"
+        ));
+        assert!(!is_broken_stdout(
+            "failed printing to stderr: Broken pipe (os error 32)"
+        ));
+        assert!(!is_broken_stdout(
+            "sending the request: Broken pipe (os error 32)"
+        ));
+        assert!(!is_broken_stdout("index out of bounds"));
+    }
+}

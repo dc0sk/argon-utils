@@ -32,7 +32,6 @@ connect on 2026-09-19). Nothing argon-utils has installed there touches Wi-Fi: t
 | 3 | ONE UP | **T19 step 2** — hand battery and lid over from `argononeupd`, reboot | 2, and your three decisions in T19 |
 | 4 | ONE UP | **T22** — the lid actions: power-save, radios, CPU, shutdown | 3 |
 | 5 | ONE UP | **T24** — does the keyboard's illumination key reach the system at all? | 1 |
-| 6 | ONE V5 | **T23** — install 0.1.17; then I check the CPU cap and the new labels | -- |
 | 7 | ONE V5 | **T18** — does the UPS really wake the Pi at a set time? (machine off ~20 min) | 6 |
 | -- | ONE V2 + Pi 4 | T3, T5 — button pulses, MCU dialect | that machine |
 | -- | ONE V5 | T6 — is IR wired? | the IR remote |
@@ -1020,7 +1019,7 @@ Afterwards set `[lid]` to what you want to keep. (Set back to the default, power
 screen only, on 2026-09-19.) **Report:** `~/argon-t22.log`, and anything that
 did not look or sound right.
 
-## 🟢 T23 — 0.1.17 on the ONE V5, and the CPU cap
+## ✅ T23 — 0.1.17 on the ONE V5, and the CPU cap — **DONE 2026-09-19 (0.1.19)**
 
 **On the ONE V5.** **Unblocks:** trusting `SetCpuCap` (argond's CPU cap) outside the lid.
 
@@ -1033,6 +1032,11 @@ Then tell me. From here I call `SetCpuCap(true)`, read the frequency limit, and 
 `SetCpuCap(false)` -- a few seconds at the lowest frequency, then exactly the previous limit.
 That checks the unit's narrow grant (`scaling_max_freq` only) and polkit's answer for your
 session. The tray should read "Battery … %".
+
+**Result 2026-09-19, 0.1.19:** `SetCpuCap(true)` took the limit from 2400000 to 1500000 (the
+hardware minimum), `SetCpuCap(false)` put back exactly 2400000; argond logged both;
+`scaling_max_freq` is `root:argon`, group-writable. `argon-tray --once` reads "Battery 92 % · on
+mains". Found on the way: `argon-tray --once | head` panicked on the closed pipe (fixed in 0.1.20).
 
 ## 🟢 T24 — Does the ONE UP's keyboard illumination reach the system?
 

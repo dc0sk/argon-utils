@@ -98,6 +98,7 @@ enum Command {
 
 fn main() -> std::process::ExitCode {
     use clap::CommandFactory;
+    argon_hal::platform::exit_quietly_on_broken_stdout();
     let cli = Cli::parse();
     if cli.man {
         let man = clap_mangen::Man::new(Cli::command()).section("1");

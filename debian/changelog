@@ -1,3 +1,12 @@
+argon-utils (0.1.20) unstable; urgency=medium
+
+  * argonctl and argon-tray end quietly (status 141) when a pipe's reader
+    stops -- `argon-tray --once | head` -- instead of panicking with
+    "failed printing to stdout: Broken pipe". Only that panic is caught;
+    a broken socket is still reported as an error.
+
+ -- Simon Keimer <dc0sk@mailbox.org>  Sat, 19 Sep 2026 20:15:00 +0200
+
 argon-utils (0.1.19) unstable; urgency=medium
 
   * argon-tray waits for a panel instead of exiting when none is hosting

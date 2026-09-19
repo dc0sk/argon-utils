@@ -77,6 +77,7 @@ fn read_status(path: &Path) -> Option<UpsStatus> {
 }
 
 fn main() -> ExitCode {
+    argon_hal::platform::exit_quietly_on_broken_stdout();
     let cli = Cli::parse();
     if cli.man {
         let man = clap_mangen::Man::new(<Cli as clap::CommandFactory>::command()).section("1");
