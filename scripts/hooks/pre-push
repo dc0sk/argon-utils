@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Refuses a push that would publish identifying or internal data.
+#
+# This repository is public, and a push cannot be taken back: the host keeps pushed commits
+# reachable by hash, and event archives copy commit messages within the hour. So everything the
+# remote does not have yet -- file contents, file names, commit messages, author lines, tag
+# messages, and the contents of compressed files -- is scanned before it leaves.
+#
+# Two kinds of pattern:
+# - BLOCK: built-in patterns below, plus this project's real values (device serials, host names,
+#   paths) from a denylist kept OUTSIDE the repository -- it lists everything that must not be
+#   published, so it must never be committed:
+#       ${XDG_CONFIG_HOME:-~/.config}/argon-utils/denylist   (or $ARGON_DENYLIST)
+#   one extended regex per line, '#' comments. Without it the push is refused.
+# - REVIEW: IPv4- and MAC-shaped strings, shown but not blocking: version numbers such as
+#   10.1.6.2 match them. Set ARGON_STRICT=1 to block on them too.
+#
+# Scan the whole history instead of the outgoing objects: ARGON_SCAN_ALL=1 scripts/hooks/pre-push
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+remote="${1:-origin}"
+
+builtin='Claude-Session[:]|claude\.ai/code/session|/tmp/claude-[0-9]|/tmp/ssh-[A-Za-z0-9]+/agent|/home/[a-z_][a-z0-9_-]*/|BEGIN [A-Z ]*PRIVATE KEY|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}'
+review='(^|[^0-9.])([0-9]{1,3}\.){3}[0-9]{1,3}([^0-9.]|$)|([0-9a-f]{2}:){5}[0-9a-f]{2}'
+
+denylist="${ARGON_DENYLIST:-${XDG_CONFIG_HOME:-$HOME/.config}/argon-utils/denylist}"
+if [ ! -r "$denylist" ]; then
+  echo "pre-push: no denylist at $denylist -- refusing to push." >&2
+  echo "pre-push: it holds this project's real identifiers (serials, host names, paths) and lives" >&2
+  echo "pre-push: outside the repository. Create it, one extended regex per line." >&2
+  exit 1
+fi
+project=$(grep -v -e '^[[:space:]]*#' -e '^[[:space:]]*$' "$denylist" | paste -sd'|' -)
+block="$builtin${project:+|$project}"
+[ "${ARGON_STRICT:-0}" = 1 ] && block="$block|$review"
+
+# The objects this push would publish.
+objects=$(mktemp)
+trap 'rm -f "$objects"' EXIT
+if [ "${ARGON_SCAN_ALL:-0}" = 1 ]; then
+  git rev-list --objects --all > "$objects"
+else
+  zero=0000000000000000000000000000000000000000
+  while read -r _lref lsha _rref _rsha; do
+    [ "$lsha" = "$zero" ] && continue          # a deletion publishes nothing
+    git rev-list --objects "$lsha" --not --remotes="$remote" >> "$objects"
+  done
+  sort -u -o "$objects" "$objects"
+fi
+[ -s "$objects" ] || exit 0
+
+hits=0
+# Every object, raw: blobs, trees (file names), commits (messages, author lines), tags.
+while read -r sha path; do
+  lines=$(git cat-file -p "$sha" 2>/dev/null | grep -a -n -i -E "$block" | cut -c1-160 || true)
+  if [ -n "$lines" ]; then
+    echo "pre-push: BLOCK $(git cat-file -t "$sha") $sha ${path:-}" >&2
+    printf '%s\n' "$lines" | sed 's/^/    /' >&2
+    hits=$((hits + 1))
+  fi
+done < "$objects"
+
+# Inside compressed and binary files, which the raw scan cannot read.
+while read -r sha path; do
+  case "$path" in
+    *.gz|*.tgz) tool="zcat" ;; *.xz) tool="xzcat" ;; *.zst) tool="zstdcat" ;; *.bz2) tool="bzcat" ;;
+    *.zip|*.tar) tool="bsdtar -xOf -" ;;
+    *.pcap|*.png|*.jpg|*.jpeg|*.pdf|*.sqlite|*.db) tool="strings" ;;
+    *) continue ;;
+  esac
+  if ! command -v "${tool%% *}" >/dev/null; then
+    echo "pre-push: BLOCK cannot open $path (${tool%% *} missing) -- check it by hand or install it" >&2
+    hits=$((hits + 1))
+    continue
+  fi
+  lines=$(git cat-file blob "$sha" | $tool 2>/dev/null | grep -a -n -i -E "$block" | cut -c1-160 || true)
+  if [ -n "$lines" ]; then
+    echo "pre-push: BLOCK inside $path" >&2
+    printf '%s\n' "$lines" | sed 's/^/    /' >&2
+    hits=$((hits + 1))
+  fi
+done < <(grep -iE ' .*\.(gz|tgz|xz|zst|bz2|zip|tar|pcap|png|jpe?g|pdf|sqlite|db)$' "$objects" || true)
+
+# Shown for a human to classify, not blocking.
+if [ "${ARGON_STRICT:-0}" != 1 ]; then
+  n=$(cut -d' ' -f1 "$objects" | git cat-file --batch | grep -a -c -i -E "$review" || true)
+  [ "$n" -gt 0 ] && echo "pre-push: note: $n line(s) look like IP or MAC addresses -- versions and localhost are fine; check anything else (ARGON_STRICT=1 to see and block them)" >&2
+fi
+
+if [ "$hits" -gt 0 ]; then
+  echo "pre-push: $hits object(s) would publish identifying or internal data. Nothing was pushed." >&2
+  echo "pre-push: scrub them first (secrets-management); do not bypass this with --no-verify." >&2
+  exit 1
+fi
+echo "pre-push: $(wc -l < "$objects") object(s) scanned, nothing identifying." >&2

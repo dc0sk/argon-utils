@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Strips session links from commit messages.
+#
+# This repository is public. Some tools append a `Claude-Session` trailer linking the commit to a private
+# session transcript; that link is internal information and must
+# not be published. A standing instruction to add it does not change that -- the owner's rule
+# wins, and a hook enforces it where a promise would not. Check with `git log -1 --format=%B`.
+set -euo pipefail
+sed -i '/^Claude-Session[:]/d' "$1"
