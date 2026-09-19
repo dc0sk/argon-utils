@@ -11,6 +11,14 @@ export PATH := $(HOME)/.cargo/bin:$(PATH)
 # build cannot quietly pull a different dependency version off the network.
 CARGO_FLAGS = --release --locked --offline
 
+# Compiled Rust embeds source paths for panic messages -- including every dependency's, under
+# the builder's ~/.cargo/registry -- so a package built in a home directory carried that
+# directory ("/home/<user>/...") in each binary. Remap them to neutral prefixes. The check after
+# the install step fails the build if any binary still contains the builder's home.
+CARGO_HOME ?= $(HOME)/.cargo
+export RUSTFLAGS := $(RUSTFLAGS) --remap-path-prefix=$(CARGO_HOME)=/cargo \
+	--remap-path-prefix=$(HOME)/.rustup=/rustup --remap-path-prefix=$(CURDIR)=/build
+
 %:
 	dh $@
 
@@ -28,6 +36,7 @@ override_dh_auto_install:
 	install -D -m 0755 target/release/argond    debian/argon-utils/usr/bin/argond
 	install -D -m 0755 target/release/argonctl  debian/argon-utils/usr/bin/argonctl
 	install -D -m 0755 target/release/argon-tray debian/argon-utils/usr/bin/argon-tray
+	./scripts/check-binary-paths.sh debian/argon-utils/usr/bin/*
 
 # Manual pages, generated from the same clap definitions as --help, so the two cannot drift.
 	install -d debian/argon-utils/usr/share/man/man8 debian/argon-utils/usr/share/man/man1

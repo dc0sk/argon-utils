@@ -1,3 +1,13 @@
+argon-utils (0.1.22) unstable; urgency=medium
+
+  * Binaries no longer carry the builder's home directory. Rust embeds
+    source paths for panic messages, and every dependency's lay under
+    ~/.cargo/registry, so each binary held ~120 "/home/<user>/..." strings.
+    debian/rules remaps them (--remap-path-prefix), and the build now
+    fails if any shipped binary still contains a build path.
+
+ -- Simon Keimer <dc0sk@mailbox.org>  Sat, 19 Sep 2026 21:45:00 +0200
+
 argon-utils (0.1.21) unstable; urgency=medium
 
   * argon-tray uses the full-colour battery icons when an installed theme
