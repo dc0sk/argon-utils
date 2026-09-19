@@ -28,11 +28,11 @@ connect on 2026-09-19). Nothing argon-utils has installed there touches Wi-Fi: t
 | | Where | Task | Needs |
 |---|---|---|---|
 | 1 | ONE UP | Get its Wi-Fi back | -- |
-| 2 | ONE UP | Install 0.1.16 (`~/git/argon-utils_0.1.16_arm64.deb` on the ONE V5) | 1 |
+| 2 | ONE UP | Install 0.1.17 (`~/git/argon-utils_0.1.17_arm64.deb` on the ONE V5) | 1 |
 | 3 | ONE UP | **T19 step 2** — hand battery and lid over from `argononeupd`, reboot | 2, and your three decisions in T19 |
 | 4 | ONE UP | **T22** — the lid actions: power-save, radios, CPU, shutdown | 3 |
 | 5 | ONE UP | **T24** — does the keyboard's illumination key reach the system at all? | 1 |
-| 6 | ONE V5 | **T23** — install 0.1.16; then I check the CPU cap and the new labels | -- |
+| 6 | ONE V5 | **T23** — install 0.1.17; then I check the CPU cap and the new labels | -- |
 | 7 | ONE V5 | **T18** — does the UPS really wake the Pi at a set time? (machine off ~20 min) | 6 |
 | 8 | either | **T25** — a first install brings up argond's D-Bus service | a machine without argon-utils |
 | -- | ONE V2 + Pi 4 | T3, T5 — button pulses, MCU dialect | that machine |
@@ -951,7 +951,7 @@ ENABLED". Undo exactly with `sudo /usr/libexec/argon-utils/oneup-restore` and a 
 
 ## 🟡 T22 — The lid actions on the ONE UP
 
-**On the ONE UP**, after T19 step 2 (0.1.16, lid overlay enabled, `argononeupd` disabled,
+**On the ONE UP**, after T19 step 2 (0.1.17, lid overlay enabled, `argononeupd` disabled,
 rebooted). **Unblocks:** calling the lid actions supported.
 
 `argonctl lid-agent` starts with the desktop session and acts as `[lid]` in
@@ -982,12 +982,12 @@ Restart it the same way after each change to `config.toml`.
 Afterwards set `[lid]` to what you want to keep. **Report:** `~/argon-t22.log`, and anything that
 did not look or sound right.
 
-## 🟢 T23 — 0.1.16 on the ONE V5, and the CPU cap
+## 🟢 T23 — 0.1.17 on the ONE V5, and the CPU cap
 
 **On the ONE V5.** **Unblocks:** trusting `SetCpuCap` (argond's CPU cap) outside the lid.
 
 ```sh
-sudo apt install -y -o Dpkg::Options::=--force-confold ~/git/argon-utils_0.1.16_arm64.deb
+sudo apt install -y -o Dpkg::Options::=--force-confold ~/git/argon-utils_0.1.17_arm64.deb
 pkill -x argon-tray; setsid argon-tray >/dev/null 2>&1 &
 ```
 
@@ -1021,7 +1021,7 @@ to drop argond's policy (the `argon` user did not exist yet), so argond was refu
 until the next restart.
 
 ```sh
-sudo apt install ./argon-utils_0.1.16_arm64.deb
+sudo apt install ./argon-utils_0.1.17_arm64.deb
 journalctl -u argond -b --no-pager -o cat | grep dbus
 ```
 
