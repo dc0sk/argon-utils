@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later OR MPL-2.0
 //! Golden tests against the report descriptor captured from a real Argon PWR UPS.
 //!
 //! Evidence: `docs/protocol/captures/OBS-2026-09-15-ups-hid-descriptor.md`.

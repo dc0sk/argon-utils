@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later OR MPL-2.0
 //! SSD1306 OLED: command construction and a frame buffer.
 //!
 //! Written from the Solomon Systech SSD1306 datasheet (rev 1.1), which is the only available

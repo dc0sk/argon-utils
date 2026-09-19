@@ -69,10 +69,10 @@ opened with, and that is worth deciding rather than drifting into.
 
 | | Decision | Blocks | Reversible? |
 |---|---|---|---|
-| **D1** | `argon-proto` licence: GPL-3.0-or-later, or dual with MPL-2.0 | publishing to crates.io | **No**, once published |
-| **D2** | A settings deny rule on `/etc/argon/**` | nothing; reduces clean-room risk | yes |
-| **T11** | Fan on Pi 5: control it, or report it | the shape of the fan feature | yes |
-| **S1** | Scope: which hardware do we commit to? | what "supported" means in the README | yes |
+| ~~**D1**~~ | ~~`argon-proto` licence~~ — **decided 2026-09-19: `GPL-3.0-or-later OR MPL-2.0`** | — | **No**, once published |
+| ~~**D2**~~ | ~~A settings deny rule on `/etc/argon/**`~~ — **decided 2026-09-19: no rule** | — | — |
+| ~~**T11**~~ | ~~Fan on Pi 5: control it, or report it~~ — **decided 2026-09-19: report only** | — | — |
+| ~~**S1**~~ | ~~Scope~~ — **decided 2026-09-19: tested hardware only** | — | — |
 | ~~**D3**~~ | ~~What to do when the battery policy advises shutdown~~ — **decided 2026-09-17** | — | — |
 
 ### D3 — acting on low-battery shutdown advice — **DECIDED 2026-09-17: implemented**
@@ -115,34 +115,38 @@ My recommendation: a delayed, cancellable shutdown, `full` mode only, with a not
 
 
 
-GPLv3 on a *library* prevents any permissively-licensed Rust project depending on it. If
-`argon-proto` is meant to be the community's Argon protocol crate, that materially limits it.
-Dual-licensing that one crate `GPL-3.0-or-later OR MPL-2.0` keeps file-level copyleft while
-allowing linking; the binaries stay GPLv3 either way. **Irreversible once published**, so it
-needs deciding before the first `cargo publish` — and not before.
+### D1 — the `argon-proto` licence — **DECIDED 2026-09-19: dual `GPL-3.0-or-later OR MPL-2.0`**
 
-### T11 — fan ownership on Pi 5
+GPLv3 on a *library* would keep every permissively-licensed Rust project from depending on it.
+The pure protocol crate is meant to be usable as the community's Argon protocol crate, so it is
+dual-licensed: MPL-2.0 keeps file-level copyleft while allowing linking. The programs (`argond`,
+`argonctl`, `argon-tray`) and the other crates stay GPL-3.0-or-later. Applied in the crate's
+`Cargo.toml`, its SPDX headers, `LICENSE-GPL-3.0` and `LICENSE-MPL-2.0` beside it, and
+`debian/copyright`. Still unpublished; publishing makes it irreversible.
 
-Evidence in
+### D2 — a settings deny rule on `/etc/argon/**` — **DECIDED 2026-09-19: no rule**
+
+No technical block. The clean-room rules in `CLEANROOM.md` stand on their own; its claim that a
+`.claude/settings.json` rule enforced them was untrue -- no such rule existed -- and was removed.
+
+### T11 — fan ownership on Pi 5 — **DECIDED 2026-09-19: report only**
+
+The kernel's `pwm-fan` governor keeps the fan and its 110 °C critical trip; argon-utils shows fan
+and temperature in the tray, OLED and status. Evidence in
 [OBS-2026-09-16-taking-the-pi5-fan](../protocol/captures/OBS-2026-09-16-taking-the-pi5-fan.md).
-Current implementation is **report-only**, which is the recommendation. Changing it would
-mean disabling the thermal zone, and with it the critical trip.
+Fan *control* remains for cases with an Argon microcontroller (ONE V2/V3 with a Pi 4).
 
-### S1 — scope
+### S1 — scope — **DECIDED 2026-09-19: tested hardware only**
 
-Hardware currently in reach, and what each would need:
+The project supports what can be tested here, and says so; nothing ships as blind support.
 
-| Hardware | State | Needs |
-|---|---|---|
-| ONE V5 + Pi 5 | primary target, working | nothing |
-| PWR UPS | **serial protocol confirmed on hardware** | nothing — ready to build on |
-| OLED | **working on hardware** (T7, 2026-09-17) | nothing — ready to build on |
-| ONE V2 + Pi 4 | untouched | a session with that machine |
-| Zigbee module | detected; health probe not built | a decision on how far to go |
-| EON, ONE UP, NEO 5, Fan HAT | no hardware | would ship untested, or not at all |
-
-The honest options are to support what can be tested and say so, or to ship blind support
-marked `untested-hardware`. The project's evidence-tier discipline argues for the former.
+| Hardware | State |
+|---|---|
+| ONE V5 + Pi 5, PWR UPS, OLED, Zigbee module | supported, tested |
+| ONE UP | battery and lid tested; lid actions and hand-over await T19/T22 |
+| ONE V2 + Pi 4 | planned: in reach, untested (T3, T5) |
+| EON, Fan HAT | planned only if hardware to test becomes available |
+| NEO 5, NVMe boards, POLY+, THRML, Mini Fan, HMI displays, BLSTR | nothing to control |
 
 ## Hardware tasks
 

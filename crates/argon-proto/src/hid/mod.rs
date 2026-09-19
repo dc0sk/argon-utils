@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later OR MPL-2.0
 //! USB HID report descriptor parsing, and the Power Device usages we care about.
 //!
 //! Facts: `ARGON-UPS-HID-CLASS`, `ARGON-UPS-HID-TABLE` (`observed`);

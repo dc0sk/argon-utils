@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later OR MPL-2.0
 //! A monochrome frame buffer laid out the way the SSD1306 stores pixels.
 
 use super::font::{GLYPH_WIDTH, glyph};

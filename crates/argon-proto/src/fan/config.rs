@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later OR MPL-2.0
 //! Parsing the vendor's fan curve file format, for migration.
 //!
 //! The format is one `<temperature>=<duty>` pair per line, with `#` comments. It is read

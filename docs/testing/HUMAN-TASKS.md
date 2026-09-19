@@ -37,7 +37,6 @@ connect on 2026-09-19). Nothing argon-utils has installed there touches Wi-Fi: t
 | 8 | either | **T25** — a first install brings up argond's D-Bus service | a machine without argon-utils |
 | -- | ONE V2 + Pi 4 | T3, T5 — button pulses, MCU dialect | that machine |
 | -- | ONE V5 | T6 — is IR wired? | the IR remote |
-| -- | decisions | T10, T11; D1, S1 in OPEN.md | -- |
 
 ## Safety legend
 
@@ -1129,7 +1128,7 @@ config in `$HOME` is invisible to it), and the daemon must be in `mode = "full"`
 **Report:** the two exit statuses from step 1, and whether step 2's cancellation worked as the
 `argon` user.
 
-## 📋 T11 — A new decision: should we control the fan at all on this machine?
+## ✅ T11 — A new decision: should we control the fan at all on this machine? — **DECIDED 2026-09-19: report only**
 
 Raised by the finding above. On your Pi 5 the fan is driven by the kernel thermal governor
 through `pwm-fan`, bound to the CPU thermal zone with active trip points at 50, 60 and
@@ -1153,13 +1152,11 @@ There is a middle option worth considering — **report but do not control**: ex
 state in status and metrics, leave the governor in charge, and put our control effort into
 the UPS, OLED and button, which nothing else manages.
 
-**Your call, and not urgent.** Nothing is blocked on it.
-
-**Result:** _(open)_
+**Result:** decided 2026-09-19 -- report only. The kernel keeps the fan (OPEN.md, T11).
 
 ---
 
-## 📋 T10 — Two decisions
+## ✅ T10 — Two decisions — **DECIDED 2026-09-19**
 
 **D1 — `argon-proto` licence.** GPLv3 on a *library* blocks every permissively-licensed Rust
 project from depending on it. If this should become the community's Argon protocol crate,
@@ -1172,4 +1169,5 @@ machine and is one `cat` from contaminating the clean-room claim. A repo-local s
 rule on `Read(/etc/argon/**)` and `Bash(cat /etc/argon/*)` would stop an assistant session
 pulling it into context by accident. Yours to add — I have not touched your config.
 
-**Result:** _(both open)_
+**Result:** decided 2026-09-19. D1: `argon-proto` is dual-licensed `GPL-3.0-or-later OR MPL-2.0`.
+D2: no rule; the untrue claim of one in `CLEANROOM.md` was removed (OPEN.md).

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later OR MPL-2.0
 //! Binary-coded decimal, as used by the UPS RTC commands and the PCF8563.
 //!
 //! Facts: `ARGON-UPS-CMD3`, `ARGON-UPS-CMD5`, `ARGON-UPS-CMD6`, `ARGON-UPS-CMD7`

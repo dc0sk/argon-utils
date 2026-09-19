@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later OR MPL-2.0
 //! The battery policy: when it advises shutdown, and every case where it must not.
 
 use argon_proto::ups::PowerSource::{Battery, Mains};

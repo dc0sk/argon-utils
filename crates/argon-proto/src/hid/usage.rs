@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later OR MPL-2.0
 //! Usage page and usage constants for HID Power Devices.
 //!
 //! From the USB-IF *Usage Tables for HID Power Devices*. These are `documented` facts: the

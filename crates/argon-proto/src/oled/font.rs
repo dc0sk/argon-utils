@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later OR MPL-2.0
 //! A 5x7 bitmap font for the printable ASCII range.
 //!
 //! Each glyph is five columns, one byte per column, least significant bit at the top. That

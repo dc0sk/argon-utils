@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later OR MPL-2.0
 //! Pure, I/O-free codecs for Argon40 Raspberry Pi enclosure and UPS hardware.
 //!
 //! This crate contains **no I/O of any kind**. It turns bytes into typed values and typed

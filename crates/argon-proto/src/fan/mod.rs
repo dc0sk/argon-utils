@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later OR MPL-2.0
 //! Fan duty cycle as a type that cannot hold an invalid value.
 //!
 //! Facts: `ARGON-MCU-L-FAN`, `ARGON-MCU-L-FANMIN` (both `documented`).

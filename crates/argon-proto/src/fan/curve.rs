@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later OR MPL-2.0
 //! Temperature-to-duty mapping, and the hysteresis that stops it oscillating.
 
 use super::{FanDuty, MIN_SPINNING_DUTY};

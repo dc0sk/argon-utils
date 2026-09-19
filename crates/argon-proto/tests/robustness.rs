@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later OR MPL-2.0
 //! Property tests over adversarial input.
 //!
 //! Everything this crate parses comes from somewhere we do not control: a device on the far

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later OR MPL-2.0
 //! Texas Instruments Z-Stack "Monitor and Test" (MT) framing, as spoken by a CC2652-based Zigbee
 //! coordinator such as the Argon Industria Zigbee module.
 //!

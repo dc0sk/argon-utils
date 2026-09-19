@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later OR MPL-2.0
 //! A HID report descriptor parser, sufficient for reading a Power Device.
 
 use alloc::vec::Vec;

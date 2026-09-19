@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later OR MPL-2.0
 //! Deciding what a battery reading means.
 //!
 //! Pure: observations in, a decision out, no clock and no I/O. The caller supplies uptime and

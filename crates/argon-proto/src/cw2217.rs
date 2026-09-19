@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later OR MPL-2.0
 //! The Cellwise CW2217 battery fuel gauge, as fitted to the Argon ONE UP.
 //!
 //! Facts: `CW2217-*` are `documented` in the chip's datasheet ([DS-CW2217] in

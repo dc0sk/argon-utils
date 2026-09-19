@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later OR MPL-2.0
 //! Argon PWR UPS serial protocol.
 //!
 //! Facts: `ARGON-UPS-FRAME`, `ARGON-UPS-READSHORT`, `ARGON-UPS-CMD*`.

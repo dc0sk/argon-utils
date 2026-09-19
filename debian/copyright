@@ -6,6 +6,12 @@ Files: *
 Copyright: 2026 Simon Keimer
 License: GPL-3.0-or-later
 
+Files: crates/argon-proto/*
+Copyright: 2026 Simon Keimer
+License: GPL-3.0-or-later or MPL-2.0
+Comment: The pure protocol library is dual-licensed, so projects under other
+ licences can use it; the programs built from this source are GPL-3.0-or-later.
+
 License: GPL-3.0-or-later
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -21,3 +27,11 @@ License: GPL-3.0-or-later
  .
  On Debian systems, the full text of the GNU General Public License version 3
  can be found in the file /usr/share/common-licenses/GPL-3.
+
+License: MPL-2.0
+ This Source Code Form is subject to the terms of the Mozilla Public License,
+ v. 2.0. If a copy of the MPL was not distributed with this file, You can
+ obtain one at https://mozilla.org/MPL/2.0/.
+ .
+ On Debian systems, the full text of the Mozilla Public License version 2.0
+ can be found in the file /usr/share/common-licenses/MPL-2.0.

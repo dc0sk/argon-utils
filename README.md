@@ -84,8 +84,9 @@ machine-readable output, a panel icon, and a Debian package.
 | **Argon Industria HMI** displays | Standard HDMI / DSI displays | ➖ |
 | **Argon BLSTR DAC** | A HiFiBerry-compatible sound card, handled by ALSA | ➖ |
 
-"Planned" means intended, not promised: which hardware the project commits to is still an open
-decision ([`docs/project/OPEN.md`](docs/project/OPEN.md)). On a Raspberry Pi 5 the ONE V5 has no
+The project commits to hardware it can test, and says how each claim was tested; nothing ships as
+blind support. "Planned" means support follows once the hardware is in hand and tested
+([`docs/project/OPEN.md`](docs/project/OPEN.md), S1). On a Raspberry Pi 5 the ONE V5 has no
 fan microcontroller and its button is the Pi's own power button, which is why fan control and
 button handling are Pi 4 items above.
 
@@ -174,6 +175,10 @@ clean run — a mistake made while building this, which is why the script exists
 ## License
 
 GPL-3.0-or-later. See [COPYING](COPYING).
+
+The pure protocol library [`argon-proto`](crates/argon-proto) is dual-licensed
+`GPL-3.0-or-later OR MPL-2.0`, so projects under other licences can use it; see its
+`LICENSE-GPL-3.0` and `LICENSE-MPL-2.0`.
 
 Argon40, ONE, EON, NEO, PWR, POLY, THRML, BLSTR and Industria are Argon40's names for their
 products; this project is not affiliated with Argon40.

@@ -48,8 +48,6 @@ to prevent.
 
 ## Enforcement
 
-- `.claude/settings.json` denies agent reads of `/etc/argon/**`, so an assistant session
-  cannot pull that source into its context by accident.
 - CI greps the tree for upstream identifier spellings (`argonsysinfo`, `argonregister`,
   `argononed`, …) appearing in our source. A hit fails the build. It is a cheap canary, not
   a proof — the real safeguard is rule 1.

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later OR MPL-2.0
 //! SSD1306 command construction and frame buffer behaviour.
 //!
 //! The init sequence is a golden test against the datasheet. It cannot prove the panel lights
