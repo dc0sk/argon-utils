@@ -19,7 +19,8 @@ use std::time::Duration;
 pub enum Effect {
     /// Turn the screen off.
     ScreenOff,
-    /// Turn the screen back on.
+    /// Turn the screen back on -- and wake it: on the ONE UP the panel goes dark with the lid
+    /// whatever software does, and the desktop does not bring it back by itself (T22).
     ScreenOn,
     /// Turn off the Wi-Fi and Bluetooth that are on, remembering which.
     RadiosOff,
@@ -152,7 +153,13 @@ impl Lid {
     }
 
     fn on_open(&mut self) -> Vec<Effect> {
-        let mut out = self.saving.take().map_or_else(Vec::new, Self::undo);
+        // The screen is woken on every open, not only after a power-save close: the panel goes
+        // dark with the lid on its own, and a shutdown cancelled by opening the lid would
+        // otherwise leave a black screen (T22).
+        let mut out = self
+            .saving
+            .take()
+            .map_or_else(|| vec![Effect::ScreenOn], Self::undo);
         if self.shutdown_at.take().is_some() {
             out.push(Effect::ShutdownCancelled);
         }
@@ -250,12 +257,28 @@ mod tests {
         let mut l = lid("shutdown", false, false, 5);
         l.report(false, s(0));
         l.report(true, s(1));
-        assert_eq!(l.report(false, s(3)), vec![Effect::ShutdownCancelled]);
+        assert_eq!(
+            l.report(false, s(3)),
+            vec![Effect::ScreenOn, Effect::ShutdownCancelled]
+        );
         assert!(
             l.tick(s(10)).is_empty(),
             "powered off after the lid was opened"
         );
         assert_eq!(l.next_deadline(), None);
+    }
+
+    #[test]
+    fn opening_the_lid_always_wakes_the_screen() {
+        // shutdown, opened in time: the screen must not stay dark behind the cancellation.
+        let mut l = lid("shutdown", false, false, 60);
+        l.report(false, s(0));
+        l.report(true, s(1));
+        assert!(l.report(false, s(2)).contains(&Effect::ScreenOn));
+        // A lid closed at start and then opened wakes it too.
+        let mut l = Lid::new(&LidConfig::default());
+        l.report(true, s(0));
+        assert_eq!(l.report(false, s(1)), vec![Effect::ScreenOn]);
     }
 
     #[test]

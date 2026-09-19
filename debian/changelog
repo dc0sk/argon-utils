@@ -1,3 +1,17 @@
+argon-utils (0.1.18) unstable; urgency=medium
+
+  * lid-agent: waking the screen power-cycles the output (off, then on).
+    On the ONE UP the panel goes dark with the lid below anything Linux
+    reports, and the desktop left it black after the lid opened until the
+    output was cycled or the console switched (T22).
+  * lid-agent: the screen is woken on every opening, a shutdown cancelled
+    by opening the lid included.
+  * lid-agent: started outside the desktop session (e.g. from SSH), it
+    finds the compositor's Wayland socket itself, so the screen still
+    works; the CPU cap still needs the desktop session, by polkit.
+
+ -- Simon Keimer <dc0sk@mailbox.org>  Sat, 19 Sep 2026 16:45:00 +0200
+
 argon-utils (0.1.17) unstable; urgency=medium
 
   * lid-agent: radios it turns off are recorded, by type and name, before

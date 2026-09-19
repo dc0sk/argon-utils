@@ -168,6 +168,7 @@ backs a write.
 | `ONEUP-PACK` | VCELL is a single cell's voltage (4.40 V) while the pack is rated 55 Wh / 4800 mAh (~11.5 V, three cells). How the gauge sees the pack is `unknown` | `observed` / `unknown` | OBS-2026-09-18-one-up-survey |
 | `ONEUP-CURRENT-SIGN` | On battery, CURRENT reads negative (about -2100 to -3000 LSB with the machine running); on the charger, positive (+2875 falling to +2688 while topping up), as documented | `observed` | OBS-2026-09-18-one-up-survey |
 | `ONEUP-GAUGE-BURST` | A two-byte read in one transaction from `0x02`, `0x04` or `0x0E` returns the same pair as two single-byte reads | `observed` | OBS-2026-09-18-one-up-survey |
+| `ONEUP-LID-PANEL` | The internal panel (on `HDMI-A-2`) goes dark while the lid is closed, with nothing in the kernel log and the connector still `connected`/`enabled`. On opening, labwc logged `Swapchain for output 'HDMI-A-2' failed test` and left the screen black until the output was power-cycled (a `wlopm` off/on, or a VT switch). Mechanism `unknown` | `observed` | T22, 2026-09-19 |
 | `ONEUP-RSENSE` | The current-sense resistor, which scales CURRENT to amperes | `unknown` | -- |
 
 What the CW2217 datasheet documents [DS-CW2217] -- true of the chip, and so of the ONE UP's

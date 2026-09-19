@@ -359,11 +359,26 @@ impl Actor {
     }
 }
 
-/// Turns every output off or on, through the compositor (wlr-output-power-management).
+/// Turns every output off, or wakes it, through the compositor (wlr-output-power-management).
+///
+/// Waking is off-then-on, not just on: on the ONE UP the panel goes dark with the lid below
+/// anything Linux reports, and the compositor, still believing the output on, leaves it black
+/// until the output is power-cycled (T22). An agent started outside the desktop session -- from
+/// SSH, say -- has no `WAYLAND_DISPLAY`; the compositor's socket is then found in the runtime
+/// directory, so the screen still works.
 fn screens(how: &str) -> Result<(), String> {
-    let list = Command::new("wlopm")
-        .output()
-        .map_err(|e| format!("wlopm: {e}"))?;
+    let display = wayland_display().ok_or(
+        "no Wayland display found (WAYLAND_DISPLAY unset, no socket in the runtime directory)",
+    )?;
+    let wlopm = |args: &[&str]| {
+        let mut c = Command::new("wlopm");
+        c.args(args).env("WAYLAND_DISPLAY", &display.0);
+        if let Some(dir) = &display.1 {
+            c.env("XDG_RUNTIME_DIR", dir);
+        }
+        c
+    };
+    let list = wlopm(&[]).output().map_err(|e| format!("wlopm: {e}"))?;
     if !list.status.success() {
         return Err(format!(
             "wlopm: {}",
@@ -377,16 +392,63 @@ fn screens(how: &str) -> Result<(), String> {
     if names.is_empty() {
         return Err("wlopm lists no outputs".into());
     }
-    for name in names {
-        let ok = Command::new("wlopm")
-            .args([how, &name])
-            .status()
-            .is_ok_and(|s| s.success());
-        if !ok {
-            return Err(format!("wlopm {how} {name} failed"));
+    let steps: &[&str] = if how == "--on" {
+        &["--off", "--on"]
+    } else {
+        &["--off"]
+    };
+    for name in &names {
+        for step in steps {
+            if *step == "--on" {
+                // Long enough for the panel to register the off before the on.
+                std::thread::sleep(std::time::Duration::from_millis(300));
+            }
+            let ok = wlopm(&[step, name]).status().is_ok_and(|s| s.success());
+            if !ok {
+                return Err(format!("wlopm {step} {name} failed"));
+            }
         }
     }
     Ok(())
+}
+
+/// The Wayland display to use, and the runtime directory to pass along when it had to be found.
+fn wayland_display() -> Option<(String, Option<PathBuf>)> {
+    if let Some(d) = std::env::var_os("WAYLAND_DISPLAY").filter(|d| !d.is_empty()) {
+        return Some((d.to_string_lossy().into_owned(), None));
+    }
+    let dir = std::env::var_os("XDG_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .or_else(|| own_uid().map(|u| PathBuf::from(format!("/run/user/{u}"))))?;
+    let socket = find_wayland_socket(&dir)?;
+    Some((socket, Some(dir)))
+}
+
+/// The first `wayland-N` socket in `dir`, by name.
+fn find_wayland_socket(dir: &Path) -> Option<String> {
+    let mut names: Vec<String> = std::fs::read_dir(dir)
+        .ok()?
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| {
+            n.strip_prefix("wayland-")
+                .is_some_and(|k| !k.is_empty() && k.bytes().all(|b| b.is_ascii_digit()))
+        })
+        .collect();
+    names.sort();
+    names.into_iter().next()
+}
+
+/// This process's user id, from procfs.
+fn own_uid() -> Option<u32> {
+    std::fs::read_to_string("/proc/self/status")
+        .ok()?
+        .lines()
+        .find_map(|l| l.strip_prefix("Uid:"))?
+        .split_whitespace()
+        .next()?
+        .parse()
+        .ok()
 }
 
 #[cfg(test)]
@@ -401,6 +463,25 @@ mod tests {
             soft_blocked: soft,
             hard_blocked: hard,
         }
+    }
+
+    #[test]
+    fn finds_the_wayland_socket_and_skips_its_lock() {
+        let dir = std::env::temp_dir().join(format!("argon-wl-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for f in [
+            "wayland-1.lock",
+            "wayland-1",
+            "wayland-0.lock",
+            "pipewire-0",
+        ] {
+            std::fs::write(dir.join(f), "").unwrap();
+        }
+        assert_eq!(find_wayland_socket(&dir).as_deref(), Some("wayland-1"));
+        std::fs::write(dir.join("wayland-0"), "").unwrap();
+        assert_eq!(find_wayland_socket(&dir).as_deref(), Some("wayland-0"));
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(find_wayland_socket(&dir), None);
     }
 
     #[test]

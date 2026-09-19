@@ -947,7 +947,7 @@ org.freedesktop.login1.Manager LidClosed` follows the lid; closing it does what 
 `journalctl -u argond -b -o cat | grep ups` shows the gauge and, with `--full`, "shutdown
 ENABLED". Undo exactly with `sudo /usr/libexec/argon-utils/oneup-restore` and a reboot.
 
-## 🟡 T22 — The lid actions on the ONE UP
+## 🟡 T22 — The lid actions on the ONE UP — **step 1 DONE 2026-09-19: works**
 
 **On the ONE UP**, after T19 step 2 (0.1.17, lid overlay enabled, `argononeupd` disabled,
 rebooted). **Unblocks:** calling the lid actions supported.
@@ -976,6 +976,21 @@ Restart it the same way after each change to `config.toml`.
 4. **shutdown, for real.** 🔴 **Save your work: this powers the ONE UP off.** Set
    `shutdown_delay_s = 1` (the default). Close the lid and leave it closed: expect the sound, and a
    clean poweroff about a second later.
+
+**Results so far (2026-09-19, 0.1.17, after T19 step 2):**
+
+- **Step 1 passed.** The autostarted agent logged `lid closed` → `ScreenOff`, `lid opened` →
+  `ScreenOn`, matching logind; the screen came back.
+- **Step 2 must be repeated from the desktop.** It was run over SSH, so the agent ran in the SSH
+  session: `wlopm` had no `WAYLAND_DISPLAY`, and polkit -- rightly -- refused `SetCpuCap` to a
+  remote session. The radios worked: off while closed, back on after, record removed.
+- **Found by it:** with no `ScreenOn` from the agent, the screen stayed black after the lid
+  opened, until a switch to a text console and back; the compositor logged
+  `Swapchain for output 'HDMI-A-2' failed test` at the opening, and the kernel nothing. The panel
+  goes dark with the lid below anything Linux reports, and the desktop does not recover by
+  itself (`ONEUP-LID-PANEL`). 0.1.18: waking the screen power-cycles the output, happens on
+  every opening (a cancelled shutdown included), and finds the Wayland socket when the agent was
+  started outside the desktop; `t22-lid.sh` refuses to run outside the desktop.
 
 Afterwards set `[lid]` to what you want to keep. **Report:** `~/argon-t22.log`, and anything that
 did not look or sound right.
