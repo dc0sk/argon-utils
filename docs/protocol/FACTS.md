@@ -187,7 +187,7 @@ gauge, though each is `documented` rather than `observed` until read there:
 | `ONEUP-NO-KERNEL-BATTERY` | No `power_supply` class device; no kernel driver bound on any I2C bus | `observed` | sysfs |
 | `ONEUP-FAN` | The fan is the kernel's `pwm-fan` (line `FAN_PWM`), as on a Pi 5 in the ONE V5 | `observed` | sysfs, `gpioinfo` |
 | `ONEUP-POWER-KEY` | The power key is the Pi's own (`pwr_button` on `PWR_GPIO`) | `observed` | `/sys/class/input`, `gpioinfo` |
-| `ONEUP-GPIO27` | Held by the vendor daemon with pull-up and both-edge events. That it is the lid switch is `inferred` from the plan and not confirmed | `observed` (held); purpose `inferred` | `gpioinfo` |
+| `ONEUP-GPIO27` | The **lid switch**: with the pull-up, high while open, low while closed, one clean edge per movement (no bounce). Held by the vendor daemon with both-edge events | `observed` | `gpioinfo`; OBS-2026-09-19-t20-one-up-lid |
 | `ONEUP-NO-USB-UPS` | No UPS on USB: the PWR UPS serial protocol does not apply | `observed` | `lsusb`, hidraw names |
 
 ## ARGON-OLED-* / ARGON-RTC-*

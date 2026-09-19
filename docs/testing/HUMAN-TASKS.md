@@ -913,7 +913,7 @@ argond only acts on the battery with `mode = "full"` **and** `argononeupd` stopp
 gives up whatever else it does on the ONE UP -- at least the lid switch it holds on GPIO27,
 which argond does not handle. That is a decision for you, not a test step: see OPEN.md, B8.
 
-## 🟢 T20 — Is GPIO27 the ONE UP's lid switch?
+## ✅ T20 — Is GPIO27 the ONE UP's lid switch? — **DONE 2026-09-19: yes** (high open, low closed; `OBS-2026-09-19-t20-one-up-lid`)
 
 **On the ONE UP.** **Unblocks:** T19 step 2 -- argond can only take over from `argononeupd` if
 what it does is understood, and the lid is the part known to matter (`ONEUP-GPIO27`:

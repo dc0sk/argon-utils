@@ -1,0 +1,8 @@
+T20 2026-09-19T08:36:01+02:00
+lid open, level now: "GPIO27"=active
+watching (up to 90 s, stops after 4 edges): close the lid, wait 5 s, open it; then once more
+45130.035571863	falling	gpiochip0 27 "GPIO27"
+45131.595990630	rising	gpiochip0 27 "GPIO27"
+45134.483012228	falling	gpiochip0 27 "GPIO27"
+45135.380281616	rising	gpiochip0 27 "GPIO27"
+lid open again, level now: "GPIO27"=active
