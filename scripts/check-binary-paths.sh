@@ -9,7 +9,10 @@ home=${HOME:-/nonexistent}
 here=$(cd "$(dirname "$0")/.." && pwd)
 bad=0
 for f in "$@"; do
-    n=$(strings "$f" | grep -c -F -e "$home/" -e "$here/" || true)
+    # A missing binary -- an unexpanded glob, a renamed target -- must not pass as clean.
+    [ -f "$f" ] || { echo "$f: not a file" >&2; bad=1; continue; }
+    # grep -c reads all of its input: no early exit, so strings is never cut off mid-stream.
+    n=$(strings -a "$f" | grep -c -F -e "$home/" -e "$here/" -e /root/ || true)
     if [ "$n" -gt 0 ]; then
         echo "$f: $n string(s) with a build path, e.g. $(strings "$f" | grep -m1 -o -F -e "$home/" -e "$here/")" >&2
         bad=1
