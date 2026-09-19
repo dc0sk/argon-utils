@@ -39,6 +39,7 @@ run "canary validation" ./scripts/test-cleanroom-check.sh
 run "licences"          ./scripts/check-licenses.py
 run "packaging XML"     ./scripts/check-packaging-xml.sh
 run "lid overlay"       ./scripts/check-overlay.sh
+run "ONE UP takeover"   ./scripts/test-oneup-takeover.sh
 
 echo
 if [ ${#failed[@]} -eq 0 ]; then

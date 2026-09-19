@@ -91,18 +91,26 @@ that hands the lid (GPIO27: high open, low closed) to the kernel as a standard l
 are `ignore`, `lock` and `poweroff`.
 
 It is not enabled by the package. The kernel then owns GPIO27, which `argononeupd` also takes,
-so that daemon has to go first:
+so that daemon has to go -- and with it, the vendor's battery handling, which argond takes
+over. One script does all of it, and records what it changed:
 
 ```sh
-sudo systemctl disable --now argononeupd
-sudo cp /usr/share/argon-utils/overlays/argon-oneup-lid.dtbo /boot/firmware/overlays/
-echo 'dtoverlay=argon-oneup-lid' | sudo tee -a /boot/firmware/config.txt
+sudo /usr/libexec/argon-utils/oneup-takeover lock --full   # or ignore / poweroff; --full optional
 sudo reboot
 ```
 
+It disables `argononeupd`, installs the overlay into `/boot/firmware/overlays/` and adds
+`dtoverlay=argon-oneup-lid` to `config.txt` (backing it up first), writes
+`/etc/systemd/logind.conf.d/50-argon-oneup-lid.conf` with `HandleLidSwitch=`, and with `--full`
+sets argond's mode to `full`, so it may power off on a critical battery.
+
 Afterwards `busctl get-property org.freedesktop.login1 /org/freedesktop/login1
-org.freedesktop.login1.Manager LidClosed` follows the lid. To undo: remove the line from
-`config.txt`, re-enable `argononeupd`, reboot.
+org.freedesktop.login1.Manager LidClosed` follows the lid. To undo exactly:
+
+```sh
+sudo /usr/libexec/argon-utils/oneup-restore
+sudo reboot
+```
 
 
 ## Building and installing the Debian package

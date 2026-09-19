@@ -1,3 +1,16 @@
+argon-utils (0.1.15) unstable; urgency=medium
+
+  * /usr/libexec/argon-utils/oneup-takeover LID_ACTION [--full] hands an
+    Argon ONE UP's battery and lid from argononeupd to argon-utils:
+    disables argononeupd, enables the lid overlay in config.txt (backed
+    up), sets HandleLidSwitch=, and with --full lets argond power off.
+    Everything is recorded; oneup-restore undoes it exactly. Neither runs
+    on install.
+  * Removing the package after a takeover runs oneup-restore first, so
+    the ONE UP is not left with argononeupd disabled and no battery watch.
+
+ -- Simon Keimer <dc0sk@mailbox.org>  Sat, 19 Sep 2026 10:30:00 +0200
+
 argon-utils (0.1.14) unstable; urgency=medium
 
   * The lid overlay names its input device "Argon ONE UP lid" instead of

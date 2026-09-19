@@ -907,11 +907,26 @@ should follow.
 
 **Report:** the `journalctl` output.
 
-### Step 2 — letting argond power off: a decision first
+### Step 2 — handing over: three decisions, then one script
 
-argond only acts on the battery with `mode = "full"` **and** `argononeupd` stopped. Stopping it
-gives up whatever else it does on the ONE UP -- at least the lid switch it holds on GPIO27,
-which argond does not handle. That is a decision for you, not a test step: see OPEN.md, B8.
+The battery (step 1) and the lid (T20, T21) now have replacements. Deciding:
+
+1. **Nothing else of `argononeupd`'s is missed** -- it is disabled for good. What else it does is
+   not observed (clean room: its code is not read).
+2. **What closing the lid does:** `ignore`, `lock` or `poweroff` (`HandleLidSwitch=`).
+3. **Whether argond may power off** on a critical battery: `--full`.
+
+Then, on the ONE UP (0.1.15 or later):
+
+```sh
+sudo /usr/libexec/argon-utils/oneup-takeover lock --full    # your choices
+sudo reboot
+```
+
+**After the reboot:** `busctl get-property org.freedesktop.login1 /org/freedesktop/login1
+org.freedesktop.login1.Manager LidClosed` follows the lid; closing it does what you chose;
+`journalctl -u argond -b -o cat | grep ups` shows the gauge and, with `--full`, "shutdown
+ENABLED". Undo exactly with `sudo /usr/libexec/argon-utils/oneup-restore` and a reboot.
 
 ## ✅ T21 — Does the lid overlay give logind a working lid switch? — **DONE 2026-09-19: yes** (`OBS-2026-09-19-t21-lid-overlay`)
 

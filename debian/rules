@@ -41,6 +41,10 @@ override_dh_auto_install:
 	dtc -q -@ -W no-unit_address_vs_reg -I dts -O dtb \
 		-o debian/argon-utils/usr/share/argon-utils/overlays/argon-oneup-lid.dtbo \
 		packaging/dt/argon-oneup-lid-overlay.dts
+	install -D -m 0755 packaging/oneup/takeover.sh \
+		debian/argon-utils/usr/libexec/argon-utils/oneup-takeover
+	install -D -m 0755 packaging/oneup/restore.sh \
+		debian/argon-utils/usr/libexec/argon-utils/oneup-restore
 
 	install -D -m 0644 packaging/systemd/argond.service \
 		debian/argon-utils/usr/lib/systemd/system/argond.service
