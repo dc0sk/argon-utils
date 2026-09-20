@@ -109,8 +109,8 @@ loop that drifts under load, so our measurement is expected to be the better spe
 | `ARGON-UPS-CMD6` | Command 6 sets an absolute wake schedule from 5 BCD bytes `YY MM DD HH MM`, UTC | `observed` | T17, 2026-09-18: two far-future times, different in every field, each read back exactly -- `OBS-2026-09-18-t17-wake-set` |
 | `ARGON-UPS-CMD6-REPLY` | The device answers a wake set with an empty command-6 frame, `FE 00 06 04` | `observed` | same, both sets |
 | `ARGON-UPS-SET-ECHO` | **Pattern:** both set commands seen so far (3 and 6) are answered by an empty frame echoing the command. Not assumed for any other command | `observed` for 3 and 6 only | T15, T17 |
-| `ARGON-UPS-WAKE-MECHANISM` | **How** the UPS wakes the Pi at the scheduled time -- very likely by cutting and restoring its output, since a Pi 5 with `POWER_OFF_ON_HALT=1` restarts when power returns. If so, a schedule coming due while the Pi is **running** is an abrupt power cut | `unknown` | not observed; the dangerous reading is assumed until it is |
-| `ARGON-UPS-WAKE-CLEAR` | How to clear a wake schedule, and whether one clears itself after firing | `unknown` | — |
+| `ARGON-UPS-WAKE-MECHANISM` | A schedule set with CMD6 powers the machine on at that minute, from a halted Pi (`POWER_OFF_ON_HALT`, `WAKE_ON_GPIO=0`): asked for 19:14, up at 19:14:22 | `observed` | T18, 2026-09-20 |
+| `ARGON-UPS-WAKE-CLEAR` | The UPS clears a schedule once it has fired: argond found none five seconds after the wake boot, so a wake never repeats | `observed` | T18, 2026-09-20 |
 | `ARGON-UPS-CMD7` | Command 7 returns the wake schedule as 5 BCD bytes | `observed` | same |
 | `ARGON-UPS-CMD7-EMPTY` | **With no schedule set, command 7 answers with an EMPTY payload** (`FE 00 07 05`), not five zero bytes | `observed` | same |
 | `ARGON-UPS-CMD8` | Command 8 is device-initiated; the host echoes it back as an acknowledgement | `inferred` | — |

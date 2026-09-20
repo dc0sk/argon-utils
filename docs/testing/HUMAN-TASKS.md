@@ -23,8 +23,7 @@ several conclusions in this project came from negative results.
 
 | | Where | Task | Needs |
 |---|---|---|---|
-| 1 | ONE V5 | **T18** — does the UPS really wake the Pi at a set time? (machine off ~20 min) | -- |
-| 2 | ONE UP | **T24** — does the keyboard's illumination key reach the system at all? | -- |
+| 1 | ONE UP | **T24** — does the keyboard's illumination key reach the system at all? | -- |
 | -- | ONE V2 + Pi 4 | T3, T5 — button pulses, MCU dialect | that machine |
 | -- | ONE V5 | T6 — is IR wired? | the IR remote |
 
@@ -820,7 +819,7 @@ systemctl is-active argond                                         # must say: a
 **Report:** `~/argon-t17.log`. The `T17 RESULT` line is the verdict; the `received` lines
 record what the UPS answers to a wake set.
 
-## 🔴 T18 — Does the UPS actually wake the Pi at the scheduled time?
+## ✅ T18 — Does the UPS actually wake the Pi at the scheduled time? — **DONE 2026-09-20: yes**
 
 **Unblocks:** trusting `argonctl poweroff --wake-at`, and two unknowns: whether a wake works at
 all (`ARGON-UPS-WAKE-MECHANISM`), and whether the UPS clears a schedule after it fires
@@ -872,6 +871,11 @@ It powers off a minute later. **Note the wake time it printed.**
 
 **If it has not come back ten minutes after the wake time**, press the case's power button
 (the Pi's own; it starts a halted Pi 5) and report that the wake did not happen.
+
+**Result 2026-09-20 (0.1.24):** asked for a wake at 19:14, powered off at 18:55, back up at
+19:14:22 -- the UPS woke it. argond's first check found **no wake schedule set**, so a fired
+schedule clears itself and never comes due again (`OBS-2026-09-20-t18-wake`;
+`ARGON-UPS-WAKE-MECHANISM` and `ARGON-UPS-WAKE-CLEAR` are now `observed`).
 
 **Report:** `~/argon-t18.log`.
 

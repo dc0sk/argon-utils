@@ -212,8 +212,8 @@ fn run(
                 // Only on a healthy link, after the poll: housekeeping must never delay or
                 // displace a battery reading.
                 if Instant::now() >= next_clock_check {
-                    check_and_record_clock(m, clock_writes, drift_record);
-                    next_clock_check = Instant::now() + clock_sync::CHECK_INTERVAL;
+                    let again = check_and_record_clock(m, clock_writes, drift_record);
+                    next_clock_check = Instant::now() + again;
                 }
                 if Instant::now() >= next_wake_check {
                     check_wake(m, writes.wake, unix_now(), &mut wake_logged);
@@ -384,12 +384,17 @@ fn open_link(
 }
 
 /// Runs a clock check and adds what it did to the drift record, if there is one.
+/// Checks the UPS clock, records the result, and says how long until the next check.
+///
+/// Shorter while the system clock is unsynchronised: nothing can be corrected until it is, and
+/// on a fresh boot that is a matter of minutes, not of the usual six hours.
 fn check_and_record_clock(
     m: &mut UpsMonitor<Gate<SerialLink>>,
     clock_writes: bool,
     record: Option<&std::path::Path>,
-) {
-    let entry = check_clock(m, clock_writes, clock_sync::system_clock_synced());
+) -> Duration {
+    let synced = clock_sync::system_clock_synced();
+    let entry = check_clock(m, clock_writes, synced);
     if let (Some(entry), Some(path)) = (entry, record) {
         if let Err(e) = drift::append(path, entry) {
             eprintln!(
@@ -398,6 +403,7 @@ fn check_and_record_clock(
             );
         }
     }
+    clock_sync::next_check_after(synced)
 }
 
 /// Where the drift record lives: `clock.log` in the state directory systemd gives the unit.

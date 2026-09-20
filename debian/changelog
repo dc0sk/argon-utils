@@ -1,3 +1,13 @@
+argon-utils (0.1.25) unstable; urgency=medium
+
+  * The UPS clock is looked at again after 10 minutes, not 6 hours, while
+    the system clock is not NTP-synchronised. The first check runs seconds
+    into a boot, before NTP has settled, and nothing may be corrected
+    until it has -- so the UPS stayed uncorrected for hours (seen on the
+    boot after T18's wake).
+
+ -- Simon Keimer <dc0sk@mailbox.org>  Sun, 20 Sep 2026 19:45:00 +0200
+
 argon-utils (0.1.24) unstable; urgency=medium
 
   * argond names the config sections it does not find: an upgrade keeps

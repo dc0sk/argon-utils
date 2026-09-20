@@ -18,6 +18,24 @@ use std::time::Duration;
 /// adding four queries a day to a link that is polled every few seconds anyway.
 pub const CHECK_INTERVAL: Duration = Duration::from_secs(6 * 3_600);
 
+/// How soon to look again when the system clock is not synchronised yet.
+///
+/// The first check runs seconds into the boot, before NTP has had its say, and an unsynchronised
+/// system clock must not be copied into the UPS. Waiting a whole [`CHECK_INTERVAL`] after that
+/// leaves the UPS uncorrected for hours on a machine that was only briefly unsure of the time
+/// (seen on the boot after T18's wake).
+pub const RETRY_UNSYNCED: Duration = Duration::from_secs(10 * 60);
+
+/// How long until the next clock check, given whether the system clock is synchronised.
+#[must_use]
+pub const fn next_check_after(system_synced: bool) -> Duration {
+    if system_synced {
+        CHECK_INTERVAL
+    } else {
+        RETRY_UNSYNCED
+    }
+}
+
 /// How far off the UPS clock may be before it is set, in seconds.
 ///
 /// Above the resolution of the method: the device counts whole seconds, and T15 read back
@@ -100,6 +118,15 @@ pub fn sleep_to_next_second() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_unsynchronised_system_clock_is_looked_at_again_soon() {
+        // The first check runs seconds into a boot, before NTP: waiting six hours to look again
+        // leaves the UPS uncorrected all that time (seen after T18's wake boot).
+        assert_eq!(next_check_after(false), RETRY_UNSYNCED);
+        assert!(RETRY_UNSYNCED < CHECK_INTERVAL);
+        assert_eq!(next_check_after(true), CHECK_INTERVAL);
+    }
 
     const NOW: u64 = 1_789_728_000;
 

@@ -1,0 +1,20 @@
+# T18, 2026-09-20 -- operator's ~/argon-t18.log, plus argond's first wake check on the new boot.
+# Identifiers redacted: UPS serial -> XXXXXXXXXXXXXXXX, host name -> ONE-V5-PI.
+
+$ sudo argonctl poweroff --wake-at "now + 20 minutes" | tee ~/argon-t18.log
+Plan:
+  power off        in 60 s, announced to logged-in users
+  wake             Sun 2026-09-20 19:14 CEST   (2026-09-20 17:14 UTC, as the UPS holds it)
+
+Done. The wake is set and was read back from the UPS.
+  powering off at  Sun 2026-09-20 18:55 CEST
+  waking at        Sun 2026-09-20 19:14 CEST
+
+To stay up after all:  sudo shutdown -c
+argond then moves the wake out of the way before it can come due.
+booted: 2026-09-20 19:14:22
+argond: ups: no wake schedule set
+
+$ journalctl -u argond -b -o short-iso | grep -iE "wake|clock offset"
+2026-09-20T19:14:27+02:00 ONE-V5-PI argond[1100]: argond: ups: clock offset -3 s; not correcting it, because the system clock is not NTP-synchronised
+2026-09-20T19:14:27+02:00 ONE-V5-PI argond[1100]: argond: ups: no wake schedule set

@@ -89,7 +89,7 @@ machine-readable output, a panel icon, and a Debian package.
 | Product | What argon-utils does | Status |
 |---|---|---|
 | **Argon PWR UPS** (27 W, 5000 / 10000 mAh) | Battery and mains monitoring, low-battery shutdown, UPS clock and drift record | ✅ one unit |
-| | Power off and wake at a set time | 🧪 wake set and read back; the wake itself not yet seen (T18) |
+| | Power off and wake at a set time | ✅ the UPS woke the machine at the set minute (T18) |
 | **Argon ONE V5** with Raspberry Pi 5 | OLED status page; fan reported (the Pi's kernel drives it) | ✅ |
 | **Argon ONE V5 OLED module** | Status page: charge, state, CPU temperature, fan | ✅ |
 | **Argon Industria Zigbee module** | Detection and a non-disruptive firmware-version probe | ✅ |
