@@ -25,7 +25,6 @@ several conclusions in this project came from negative results.
 |---|---|---|---|
 | 1 | ONE V5 | **T18** — does the UPS really wake the Pi at a set time? (machine off ~20 min) | -- |
 | 2 | ONE UP | **T24** — does the keyboard's illumination key reach the system at all? | -- |
-| 3 | ONE V5 | **T26** — the tray's "Case display" switch | 0.1.23 installed |
 | -- | ONE V2 + Pi 4 | T3, T5 — button pulses, MCU dialect | that machine |
 | -- | ONE V5 | T6 — is IR wired? | the IR remote |
 
@@ -1056,7 +1055,7 @@ Press the key combination that changes the keyboard light, a few times, on each 
 **Report:** whether any event appears, and which. Nothing at all means the light is the
 keyboard's own business, and the lid cannot switch it.
 
-## 🟢 T26 — The tray's "Case display" switch
+## ✅ T26 — The tray's "Case display" switch — **DONE 2026-09-20: works**
 
 **On the ONE V5**, with 0.1.24 installed and `[oled] enabled = true` (mode `managed` or `full`).
 
@@ -1070,7 +1069,10 @@ Restart the tray (`pkill -x argon-tray; setsid argon-tray >/dev/null 2>&1 &`).
 2. `sudo systemctl restart argond`: the OLED stays dark (the choice is remembered).
 3. Tick it again: the status page comes back.
 
-**Report:** whether each step did what it says.
+**Result 2026-09-20 (0.1.24):** the switch works from the tray. Getting there found the real
+problem: the machine's config had no `[oled]` section at all, kept through every upgrade, so the
+display was off by default and the switch was hidden with nothing said -- which is what 0.1.24's
+startup warning now reports.
 
 ## ✅ T25 — A first install brings up argond's D-Bus service — **DONE 2026-09-19: yes**
 
