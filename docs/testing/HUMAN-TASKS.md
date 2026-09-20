@@ -242,7 +242,22 @@ sudo ./target/debug/argonctl ir --watch   # not yet built -- will be, before thi
 
 Point the Argon remote at the case and press buttons.
 
-**Result:** _(not yet done)_
+**Attempt 2026-09-20 -- nothing received, not yet conclusive.** The `gpio-ir` overlay was
+loaded at runtime on the ONE V5 (`sudo dtoverlay gpio-ir gpio_pin=23`, nothing written to
+`config.txt`), which bound GPIO23 and gave `/dev/lirc0` and an `rc-core` device
+(`gpio_ir_recv`). Raw capture with `ir-ctl -r` recorded **zero pulses** in three windows: 60 s
+and 45 s with the default active-low polarity, and 30 s with `invert=0`. The overlay was then
+removed and GPIO23 released.
+
+Two readings still fit, and the captures do not separate them: the receiver may not be
+populated on the V5 board (which would match the vendor suppressing the IR menu for this
+model), or the remote may not have been emitting into the window. **Parked** at the operator's
+request.
+
+**To resume:** confirm the remote emits (its LED flickers violet through a phone camera), then
+repeat the capture; if GPIO23 is still silent, watch the unheld GPIO lines with `gpiomon` while
+pressing, in case the receiver sits on another pin. All of this is input-only -- no MCU write is
+involved.
 
 ---
 
