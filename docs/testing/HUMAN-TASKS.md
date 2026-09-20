@@ -242,22 +242,31 @@ sudo ./target/debug/argonctl ir --watch   # not yet built -- will be, before thi
 
 Point the Argon remote at the case and press buttons.
 
-**Attempt 2026-09-20 -- nothing received, not yet conclusive.** The `gpio-ir` overlay was
-loaded at runtime on the ONE V5 (`sudo dtoverlay gpio-ir gpio_pin=23`, nothing written to
-`config.txt`), which bound GPIO23 and gave `/dev/lirc0` and an `rc-core` device
-(`gpio_ir_recv`). Raw capture with `ir-ctl -r` recorded **zero pulses** in three windows: 60 s
-and 45 s with the default active-low polarity, and 30 s with `invert=0`. The overlay was then
-removed and GPIO23 released.
+**Attempt 2026-09-20 -- no IR activity reached the board on any free pin.**
 
-Two readings still fit, and the captures do not separate them: the receiver may not be
-populated on the V5 board (which would match the vendor suppressing the IR menu for this
-model), or the remote may not have been emitting into the window. **Parked** at the operator's
-request.
+Four capture windows, all with the `gpio-ir` overlay loaded at runtime
+(`sudo dtoverlay gpio-ir gpio_pin=23`, nothing written to `config.txt`), which bound GPIO23 and
+gave `/dev/lirc0` and an `rc-core` device (`gpio_ir_recv`):
 
-**To resume:** confirm the remote emits (its LED flickers violet through a phone camera), then
-repeat the capture; if GPIO23 is still silent, watch the unheld GPIO lines with `gpiomon` while
-pressing, in case the receiver sits on another pin. All of this is input-only -- no MCU write is
-involved.
+| Window | What was watched | Received |
+|---|---|---|
+| 60 s | GPIO23, `ir-ctl -r`, active-low (the overlay's default) | nothing |
+| 45 s | the same | nothing |
+| 30 s | GPIO23 with `invert=0` (active-high) | nothing |
+| 90 s | GPIO23 **and every free header line** -- 4-13, 16, 17, 22, 24-27 -- with `gpiomon -b pull-up` | nothing, on any line |
+
+The operator pressed remote buttons during the last window. `gpiomon` was confirmed to work by
+requesting a line and seeing its banner, so the silence is the hardware's, not the tool's. The
+lines left out are the ones the kernel already holds (I2C, UART, the I2S lines of the BLSTR
+DAC), where an IR receiver would not sit. The overlay was removed afterwards and GPIO23 released.
+
+**Reading:** the V5 board most likely has no IR receiver populated -- which matches the vendor's
+installer suppressing the IR menu for this model. The one variable not under our control is the
+remote: nothing here proves it emitted. A press seen as a violet flicker through a phone camera
+would close that gap and turn this into a definite "not wired".
+
+**If the remote is confirmed emitting and this stays silent:** the V5 gets no IR support, and the
+question moves to the Pi 4 / ONE V2, where the vendor does offer IR (T3/T5's machine).
 
 ---
 
