@@ -94,6 +94,19 @@ fn run(cli: &Cli) -> Result<ExitCode, Box<dyn std::error::Error>> {
         .clone()
         .unwrap_or_else(|| PathBuf::from(argon_device::config::DEFAULT_PATH));
     let config = if path.exists() {
+        // An upgrade keeps the administrator's file, so a config written before a feature
+        // existed silently runs that feature's defaults. Say which sections are missing.
+        if let Ok(text) = std::fs::read_to_string(&path) {
+            let missing = Config::missing_sections(&text);
+            if !missing.is_empty() {
+                eprintln!(
+                    "argond: {} has no [{}] section; those settings are at their defaults. The \
+                     package's current config is /etc/argon-utils/config.toml.dpkg-dist.",
+                    path.display(),
+                    missing.join("], [")
+                );
+            }
+        }
         Config::load(&path)?
     } else {
         eprintln!("argond: {} not present, using defaults", path.display());

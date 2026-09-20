@@ -237,3 +237,24 @@ fn the_t12_test_config_is_valid() {
     assert_eq!(c.mode().unwrap(), argon_hal::mode::Mode::Full);
     assert_eq!(c.ups.shutdown_delay_min, 5);
 }
+
+#[test]
+fn missing_sections_are_named_so_an_old_config_is_visible() {
+    // A config kept from an older version through an upgrade: its features run on defaults
+    // silently, which is how a disabled OLED looked like a broken tray switch.
+    let old = "mode = \"full\"\n[fan]\nenabled = false\n[mcu]\n[ups]\n[telemetry]\n";
+    assert_eq!(Config::missing_sections(old), vec!["oled", "lid"]);
+    let current = "[fan]\n[mcu]\n[ups]\n[oled]\n[telemetry]\n[lid]\n";
+    assert!(Config::missing_sections(current).is_empty());
+    // An indented header still counts; a key whose value looks like one does not.
+    assert!(
+        Config::missing_sections("  [fan]\n[mcu]\n[ups]\n[oled]\n[telemetry]\n[lid]\n").is_empty()
+    );
+    assert!(Config::missing_sections("x = \"[oled]\"\n").contains(&"oled"));
+    // The packaged config must have every section this version knows.
+    let packaged = include_str!("../../../packaging/config/config.toml");
+    assert!(
+        Config::missing_sections(packaged).is_empty(),
+        "packaged config is missing sections"
+    );
+}

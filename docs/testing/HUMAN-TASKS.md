@@ -1058,7 +1058,11 @@ keyboard's own business, and the lid cannot switch it.
 
 ## 🟢 T26 — The tray's "Case display" switch
 
-**On the ONE V5**, with 0.1.23 installed and `[oled] enabled = true` (mode `managed` or `full`).
+**On the ONE V5**, with 0.1.24 installed and `[oled] enabled = true` (mode `managed` or `full`).
+
+A config kept through upgrades (`--force-confold`) may have no `[oled]` section at all -- then the
+display is off by default and the tray shows no switch, which is how this was first met. argond
+says so at startup from 0.1.24; the packaged config is `/etc/argon-utils/config.toml.dpkg-dist`.
 Restart the tray (`pkill -x argon-tray; setsid argon-tray >/dev/null 2>&1 &`).
 
 1. The tray menu shows a ticked **Case display** item. Untick it: the OLED goes dark within a

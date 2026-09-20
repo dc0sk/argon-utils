@@ -332,6 +332,25 @@ impl Config {
         Self::from_toml(&text)
     }
 
+    /// The sections this version knows that the file does not have, in file order.
+    ///
+    /// A missing section is silently the defaults, which after an upgrade is a trap: a config
+    /// kept from an older version (`--force-confold`, or an admin's own file) has no `[oled]`,
+    /// and the display then stays off with nothing said about why.
+    #[must_use]
+    pub fn missing_sections(text: &str) -> Vec<&'static str> {
+        const SECTIONS: [&str; 6] = ["fan", "mcu", "ups", "oled", "telemetry", "lid"];
+        let present: Vec<&str> = text
+            .lines()
+            .map(str::trim)
+            .filter_map(|l| l.strip_prefix('[')?.strip_suffix(']'))
+            .collect();
+        SECTIONS
+            .into_iter()
+            .filter(|s| !present.contains(s))
+            .collect()
+    }
+
     /// Serialises back to TOML.
     ///
     /// # Errors

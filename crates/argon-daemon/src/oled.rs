@@ -125,6 +125,8 @@ pub fn spawn(
     control: Arc<OledControl>,
 ) -> Option<JoinHandle<()>> {
     if !config.oled.enabled {
+        // Said out loud: otherwise "the tray shows no display switch" has no visible cause.
+        eprintln!("argond: oled: not enabled ([oled] enabled = true switches the status page on)");
         return None;
     }
 
