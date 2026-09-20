@@ -94,7 +94,9 @@ that hands the lid (GPIO27: high open, low closed) to the kernel as a standard l
 - `action = "shutdown"`: an alert with a sound, then power off after `shutdown_delay_s`
   (default 1), unless the lid is opened first.
 
-The keyboard's illumination is not among them: the host sees no control for it.
+The keyboard's illumination is not among them. Its key, Fn+Space, does reach the host -- as
+`KEY_F16`, the same for on and off -- but no LED device appears with it: the keyboard switches
+its own light and only reports the key, so nothing here can turn it off (T24).
 
 It is not enabled by the package. The kernel then owns GPIO27, which `argononeupd` also takes,
 so that daemon has to go -- and with it, the vendor's battery handling, which argond takes

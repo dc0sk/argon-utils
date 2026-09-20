@@ -197,4 +197,5 @@ cpu_throttle = false
 # shutdown: seconds from the alert to the poweroff, 0 to 60.
 shutdown_delay_s = 1
 
-# The keyboard's illumination is not controlled: on the ONE UP the host sees no control for it.
+# The keyboard's illumination is not controlled. Fn+Space reaches the host as KEY_F16, but the
+# keyboard switches its own light and exposes no LED device, so nothing here can set it (T24).

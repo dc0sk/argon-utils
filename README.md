@@ -94,7 +94,7 @@ machine-readable output, a panel icon, and a Debian package.
 | **Argon ONE V5 OLED module** | Status page: charge, state, CPU temperature, fan | ✅ |
 | **Argon Industria Zigbee module** | Detection and a non-disruptive firmware-version probe | ✅ |
 | **Argon ONE UP** (CM5 laptop) | Battery from the fuel gauge; the lid as a lid switch; lid actions (power-save / shutdown); hand-over from the vendor daemon | ✅ (T19–T22) |
-| | Keyboard illumination | — no host control found |
+| | Keyboard illumination | — the key arrives as `KEY_F16`, but the keyboard drives its own light (T24) |
 | **Argon ONE V2 / V3** with Raspberry Pi 4 | Fan control and power button through the case's microcontroller | 🗓 hardware available |
 | **Argon EON** Pi NAS | Fan, real-time clock, OLED | 🗓 no hardware to test |
 | **Argon Fan HAT** | Fan control through its microcontroller | 🗓 no hardware to test |

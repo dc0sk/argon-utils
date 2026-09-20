@@ -170,6 +170,7 @@ backs a write.
 | `ONEUP-GAUGE-BURST` | A two-byte read in one transaction from `0x02`, `0x04` or `0x0E` returns the same pair as two single-byte reads | `observed` | OBS-2026-09-18-one-up-survey |
 | `ONEUP-LID-PANEL` | The internal panel (on `HDMI-A-2`) goes dark while the lid is closed, with nothing in the kernel log and the connector still `connected`/`enabled`. On opening, labwc logged `Swapchain for output 'HDMI-A-2' failed test` and left the screen black until the output was power-cycled (a `wlopm` off/on, or a VT switch). Mechanism `unknown` | `observed` | T22, 2026-09-19 |
 | `ONEUP-KEYBOARD-USB` | The built-in keyboard is two USB devices on the internal hub: `6080:8061` (port 1-1.6: keyboard, mouse, touchpad) and `6080:8060` (port 1-1.7: keyboard, mouse, system control, wireless-radio control, consumer control). On one boot (after a lid-triggered poweroff) 1-1.7 failed four descriptor reads (`-110`) and enumerated about a minute late | `observed` | T22, 2026-09-19 |
+| `ONEUP-KEYBOARD-LIGHT` | Fn+Space reaches the host as `KEY_F16` (scancode `0x7002B`) on the 1-1.7 keyboard, identically for on and off; no LED device appears, so the keyboard drives its own backlight and the host cannot set or read it | `observed` | T24, 2026-09-20 |
 | `ONEUP-RSENSE` | The current-sense resistor, which scales CURRENT to amperes | `unknown` | -- |
 
 What the CW2217 datasheet documents [DS-CW2217] -- true of the chip, and so of the ONE UP's

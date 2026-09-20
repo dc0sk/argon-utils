@@ -23,7 +23,6 @@ several conclusions in this project came from negative results.
 
 | | Where | Task | Needs |
 |---|---|---|---|
-| 1 | ONE UP | **T24** — does the keyboard's illumination key reach the system at all? | -- |
 | -- | ONE V2 + Pi 4 | T3, T5 — button pulses, MCU dialect | that machine |
 | -- | ONE V5 | T6 — is IR wired? | the IR remote |
 
@@ -1042,7 +1041,7 @@ hardware minimum), `SetCpuCap(false)` put back exactly 2400000; argond logged bo
 `scaling_max_freq` is `root:argon`, group-writable. `argon-tray --once` reads "Battery 92 % · on
 mains". Found on the way: `argon-tray --once | head` panicked on the closed pipe (fixed in 0.1.20).
 
-## 🟢 T24 — Does the ONE UP's keyboard illumination reach the system?
+## ✅ T24 — Does the ONE UP's keyboard illumination reach the system? — **DONE 2026-09-20: the key does, the light does not**
 
 **On the ONE UP.** **Unblocks:** a decision on keyboard illumination for the lid's power-save.
 
@@ -1056,8 +1055,10 @@ sudo evtest      # pick each "AMIRA-KEYBOAR USB KEYBOARD" device in turn
 ```
 
 Press the key combination that changes the keyboard light, a few times, on each device.
-**Report:** whether any event appears, and which. Nothing at all means the light is the
-keyboard's own business, and the lid cannot switch it.
+**Result 2026-09-20:** watched every input device for 120 s (read-only, no install -- the login
+user is in `input`). Fn+Space arrives as `KEY_F16`, scancode `0x7002B`, identical for on and off;
+no LED device appears. The keyboard switches its own light and only reports the key, so the lid's
+power-save cannot include it (`OBS-2026-09-20-t24-keyboard-light`).
 
 ## ✅ T26 — The tray's "Case display" switch — **DONE 2026-09-20: works**
 
