@@ -22,6 +22,10 @@ use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
 #[derive(clap::Args)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "command-line flags: clap derives one field per flag"
+)]
 pub struct Args {
     /// How long to listen for reports. The device sends on change, so a short window may
     /// see only some fields.
@@ -47,6 +51,10 @@ pub struct Args {
     /// it does not exist.
     #[arg(long, value_name = "PATH")]
     pub config: Option<std::path::PathBuf>,
+
+    /// Machine-readable output: one JSON object, or one per poll with `--watch`.
+    #[arg(long)]
+    pub json: bool,
 
     /// Read the device directly instead of asking argond.
     ///
@@ -76,7 +84,11 @@ pub fn run(args: &Args) -> ExitCode {
     }
     if !args.device {
         if let Some(fields) = from_daemon() {
-            print!("{}", render(&fields, now_unix()));
+            if args.json {
+                println!("{}", json_from_daemon(&fields, now_unix()));
+            } else {
+                print!("{}", render(&fields, now_unix()));
+            }
             return ExitCode::SUCCESS;
         }
         eprintln!("argonctl: argond is not on the system bus; reading the device directly\n");
@@ -85,6 +97,10 @@ pub fn run(args: &Args) -> ExitCode {
         Ok(v) => v,
         Err(code) => return code,
     };
+
+    if args.json {
+        return device_json(&mut dev, &desc, serial.as_deref(), args.wait);
+    }
 
     println!("Device");
     println!("------");
@@ -208,6 +224,96 @@ fn render(fields: &std::collections::HashMap<String, String>, now_unix: u64) -> 
     out
 }
 
+/// How old a reading may be before it is called stale, in seconds.
+///
+/// Two poll intervals and a bit: long enough that a slow poll is not an alarm, short enough
+/// that a thread which stopped is noticed.
+const STALE_AFTER_S: u64 = 120;
+
+/// argond's answer as JSON.
+///
+/// Numbers are numbers and an absent value is `null`, never `0` or `""` -- a monitor that
+/// cannot tell "no reading" from "0 %" is worse than no monitor. `stale` applies the same
+/// threshold as the text output, so the two cannot disagree.
+fn json_from_daemon(fields: &std::collections::HashMap<String, String>, now_unix: u64) -> String {
+    let get = |k: &str| fields.get(k).map_or("", String::as_str);
+    let num = |k: &str| get(k).parse::<u64>().ok();
+    let available = get("available") == "yes";
+    let age = num("age_s");
+    let at = num("shutdown_at_unix");
+    let value = serde_json::json!({
+        "route": "argond",
+        "available": available,
+        "level": opt(get("level")),
+        "source": opt(get("source")),
+        "percent": get("percent").parse::<u8>().ok(),
+        "updated_unix": num("updated_unix"),
+        "age_s": age,
+        "stale": age.is_some_and(|a| a >= STALE_AFTER_S),
+        "shutdown_at_unix": at,
+        "shutdown_in_s": at.map(|t| t.saturating_sub(now_unix)),
+    });
+    value.to_string()
+}
+
+/// The hidraw route, reported as one JSON object.
+fn device_json(
+    dev: &mut hidraw::HidRaw,
+    desc: &ReportDescriptor,
+    serial: Option<&str>,
+    wait: u64,
+) -> ExitCode {
+    let deadline = Instant::now() + Duration::from_secs(wait);
+    let reports = match dev.collect_until(deadline) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("argonctl: read failed: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let (readings, status) = decode(desc, &reports);
+    println!(
+        "{}",
+        json_from_device(
+            &dev.path().display().to_string(),
+            serial,
+            &readings,
+            &status
+        )
+    );
+    ExitCode::SUCCESS
+}
+
+/// The hidraw route as JSON.
+///
+/// `readings` is an object of what the descriptor actually yielded, so a firmware that serves
+/// nothing -- which is what firmware 113 does -- produces an empty object rather than invented
+/// zeroes.
+fn json_from_device(
+    node: &str,
+    serial: Option<&str>,
+    readings: &[Reading],
+    status: &[&'static str],
+) -> String {
+    let mut map = serde_json::Map::new();
+    for r in readings {
+        map.insert(r.label.to_owned(), serde_json::Value::from(r.value.clone()));
+    }
+    serde_json::json!({
+        "route": "hidraw",
+        "node": node,
+        "serial": serial,
+        "readings": map,
+        "status": status,
+    })
+    .to_string()
+}
+
+/// `None` for an empty string, so a missing field is `null` rather than `""`.
+fn opt(v: &str) -> Option<&str> {
+    (!v.is_empty()).then_some(v)
+}
+
 fn dash(v: &str) -> &str {
     if v.is_empty() { "-" } else { v }
 }
@@ -249,11 +355,15 @@ fn now_unix() -> u64 {
 ///
 /// Every request goes through `QueryOnly`, so nothing that changes the UPS's state can be
 /// sent from here, whatever this function does.
-fn run_serial(port: &str, args: &Args) -> ExitCode {
+/// Resolves the port to use, and refuses when something else holds it.
+///
+/// Read as one question -- may this process talk to the UPS over serial? -- because every
+/// answer has the same consequence: two readers on a CDC-ACM port corrupt each other's frames.
+fn serial_path(port: &str) -> Result<std::path::PathBuf, ExitCode> {
     let path = if port == "auto" {
         let Some(p) = discovery::argon_ups_serial_path() else {
             eprintln!("argonctl: no Argon UPS serial port found");
-            return ExitCode::FAILURE;
+            return Err(ExitCode::FAILURE);
         };
         p
     } else {
@@ -273,7 +383,7 @@ fn run_serial(port: &str, args: &Args) -> ExitCode {
              sudo systemctl stop argonupsrtcd\n\n\
              and start it again when you are done."
         );
-        return ExitCode::FAILURE;
+        return Err(ExitCode::FAILURE);
     }
     if let Some(o) = foreign::port_owners(&path).first() {
         eprintln!(
@@ -282,7 +392,7 @@ fn run_serial(port: &str, args: &Args) -> ExitCode {
             o.pid,
             o.comm
         );
-        return ExitCode::FAILURE;
+        return Err(ExitCode::FAILURE);
     }
     // That scan only sees processes we are allowed to see. As an ordinary user it cannot see
     // argond's file descriptors at all, so "nobody holds it" is not a finding -- say so,
@@ -308,8 +418,17 @@ fn run_serial(port: &str, args: &Args) -> ExitCode {
              and start it again when you are done.",
             path.display()
         );
-        return ExitCode::FAILURE;
+        return Err(ExitCode::FAILURE);
     }
+
+    Ok(path)
+}
+
+fn run_serial(port: &str, args: &Args) -> ExitCode {
+    let path = match serial_path(port) {
+        Ok(p) => p,
+        Err(code) => return code,
+    };
 
     let config = match load_config(args.config.as_deref()) {
         Ok(c) => c,
@@ -332,23 +451,34 @@ fn run_serial(port: &str, args: &Args) -> ExitCode {
     };
     let mut monitor = UpsMonitor::new(Ups::new(QueryOnly(link)), policy);
 
-    println!("Serial: {}", path.display());
-    report_identity(monitor.ups_mut());
+    let id = identity(monitor.ups_mut());
+    if !args.json {
+        println!("Serial: {}", path.display());
+        print_identity(&id);
+    }
 
     if !args.watch {
         let poll = monitor.poll(uptime());
-        match poll.battery {
-            Some(b) => println!("  {:<14} {b}", "battery"),
-            None => println!(
-                "  {:<14} unavailable ({})",
-                "battery",
-                poll.error.map_or_else(String::new, |e| e.to_string())
-            ),
+        if args.json {
+            println!(
+                "{}",
+                json_from_serial(&path.display().to_string(), &id, &poll, &clock_hms())
+            );
+        } else {
+            match poll.battery {
+                Some(b) => println!("  {:<14} {b}", "battery"),
+                None => println!(
+                    "  {:<14} unavailable ({})",
+                    "battery",
+                    poll.error.map_or_else(String::new, |e| e.to_string())
+                ),
+            }
         }
         return ExitCode::SUCCESS;
     }
 
-    watch(&mut monitor, &config, args.count);
+    let port = path.display().to_string();
+    watch(&mut monitor, &config, args.count, args.json, &port, &id);
     let discarded = monitor.ups_mut().link().0.discarded_frames();
     if discarded > 0 {
         println!(
@@ -377,26 +507,103 @@ fn is_argond_running() -> bool {
         .is_ok_and(|s| s.success())
 }
 
-fn report_identity<L: argon_device::ups::UpsLink>(ups: &mut Ups<L>) {
-    match ups.firmware() {
+/// What the UPS says about itself: read once, not every poll.
+///
+/// Kept as values rather than printed on the spot, so the same read serves the table and the
+/// JSON and the two cannot drift apart.
+struct Identity {
+    firmware: Result<String, String>,
+    /// An implausible clock is carried as such: it is a reading, not an error.
+    clock: Result<(String, bool), String>,
+    /// `Ok(None)`: no schedule set.
+    wake: Result<Option<String>, String>,
+}
+
+fn identity<L: argon_device::ups::UpsLink>(ups: &mut Ups<L>) -> Identity {
+    Identity {
+        firmware: ups
+            .firmware()
+            .map(|v| v.to_string())
+            .map_err(|e| e.to_string()),
+        clock: ups
+            .clock()
+            .map(|t| (t.to_string(), t.is_plausible()))
+            .map_err(|e| e.to_string()),
+        wake: ups
+            .wake()
+            .map(|w| w.map(|t| t.to_string()))
+            .map_err(|e| e.to_string()),
+    }
+}
+
+fn print_identity(id: &Identity) {
+    match &id.firmware {
         Ok(v) => println!("  {:<14} {v}", "firmware"),
         Err(e) => println!("  {:<14} unavailable ({e})", "firmware"),
     }
-    match ups.clock() {
-        Ok(t) if t.is_plausible() => println!("  {:<14} {t}", "clock"),
-        Ok(t) => println!("  {:<14} {t}  (implausible)", "clock"),
+    match &id.clock {
+        Ok((t, true)) => println!("  {:<14} {t}", "clock"),
+        Ok((t, false)) => println!("  {:<14} {t}  (implausible)", "clock"),
         Err(e) => println!("  {:<14} unavailable ({e})", "clock"),
     }
-    match ups.wake() {
+    match &id.wake {
         Ok(None) => println!("  {:<14} none set", "wake schedule"),
         Ok(Some(t)) => println!("  {:<14} {t}", "wake schedule"),
         Err(e) => println!("  {:<14} unavailable ({e})", "wake schedule"),
     }
 }
 
+/// One poll on the serial route as JSON.
+///
+/// The same object for a single read and for each line of `--watch`, so a consumer parses one
+/// shape either way. A failed read gives `percent: null` and an `error`, never a stale number.
+fn json_from_serial(
+    port: &str,
+    id: &Identity,
+    poll: &argon_device::ups::Poll,
+    time: &str,
+) -> String {
+    let source = poll.battery.map(|b| match b.source {
+        PowerSource::Mains => "mains",
+        PowerSource::Battery => "battery",
+    });
+    let advice = match poll.decision.advice {
+        Advice::None => "none",
+        Advice::Shutdown => "shutdown",
+        Advice::HeldForUptime { .. } => "held-for-uptime",
+    };
+    serde_json::json!({
+        "route": "serial",
+        "port": port,
+        "time": time,
+        "firmware": id.firmware.as_deref().ok(),
+        "clock": id.clock.as_ref().ok().map(|(t, _)| t.as_str()),
+        "clock_plausible": id.clock.as_ref().ok().map(|&(_, ok)| ok),
+        "wake_at": id.wake.as_ref().ok().and_then(|w| w.as_deref()),
+        "percent": poll.battery.map(|b| b.percent),
+        "source": source,
+        "level": argon_device::status::level_name(poll.decision.level),
+        "advice": advice,
+        "error": poll.error.as_ref().map(std::string::ToString::to_string),
+        "consecutive_failures": poll.consecutive_failures,
+    })
+    .to_string()
+}
+
 /// Polls until interrupted or `count` polls have run.
-fn watch<L: argon_device::ups::UpsLink>(monitor: &mut UpsMonitor<L>, config: &Config, count: u64) {
+fn watch<L: argon_device::ups::UpsLink>(
+    monitor: &mut UpsMonitor<L>,
+    config: &Config,
+    count: u64,
+    json: bool,
+    port: &str,
+    id: &Identity,
+) {
     let interval = Duration::from_secs(config.ups.poll_interval_s.max(1));
+    if json {
+        watch_json(monitor, interval, count, port, id);
+        return;
+    }
     let u = &config.ups;
     println!(
         "\nPolicy: low {}%, critical {}% (confirmed {}x), margin {}%, no advice before {}s uptime",
@@ -447,6 +654,29 @@ fn watch<L: argon_device::ups::UpsLink>(monitor: &mut UpsMonitor<L>, config: &Co
             );
         }
 
+        polls += 1;
+        if count > 0 && polls >= count {
+            break;
+        }
+        std::thread::sleep(interval);
+    }
+}
+
+/// `--watch --json`: one object per poll, flushed as it goes, so a pipe sees each line when it
+/// happens rather than when the process ends.
+fn watch_json<L: argon_device::ups::UpsLink>(
+    monitor: &mut UpsMonitor<L>,
+    interval: Duration,
+    count: u64,
+    port: &str,
+    id: &Identity,
+) {
+    use std::io::Write as _;
+    let mut polls = 0u64;
+    loop {
+        let poll = monitor.poll(uptime());
+        println!("{}", json_from_serial(port, id, &poll, &clock_hms()));
+        let _ = std::io::stdout().flush();
         polls += 1;
         if count > 0 && polls >= count {
             break;
@@ -633,7 +863,7 @@ fn format_seconds(v: i64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{age, poweroff, render};
+    use super::{age, json_from_daemon, poweroff, render};
     use std::collections::HashMap;
 
     fn fields(pairs: &[(&str, &str)]) -> HashMap<String, String> {
@@ -687,6 +917,63 @@ mod tests {
         assert!(!age("59").contains("stale"));
         assert!(age("3600").contains("stale"), "{}", age("3600"));
         assert_eq!(age("not a number"), "-");
+    }
+
+    #[test]
+    fn the_json_route_reports_numbers_as_numbers_and_absence_as_null() {
+        let out = json_from_daemon(
+            &fields(&[
+                ("available", "yes"),
+                ("level", "critical"),
+                ("source", "battery"),
+                ("percent", "7"),
+                ("updated_unix", "1000"),
+                ("age_s", "4"),
+                ("shutdown_at_unix", "1300"),
+            ]),
+            1_000,
+        );
+        let v: serde_json::Value = serde_json::from_str(&out).expect("valid JSON");
+        assert_eq!(v["percent"], 7);
+        assert_eq!(v["level"], "critical");
+        assert_eq!(v["source"], "battery");
+        assert_eq!(v["age_s"], 4);
+        assert_eq!(v["stale"], false);
+        assert_eq!(v["shutdown_in_s"], 300);
+        assert_eq!(v["route"], "argond");
+    }
+
+    #[test]
+    fn json_never_turns_a_missing_reading_into_a_zero() {
+        // A monitor that cannot tell "no reading" from "0 %" would shut a machine down.
+        let out = json_from_daemon(
+            &fields(&[("available", "yes"), ("level", "unknown"), ("percent", "")]),
+            1_000,
+        );
+        let v: serde_json::Value = serde_json::from_str(&out).expect("valid JSON");
+        assert!(v["percent"].is_null(), "{out}");
+        assert!(v["shutdown_at_unix"].is_null(), "{out}");
+        assert!(v["shutdown_in_s"].is_null(), "{out}");
+
+        let none = json_from_daemon(&fields(&[("available", "no")]), 1_000);
+        let v: serde_json::Value = serde_json::from_str(&none).expect("valid JSON");
+        assert_eq!(v["available"], false);
+        assert!(v["level"].is_null());
+    }
+
+    #[test]
+    fn json_marks_a_stale_reading_at_the_same_threshold_as_the_text() {
+        let stale = |age: &str| {
+            let out = json_from_daemon(&fields(&[("available", "yes"), ("age_s", age)]), 0);
+            let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+            v["stale"].as_bool().unwrap()
+        };
+        assert!(!stale("119"));
+        assert!(stale("120"));
+        // The text output must agree, or a script and a person reading the same daemon
+        // disagree about whether to trust it.
+        assert!(!age("119").contains("stale"));
+        assert!(age("120").contains("stale"));
     }
 
     #[test]

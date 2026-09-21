@@ -63,7 +63,9 @@ machine-readable output, a panel icon, and a Debian package.
 - **OLED status page** on the ONE V5's case display, switched on and off from the panel icon.
 - **`argonctl`** — `doctor`, `ups`, `battery`, `rtc`, `poweroff`, `zigbee`, `oled`, … with
   manual pages. `argonctl ups` asks the daemon over D-Bus, so reading the battery needs no
-  access to the device and no membership of the group that owns it.
+  access to the device and no membership of the group that owns it, and `--json` gives the
+  same reading to a script -- on every route, with an absent value as `null` rather than a
+  zero, and the reading's age included so a monitor can tell fresh from stale.
 - **D-Bus service** `org.argonutils.Daemon1`, guarded by polkit: the desktop's own rules apply.
 - **Zigbee module check** — identifies the Industria Zigbee module and reads its firmware
   version without disturbing it.

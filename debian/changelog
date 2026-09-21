@@ -1,3 +1,17 @@
+argon-utils (0.1.27) unstable; urgency=medium
+
+  * `argonctl ups --json` on every route: the daemon, hidraw and serial,
+    the last one as one object per poll with `--watch`. Numbers are
+    numbers and an absent reading is `null`, never 0 or "" -- a monitor
+    that cannot tell "no reading" from "0 %" would shut a machine down.
+    The JSON marks a reading stale at the same threshold as the text, so
+    a script and a person reading the same daemon cannot disagree.
+  * The serial route's identity read (firmware, clock, wake) is kept as
+    values rather than printed where it is read, so both output forms
+    come from the same read.
+
+ -- Simon Keimer <simon.keimer@mailbox.org>  Mon, 21 Sep 2026 12:11:02 +0200
+
 argon-utils (0.1.26) unstable; urgency=medium
 
   * `argonctl ups` asks argond over D-Bus (new method `UpsStatus`, reports
