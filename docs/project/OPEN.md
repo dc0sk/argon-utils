@@ -2,7 +2,7 @@
 project: argon-utils
 doc: project/OPEN
 status: living
-last_updated: 2026-09-18
+last_updated: 2026-09-21
 ---
 
 # Open items
@@ -35,12 +35,12 @@ Deliverables from the plan that do not exist yet, so nothing claims them by omis
 | | What | Notes |
 |---|---|---|
 | ~~**B1**~~ | ~~Man pages~~ — **built 2026-09-18**: `argond(8)`, `argonctl(1)`, `argon-tray(1)`, generated from the clap definitions at package build | — |
-| **B2** | IPC: D-Bus service and Unix socket | **built 2026-09-18**: the root-only socket, and `org.argonutils.Daemon1` on the system bus with polkit (logind's power-off defaults). Carries "power off with a wake". Verified on the real bus with 0.1.7 installed (2026-09-18): `Version` gives "0.1.7"; `CanPoweroffWithWake` gives "yes" from the active desktop session and "challenge" from a sessionless process (`systemd-run --uid=nobody`). `PoweroffWithWake` itself is exercised by T18 or the tray |
+| **B2** | IPC: D-Bus service and Unix socket | **built 2026-09-18**: the root-only socket, and `org.argonutils.Daemon1` on the system bus with polkit (logind's power-off defaults). Carries "power off with a wake". Verified on the real bus with 0.1.7 installed (2026-09-18): `Version` gives "0.1.7"; `CanPoweroffWithWake` gives "yes" from the active desktop session and "challenge" from a sessionless process (`systemd-run --uid=nobody`). `PoweroffWithWake` itself is exercised by T18 or the tray. **0.1.26**: a reports-only `UpsStatus` (`a{ss}`: level, source, percent, times, and the reading's age) so `argonctl ups` can read the battery without opening the device -- see the note on the `argon` group below |
 | ~~**B3**~~ | ~~OLED status page in `argond`~~ — **built 2026-09-18** | confirmed on the case panel: orientation, legibility at contrast 64, nothing clipped. Off by default; `[oled] enabled = true` |
 | **B4** | UPS scheduled wake | **clock sync built 2026-09-18**: argond checks the UPS clock at startup and every 6 h and sets it when more than 2 s off (full mode, NTP-synced system clock, `sync_clock`). **Built 2026-09-18**: `argonctl poweroff --wake-at` (argond sets the wake, reads it back, then powers off) and a safety net that parks any schedule coming due on a running machine. **T18 passed 2026-09-20**: the UPS woke the machine at the set minute and cleared the schedule itself (`OBS-2026-09-20-t18-wake`) |
 | ~~**B7**~~ | ~~Persistent drift record~~ — **built 2026-09-18**: every clock check appends to `/var/lib/argon-utils/clock.log` (bounded to 1,000 lines, cut to the newest 500), and `argonctl rtc` reports a rate once an uncorrected stretch spans a day. Earlier points, before the record existed: +0 s at 11:52 and +0/+1 s at 13:52 UTC on 2026-09-18, after T15 set the clock at 11:19 | — |
 | **B5** | Zigbee detect/health | **working on hardware (T16, 2026-09-18)**: `argonctl zigbee` identifies the module; `--probe` reads the firmware version, non-disruptively. Firmware *update* tooling is not built, and would need its own risk decision |
-| **B8** | ONE UP battery | **built 2026-09-18**: `[ups] source = "oneup"` reads the ONE UP's CW2217 fuel gauge (identified by VERSION `0xA0`; reads only, through a bus type with no write method) into the same policy, shutdown coordinator and status file as the PWR UPS. `argonctl battery` reads it by hand. Run on the ONE UP from a scratch folder in read-only mode: identified, published "on mains 100 %". **T19 step 1 passed 2026-09-19** (0.1.10, packaged, alongside `argononeupd`): charger out -> "on battery" at current -2256, back in -> "on mains", each within one poll. 0.1.11 installed there 2026-09-19; its tray reads "Battery 100 %" (confirmed on the ONE UP's panel). **Handed over 2026-09-19 (T19 step 2):** argond in mode full owns the battery, the lid overlay and lid agent the lid (T22: power-save and shutdown both work), `argononeupd` disabled -- `oneup-restore` reverts. **Open:** what else `argononeupd` did is unobserved; the keyboard light (T24); no wake on the ONE UP, so "Power off now…" is not offered there |
+| **B8** | ONE UP battery | **built 2026-09-18**: `[ups] source = "oneup"` reads the ONE UP's CW2217 fuel gauge (identified by VERSION `0xA0`; reads only, through a bus type with no write method) into the same policy, shutdown coordinator and status file as the PWR UPS. `argonctl battery` reads it by hand. Run on the ONE UP from a scratch folder in read-only mode: identified, published "on mains 100 %". **T19 step 1 passed 2026-09-19** (0.1.10, packaged, alongside `argononeupd`): charger out -> "on battery" at current -2256, back in -> "on mains", each within one poll. 0.1.11 installed there 2026-09-19; its tray reads "Battery 100 %" (confirmed on the ONE UP's panel). **Handed over 2026-09-19 (T19 step 2):** argond in mode full owns the battery, the lid overlay and lid agent the lid (T22: power-save and shutdown both work), `argononeupd` disabled -- `oneup-restore` reverts. **T24 settled 2026-09-20:** the keyboard light cannot be ours -- Fn+Space arrives as `KEY_F16` (scancode `0x7002B`) but no LED device exists, so the keyboard switches its own backlight and the lid's power-save leaves it alone. **Open:** what else `argononeupd` did is unobserved; no wake on the ONE UP, so "Power off now…" is not offered there |
 | **B6** | Tray controls | **started 2026-09-18**: "Power off now… and wake in 1 h / 8 h / tomorrow 07:00", offered only when polkit could allow it (confirmed in the panel with 0.1.7). **0.1.8**: any shutdown logind has scheduled is shown and can be cancelled in one click (confirmed 2026-09-18 with `shutdown -P +30`, cancelled from the tray); argond's low-battery poweroff keeps its two-step cancel. **0.1.23**: a "Case display" checkbox switches the OLED status page (D-Bus `OledState`/`SetOled`, polkit `org.argonutils.oled`), remembered across restarts; confirmed on the panel 2026-09-20 (T26) |
 
 Done since the plan: the tray icon (`argon-tray`, confirmed on the Pi desktop panel
@@ -61,7 +61,9 @@ The project was planned around fan control. Two findings moved its centre of gra
 What is left that nothing else does, on the ONE V5 with a Pi 5: the **UPS** (battery state,
 RTC, scheduled wake), the **OLED**, and the **Zigbee** module. On 2026-09-17 T2 showed that
 the case button is the Pi's own power button, which the OS already handles, so it joins the
-fan as something to leave alone on this hardware. IR is still unknown (T6). That is a coherent product, and arguably a more
+fan as something to leave alone on this hardware. IR looks like nothing of ours either: four capture windows on 2026-09-20 saw no pulse on
+GPIO23 or on any other free header line, so the V5 board most likely has no receiver populated,
+and the question moves to the V2/V3 on the Pi 4 (T6). That is a coherent product, and arguably a more
 useful one than a second fan controller. But it is a different product from the one the plan
 opened with, and that is worth deciding rather than drifting into.
 
@@ -74,6 +76,17 @@ opened with, and that is worth deciding rather than drifting into.
 | ~~**T11**~~ | ~~Fan on Pi 5: control it, or report it~~ — **decided 2026-09-19: report only** | — | — |
 | ~~**S1**~~ | ~~Scope~~ — **decided 2026-09-19: tested hardware only** | — | — |
 | ~~**D3**~~ | ~~What to do when the battery policy advises shutdown~~ — **decided 2026-09-17** | — | — |
+
+### D4 — who may read the battery — **DECIDED 2026-09-21: through the daemon, not the group**
+
+The udev rules give the UPS's serial and hidraw nodes to the `argon` group, replacing `dialout`,
+so exactly one process opens a link that has no arbitration. That made reading the battery need
+`sudo`, and the obvious shortcut -- adding a login to `argon` -- would undo the property the
+group exists for: the serial channel can set the UPS clock, set a wake schedule and reset the
+battery meter, and the hidraw node carries writable `ShutdownImminent` and
+`RemainingCapacityLimit`. So argond reports what it already knows, over D-Bus (`UpsStatus`,
+reports only, 0.1.26), and `argonctl ups` asks it before touching any device. Nobody needs to be
+in the group, and the single-owner rule stays intact. Documented in `packaging/README.md`.
 
 ### D3 — acting on low-battery shutdown advice — **DECIDED 2026-09-17: implemented**
 
