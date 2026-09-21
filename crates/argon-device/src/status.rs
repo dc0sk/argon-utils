@@ -15,6 +15,20 @@ pub const DEFAULT_PATH: &str = "/run/argon-utils/ups.state";
 /// The format version. Bumped on any incompatible change.
 pub const VERSION: u32 = 1;
 
+/// Which power source a level implies: `mains`, `battery` or `unknown`.
+///
+/// Every level but `on-mains` and `unknown` is a battery level. That is obvious from the names
+/// and still worth having in one place, so the tray, the CLI and the D-Bus service cannot come
+/// to different conclusions about the same word.
+#[must_use]
+pub fn source_of(level: &str) -> &'static str {
+    match level {
+        "on-mains" => "mains",
+        "on-battery" | "low" | "critical" => "battery",
+        _ => "unknown",
+    }
+}
+
 /// A snapshot of UPS state as published by the daemon.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UpsStatus {

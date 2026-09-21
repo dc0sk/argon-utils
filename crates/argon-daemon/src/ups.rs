@@ -7,6 +7,7 @@ use argon_device::control::{Request, Response};
 use argon_device::drift;
 use argon_device::power::PowerControl;
 use argon_device::power::{Action, Logind, ShutdownCoordinator};
+use argon_device::status::UpsStatus;
 use argon_device::ups::{Gate, Ups, UpsMonitor, Writes};
 use argon_device::ups_service::{contention, step};
 use argon_device::wake::{self, Assessment};
@@ -16,6 +17,7 @@ use argon_hal::{discovery, platform};
 use argon_proto::ups::policy::{Advice, BatteryPolicy};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::Receiver;
 use std::thread::JoinHandle;
@@ -33,6 +35,19 @@ pub const STALL_INTERVALS: u32 = 4;
 /// The device has been seen to re-enumerate under a new node name; a link held open across
 /// that points at nothing and never recovers on its own.
 pub(crate) const REOPEN_AFTER: u32 = 3;
+
+/// The last status the monitoring thread published, shared with the D-Bus service.
+///
+/// The status file is the record other programs read; this is the same snapshot kept in memory
+/// so `UpsStatus` on the bus can answer without reading back what argond itself wrote, and
+/// without a caller needing access to the UPS device at all.
+pub type Latest = Arc<Mutex<Option<UpsStatus>>>;
+
+/// A share holding nothing yet.
+#[must_use]
+pub fn no_status() -> Latest {
+    Arc::new(Mutex::new(None))
+}
 
 /// Requests from the control socket, and the flag that says one is waiting.
 pub struct Requests {
@@ -52,6 +67,7 @@ pub fn spawn(
     stopping: Arc<AtomicBool>,
     heartbeat: Arc<AtomicU64>,
     requests: Requests,
+    latest: Latest,
 ) -> Option<JoinHandle<()>> {
     if config.ups.source != "serial" {
         eprintln!(
@@ -142,6 +158,7 @@ pub fn spawn(
             &heartbeat,
             writes,
             &requests,
+            &latest,
         );
     }))
 }
@@ -161,6 +178,7 @@ fn run(
     heartbeat: &AtomicU64,
     writes: Writes,
     requests: &Requests,
+    latest: &Latest,
 ) {
     let clock_writes = writes.clock;
     let drift_record = drift_record_path();
@@ -221,7 +239,7 @@ fn run(
                 }
             }
 
-            publish(&cycle.status, state_file, &mut state_error_logged);
+            publish(&cycle.status, state_file, latest, &mut state_error_logged);
         }
 
         serve_requests(requests, monitor.as_mut(), writes.wake);
@@ -417,12 +435,20 @@ fn drift_record_path() -> Option<PathBuf> {
     (!first.is_empty()).then(|| PathBuf::from(first).join("clock.log"))
 }
 
-/// Writes the status file, logging a failure once rather than on every poll.
+/// Writes the status file and keeps the same snapshot for the D-Bus service, logging a failure
+/// once rather than on every poll.
+///
+/// The share is updated even when the file cannot be written: a full or read-only `/run` must
+/// not also cost the bus its answer.
 pub(crate) fn publish(
     status: &argon_device::status::UpsStatus,
     path: &std::path::Path,
+    latest: &Latest,
     error_logged: &mut bool,
 ) {
+    if let Ok(mut slot) = latest.lock() {
+        *slot = Some(status.clone());
+    }
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
     }

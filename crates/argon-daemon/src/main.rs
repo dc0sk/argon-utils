@@ -196,6 +196,9 @@ fn start_workers(cli: &Cli, config: &Config, stopping: &Arc<AtomicBool>) -> Work
     };
     // The case display's switch: the OLED thread obeys it, the D-Bus service flips it.
     let oled_control = Arc::new(oled::OledControl::from_state_directory());
+    // The last reading, shared the same way: the monitoring thread fills it, the D-Bus service
+    // reports it to callers who cannot open the device themselves.
+    let latest = ups::no_status();
     // Only the PWR UPS has a clock to wake the machine by.
     let oneup = config.ups.source == "oneup";
     let ups_thread = if cli.once {
@@ -207,6 +210,7 @@ fn start_workers(cli: &Cli, config: &Config, stopping: &Arc<AtomicBool>) -> Work
             Arc::clone(stopping),
             Arc::clone(&heartbeat),
             requests,
+            Arc::clone(&latest),
         )
     } else {
         ups::spawn(
@@ -215,6 +219,7 @@ fn start_workers(cli: &Cli, config: &Config, stopping: &Arc<AtomicBool>) -> Work
             Arc::clone(stopping),
             Arc::clone(&heartbeat),
             requests,
+            Arc::clone(&latest),
         )
     };
     // The same channel serves the D-Bus service, so both routes reach the UPS thread the same
@@ -227,6 +232,7 @@ fn start_workers(cli: &Cli, config: &Config, stopping: &Arc<AtomicBool>) -> Work
             Arc::clone(&request_waiting),
             !oneup,
             Arc::clone(&oled_control),
+            latest,
         )
     };
     let control_thread = if cli.once {

@@ -174,6 +174,13 @@ Two things beyond dropping files in place, both in `postinst`:
   gets its device access from the `i2c`, `gpio` and `dialout` groups named in the unit. If any
   of those groups are missing, `postinst` warns rather than leaving you to decode a systemd
   failure.
+  The udev rules hand the UPS's serial and hidraw nodes to the `argon` **group**, replacing
+  `dialout`, so that exactly one process opens a link that has no arbitration. **Do not add your
+  login to that group** to read the battery: it would put every process in your session on the
+  same port, and that port can set the UPS clock, set a wake schedule and reset the battery
+  meter, while the hidraw node carries writable `ShutdownImminent` and `RemainingCapacityLimit`
+  reports. `argonctl ups` asks argond over D-Bus instead, which needs no group and no device
+  access.
 - **It disables the vendor's UPS daemons** `argononeupsd` and `argonupsrtcd`, because two
   readers on one CDC-ACM port split the byte stream and both desynchronise mid-frame. This
   cannot be a dpkg `Conflicts`: the vendor stack is not a dpkg package, it is a curl-to-shell

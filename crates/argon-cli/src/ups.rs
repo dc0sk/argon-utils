@@ -1,10 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! `argonctl ups` — UPS telemetry over hidraw.
+//! `argonctl ups` — what the UPS is doing.
 //!
-//! Read-only. Uses `hidraw` and Input reports only, so it claims no USB interface and
-//! cannot disturb whatever holds the serial port.
+//! Read-only, by three routes, in this order:
+//!
+//! 1. **argond over D-Bus** (the default when it is running). argond holds the UPS port, so it
+//!    is the one process that can read it; asking it keeps a login out of the `argon` group,
+//!    which owns both the serial node and the hidraw node and is what keeps a second writer off
+//!    a link that has no arbitration.
+//! 2. **hidraw** (`--device`), Input reports only: it claims no USB interface and cannot
+//!    disturb whatever holds the serial port. Needs access to the node.
+//! 3. **the serial protocol** (`--serial`), which only works when nothing else holds the port.
 
 use argon_device::config::Config;
+use argon_device::control::{BUS_NAME, INTERFACE, OBJECT_PATH};
 use argon_device::ups::{QueryOnly, Ups, UpsMonitor};
 use argon_hal::{discovery, foreign, hidraw, platform, serial};
 use argon_proto::hid::{ItemKind, ReportDescriptor, usage};
@@ -40,6 +48,13 @@ pub struct Args {
     #[arg(long, value_name = "PATH")]
     pub config: Option<std::path::PathBuf>,
 
+    /// Read the device directly instead of asking argond.
+    ///
+    /// Uses hidraw, which needs access to the node -- so this normally wants `sudo`, because
+    /// the node belongs to the `argon` group that argond runs as.
+    #[arg(long, conflicts_with = "serial")]
+    pub device: bool,
+
     /// Read over the Argon serial protocol instead of HID.
     ///
     /// Pass a port path, or `auto` to use the discovered UPS. The vendor's daemon holds the
@@ -58,6 +73,13 @@ struct Reading {
 pub fn run(args: &Args) -> ExitCode {
     if let Some(port) = &args.serial {
         return run_serial(port, args);
+    }
+    if !args.device {
+        if let Some(fields) = from_daemon() {
+            print!("{}", render(&fields, now_unix()));
+            return ExitCode::SUCCESS;
+        }
+        eprintln!("argonctl: argond is not on the system bus; reading the device directly\n");
     }
     let (mut dev, desc, raw_len, serial) = match open_ups() {
         Ok(v) => v,
@@ -140,6 +162,89 @@ pub fn run(args: &Args) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// Asks argond what it last read, or `None` when it is not on the bus.
+///
+/// Anything short of an answer is a `None`: no system bus, no service, an older argond without
+/// the method. The caller then falls back to the device, so a missing daemon is not an error.
+fn from_daemon() -> Option<std::collections::HashMap<String, String>> {
+    let conn = zbus::blocking::Connection::system().ok()?;
+    let proxy = zbus::blocking::Proxy::new(&conn, BUS_NAME, OBJECT_PATH, INTERFACE).ok()?;
+    proxy
+        .call::<_, _, std::collections::HashMap<String, String>>("UpsStatus", &())
+        .ok()
+}
+
+/// Formats argond's answer.
+///
+/// Unknown keys are ignored and missing ones read as "-", so a newer daemon reporting more, or
+/// an older one reporting less, still prints something truthful.
+fn render(fields: &std::collections::HashMap<String, String>, now_unix: u64) -> String {
+    use std::fmt::Write as _;
+    let get = |k: &str| fields.get(k).map_or("", String::as_str);
+    let mut out = String::new();
+    let _ = writeln!(out, "From argond\n-----------");
+    if get("available") != "yes" {
+        let _ = writeln!(
+            out,
+            "  argond is running but has no reading: it is not monitoring a battery, or has \n  \
+             not completed its first poll."
+        );
+        return out;
+    }
+    let percent = match get("percent") {
+        "" => "unknown".to_owned(),
+        p => format!("{p}%"),
+    };
+    let _ = writeln!(out, "  {:<14} {percent}", "charge");
+    let _ = writeln!(out, "  {:<14} {}", "source", dash(get("source")));
+    let _ = writeln!(out, "  {:<14} {}", "level", dash(get("level")));
+    let _ = writeln!(out, "  {:<14} {}", "last read", age(get("age_s")));
+    let _ = writeln!(
+        out,
+        "  {:<14} {}",
+        "poweroff",
+        poweroff(get("shutdown_at_unix"), now_unix)
+    );
+    out
+}
+
+fn dash(v: &str) -> &str {
+    if v.is_empty() { "-" } else { v }
+}
+
+/// How long ago the reading was taken, called out when it is old enough to distrust.
+fn age(age_s: &str) -> String {
+    let Ok(secs) = age_s.parse::<u64>() else {
+        return "-".to_owned();
+    };
+    let when = if secs < 60 {
+        format!("{secs}s ago")
+    } else {
+        format!("{}m {}s ago", secs / 60, secs % 60)
+    };
+    // A status that stopped being updated looks exactly like a healthy one otherwise.
+    if secs >= 120 {
+        format!("{when}  (stale -- is argond still polling?)")
+    } else {
+        when
+    }
+}
+
+/// A pending poweroff, as the time left rather than a timestamp to subtract in your head.
+fn poweroff(at_unix: &str, now_unix: u64) -> String {
+    let Ok(at) = at_unix.parse::<u64>() else {
+        return "none scheduled".to_owned();
+    };
+    let left = at.saturating_sub(now_unix);
+    format!("scheduled in {}m {}s", left / 60, left % 60)
+}
+
+fn now_unix() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+}
+
 /// Reads the UPS over the Argon serial protocol, once or continuously.
 ///
 /// Every request goes through `QueryOnly`, so nothing that changes the UPS's state can be
@@ -197,7 +302,7 @@ fn run_serial(port: &str, args: &Args) -> ExitCode {
             "argonctl: {} belongs to the argond service (group `argon`), which is holding it \
              now.\n\n\
              argond publishes what it reads, so for a quick look:\n\n    \
-             cat /run/argon-utils/ups.state\n\n\
+             argonctl ups\n\n\
              To talk to the device from here instead, stop the service first:\n\n    \
              sudo systemctl stop argond\n\n\
              and start it again when you are done.",
@@ -401,8 +506,16 @@ fn open_ups() -> Result<(hidraw::HidRaw, ReportDescriptor, usize, Option<String>
     let dev = hidraw::HidRaw::open(node).map_err(|e| {
         eprintln!("argonctl: cannot open {}: {e}", node.display());
         eprintln!(
-            "\nhidraw nodes are root:root 0600 by default. Either run this with sudo, or\n\
-             install the udev rule from packaging/udev/60-argon-utils.rules."
+            "\nThe UPS's hidraw node belongs to the `argon` group -- the user argond runs as --\n\
+             so that one process holds a link that has no arbitration, and because that group\n\
+             carries writes: the UPS clock, the wake schedule, the battery meter, and HID's\n\
+             ShutdownImminent. Adding your login to it is not the answer.\n\n\
+             Either let argond read it and ask argond instead:\n\n    \
+             sudo systemctl start argond && argonctl ups\n\n\
+             or read the device yourself, just this once:\n\n    \
+             sudo argonctl ups --device\n\n\
+             Without the packaged udev rule the node is root:root 0600 and even the group is\n\
+             absent; it is in packaging/udev/60-argon-utils.rules."
         );
         ExitCode::FAILURE
     })?;
@@ -515,5 +628,72 @@ fn format_seconds(v: i64) -> String {
         format!("{m}m {s:02}s")
     } else {
         format!("{s}s")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{age, poweroff, render};
+    use std::collections::HashMap;
+
+    fn fields(pairs: &[(&str, &str)]) -> HashMap<String, String> {
+        pairs
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+            .collect()
+    }
+
+    #[test]
+    fn a_reading_is_reported_with_its_source_and_age() {
+        let out = render(
+            &fields(&[
+                ("available", "yes"),
+                ("level", "on-battery"),
+                ("source", "battery"),
+                ("percent", "64"),
+                ("age_s", "3"),
+                ("shutdown_at_unix", ""),
+            ]),
+            1_000,
+        );
+        assert!(out.contains("64%"), "{out}");
+        assert!(out.contains("battery"), "{out}");
+        assert!(out.contains("3s ago"), "{out}");
+        assert!(out.contains("none scheduled"), "{out}");
+    }
+
+    #[test]
+    fn a_daemon_with_nothing_to_report_says_so_rather_than_printing_blanks() {
+        let out = render(&fields(&[("available", "no")]), 1_000);
+        assert!(out.contains("no reading"), "{out}");
+        assert!(!out.contains("charge"), "{out}");
+    }
+
+    #[test]
+    fn a_missing_field_never_becomes_a_wrong_number() {
+        // An older daemon, or one that failed its last read: the percentage is simply absent.
+        let out = render(
+            &fields(&[("available", "yes"), ("level", "unknown")]),
+            1_000,
+        );
+        assert!(out.contains("unknown"), "{out}");
+        assert!(!out.contains("0%"), "{out}");
+    }
+
+    #[test]
+    fn a_stale_reading_is_called_stale() {
+        // A thread that died leaves a status that otherwise looks perfectly healthy.
+        assert!(age("3").contains("3s ago"));
+        assert!(!age("59").contains("stale"));
+        assert!(age("3600").contains("stale"), "{}", age("3600"));
+        assert_eq!(age("not a number"), "-");
+    }
+
+    #[test]
+    fn a_pending_poweroff_is_shown_as_time_left() {
+        assert_eq!(poweroff("1300", 1_000), "scheduled in 5m 0s");
+        assert_eq!(poweroff("", 1_000), "none scheduled");
+        // Already due: no underflow, and no negative time printed.
+        assert_eq!(poweroff("900", 1_000), "scheduled in 0m 0s");
     }
 }

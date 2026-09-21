@@ -44,8 +44,10 @@ enum Command {
 
     /// Read UPS telemetry.
     ///
-    /// Uses hidraw and Input reports only, so it claims no USB interface and cannot
-    /// disturb whatever holds the serial port.
+    /// Asks argond over D-Bus, which is the process that holds the UPS port -- so this needs
+    /// no access to the device and no membership of the `argon` group. Without argond it falls
+    /// back to hidraw, Input reports only, which claims no USB interface. `--device` and
+    /// `--serial` choose a route explicitly.
     #[command(subcommand_negates_reqs = true)]
     Ups(ups::Args),
 

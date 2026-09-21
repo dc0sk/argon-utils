@@ -6,7 +6,7 @@
 //! agent work unchanged. What the ONE UP lacks is the UPS's clock and scheduled wake, so this
 //! thread has no housekeeping and refuses wake requests.
 
-use crate::ups::{self, Requests};
+use crate::ups::{self, Latest, Requests};
 use argon_device::config::Config;
 use argon_device::control::Response;
 use argon_device::gauge::{Cw2217, GaugeMonitor};
@@ -31,6 +31,7 @@ pub fn spawn(
     stopping: Arc<AtomicBool>,
     heartbeat: Arc<AtomicU64>,
     requests: Requests,
+    latest: Latest,
 ) -> Option<JoinHandle<()>> {
     // Reading alongside the vendor daemon is safe -- the I2C bus arbitrates, unlike the UPS's
     // serial port -- so it only decides whether argond may act.
@@ -92,6 +93,7 @@ pub fn spawn(
             &stopping,
             &heartbeat,
             &requests,
+            &latest,
         );
     }))
 }
@@ -110,6 +112,7 @@ fn run(
     stopping: &AtomicBool,
     heartbeat: &AtomicU64,
     requests: &Requests,
+    latest: &Latest,
 ) {
     let mut coordinator = ShutdownCoordinator::new(Logind, delay, dry_run);
     let mut monitor: Option<GaugeMonitor<LinuxI2c>> = None;
@@ -150,7 +153,7 @@ fn run(
                 monitor = None;
                 last_flow = None;
             }
-            ups::publish(&cycle.status, state_file, &mut state_error_logged);
+            ups::publish(&cycle.status, state_file, latest, &mut state_error_logged);
         }
 
         refuse_requests(requests);

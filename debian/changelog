@@ -1,3 +1,22 @@
+argon-utils (0.1.26) unstable; urgency=medium
+
+  * `argonctl ups` asks argond over D-Bus (new method `UpsStatus`, reports
+    only) instead of opening the UPS itself, and falls back to the device
+    when argond is not on the bus. Reading the battery now needs no access
+    to the device and no membership of the `argon` group -- which owns the
+    serial and hidraw nodes precisely so that one process holds a link with
+    no arbitration, and which carries writes: the UPS clock, the wake
+    schedule, the battery-meter reset, and HID's ShutdownImminent.
+  * `--device` and `--serial` pick a route explicitly.
+  * The reading's age is reported, and called stale past two minutes: a
+    monitoring thread that died otherwise leaves a status that looks
+    perfectly healthy.
+  * The refusal on the hidraw node says what is actually true -- the node
+    belongs to the `argon` group by design -- instead of telling you to
+    install a udev rule that is already installed.
+
+ -- Simon Keimer <simon.keimer@mailbox.org>  Mon, 21 Sep 2026 10:14:07 +0200
+
 argon-utils (0.1.25) unstable; urgency=medium
 
   * The UPS clock is looked at again after 10 minutes, not 6 hours, while

@@ -20,10 +20,13 @@ use zbus::zvariant::Value;
 
 use crate::cpu_cap::{CapControl, CpuCap};
 use crate::oled::OledControl;
+use crate::ups::Latest;
 use argon_device::control::{
     ACTION_CPU_CAP, ACTION_OLED, ACTION_POWEROFF_WITH_WAKE, BUS_NAME, OBJECT_PATH,
 };
+use argon_device::status::{UpsStatus, source_of};
 use std::sync::Mutex;
+use std::time::SystemTime;
 
 /// What polkit said about a caller.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,6 +99,8 @@ pub struct Daemon1 {
     cpu: Mutex<Box<dyn CapControl>>,
     /// The case display's on/off switch, shared with the OLED thread.
     oled: Arc<OledControl>,
+    /// The last reading the monitoring thread published.
+    latest: Latest,
 }
 
 // The interface macro fixes these signatures: a method takes `&self` whether it needs it or
@@ -125,6 +130,23 @@ impl Daemon1 {
         poweroff(self.auth.as_ref(), &sender_of(&header), at_unix, |req| {
             relay(req, &self.to_ups, &self.waiting)
         })
+    }
+
+    /// What argond last read from the battery, as `key=value` pairs. Reports only.
+    ///
+    /// This is how `argonctl` and anything else in a user session can see the battery without
+    /// opening the device: argond holds the UPS port, and handing a login the group that owns
+    /// it would put a second writer on a link that has no arbitration.
+    ///
+    /// Always answers. `available=no` means argond is not monitoring a battery, or has not
+    /// completed a reading yet -- which is a different thing from the service being absent, and
+    /// the caller can tell the two apart because an absent service cannot reply at all.
+    fn ups_status(&self) -> HashMap<String, String> {
+        let latest = self
+            .latest
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        status_fields(latest.as_ref(), SystemTime::now())
     }
 
     /// The case display: "on", "off", or "na" when argond is not driving one. Changes nothing.
@@ -214,6 +236,45 @@ fn set_cpu_cap(
     Ok(())
 }
 
+/// The status as flat pairs for the bus.
+///
+/// `a{ss}` rather than a struct: a reader that does not know a key ignores it, so a later
+/// version can report more without breaking an older `argonctl`. Times are unix seconds, and
+/// `age_s` is included because a caller cannot otherwise tell a fresh reading from one left
+/// behind by a thread that died half an hour ago.
+fn status_fields(latest: Option<&UpsStatus>, now: SystemTime) -> HashMap<String, String> {
+    let mut f = HashMap::new();
+    let Some(s) = latest else {
+        f.insert("available".to_owned(), "no".to_owned());
+        return f;
+    };
+    f.insert("available".to_owned(), "yes".to_owned());
+    f.insert("level".to_owned(), s.level.clone());
+    f.insert("source".to_owned(), source_of(&s.level).to_owned());
+    f.insert(
+        "percent".to_owned(),
+        s.percent.map_or_else(String::new, |p| p.to_string()),
+    );
+    f.insert("updated_unix".to_owned(), unix(s.updated).to_string());
+    f.insert(
+        "age_s".to_owned(),
+        now.duration_since(s.updated)
+            .map_or_else(|_| "0".to_owned(), |d| d.as_secs().to_string()),
+    );
+    f.insert(
+        "shutdown_at_unix".to_owned(),
+        s.shutdown_at
+            .map_or_else(String::new, |t| unix(t).to_string()),
+    );
+    f
+}
+
+/// Seconds since the epoch, saturating at zero for a time before it.
+fn unix(t: SystemTime) -> u64 {
+    t.duration_since(SystemTime::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+}
+
 fn sender_of(header: &Header<'_>) -> String {
     header.sender().map(ToString::to_string).unwrap_or_default()
 }
@@ -270,6 +331,7 @@ pub fn serve(
     waiting: Arc<AtomicBool>,
     wake_supported: bool,
     oled: Arc<OledControl>,
+    latest: Latest,
 ) -> Option<zbus::blocking::Connection> {
     let object = Daemon1 {
         to_ups,
@@ -278,6 +340,7 @@ pub fn serve(
         wake_supported,
         cpu: Mutex::new(Box::new(CpuCap::default())),
         oled,
+        latest,
     };
     let built = zbus::blocking::connection::Builder::system()
         .and_then(|b| b.name(BUS_NAME))
@@ -318,6 +381,61 @@ mod tests {
             self.1.lock().unwrap().push(interactive);
             self.0.clone()
         }
+    }
+
+    fn at(unix: u64) -> SystemTime {
+        SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix)
+    }
+
+    fn status(level: &str, percent: Option<u8>, shutdown_at: Option<u64>) -> UpsStatus {
+        UpsStatus {
+            updated: at(1_000),
+            level: level.to_owned(),
+            percent,
+            shutdown_at: shutdown_at.map(at),
+        }
+    }
+
+    #[test]
+    fn a_reading_is_reported_with_the_source_its_level_implies() {
+        let f = status_fields(Some(&status("on-battery", Some(64), None)), at(1_005));
+        assert_eq!(f["available"], "yes");
+        assert_eq!(f["level"], "on-battery");
+        assert_eq!(f["source"], "battery", "a battery level reported as mains");
+        assert_eq!(f["percent"], "64");
+        assert_eq!(f["updated_unix"], "1000");
+        assert_eq!(f["age_s"], "5");
+        assert_eq!(f["shutdown_at_unix"], "");
+    }
+
+    #[test]
+    fn nothing_read_yet_is_said_plainly_rather_than_as_a_zero() {
+        let f = status_fields(None, at(1_000));
+        assert_eq!(f["available"], "no");
+        assert!(!f.contains_key("percent"), "invented a percentage");
+        assert!(!f.contains_key("level"));
+    }
+
+    #[test]
+    fn a_failed_read_leaves_the_percentage_empty_not_zero() {
+        // The level still says what the policy concluded; the charge is simply unknown.
+        let f = status_fields(Some(&status("unknown", None, None)), at(1_000));
+        assert_eq!(f["percent"], "");
+        assert_eq!(f["source"], "unknown");
+    }
+
+    #[test]
+    fn a_pending_poweroff_is_reported() {
+        let f = status_fields(Some(&status("critical", Some(4), Some(1_300))), at(1_000));
+        assert_eq!(f["shutdown_at_unix"], "1300");
+        assert_eq!(f["source"], "battery");
+    }
+
+    #[test]
+    fn a_clock_that_went_backwards_does_not_make_the_age_wrap() {
+        // NTP stepping the clock back must not turn a fresh reading into a 136-year-old one.
+        let f = status_fields(Some(&status("on-mains", Some(90), None)), at(900));
+        assert_eq!(f["age_s"], "0");
     }
 
     #[test]
