@@ -38,6 +38,10 @@ const TOLERANCE_S: i64 = 2;
 const LISTEN: Duration = Duration::from_millis(1_500);
 
 #[derive(clap::Args)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "command-line flags: clap derives one field per flag"
+)]
 pub struct Args {
     /// Run task T15: set the clock to a deliberately wrong time, read it back, then set it to
     /// the correct time and read that back too. Requires --write.
@@ -56,6 +60,11 @@ pub struct Args {
     /// Serial port, or "auto" to find the UPS by its USB identity.
     #[arg(long, default_value = "auto")]
     pub port: String,
+
+    /// Machine-readable output: one JSON object. Queries only -- the experiments print their
+    /// whole exchange as evidence, which is the point of them.
+    #[arg(long, conflicts_with_all = ["t15", "t17"])]
+    pub json: bool,
 }
 
 pub fn run(args: &Args) -> ExitCode {
@@ -94,10 +103,12 @@ pub fn run(args: &Args) -> ExitCode {
         }
     };
 
-    println!("UPS on {}", path.display());
-    println!();
-    println!("Baseline: three reads, nothing written");
-    let baseline = match read_offsets(&mut link, 3) {
+    if !args.json {
+        println!("UPS on {}", path.display());
+        println!();
+        println!("Baseline: three reads, nothing written");
+    }
+    let baseline = match read_offsets(&mut link, 3, args.json) {
         Ok(b) => b,
         Err(e) => {
             eprintln!("argonctl: reading the clock failed: {e}");
@@ -105,6 +116,13 @@ pub fn run(args: &Args) -> ExitCode {
         }
     };
     let wake = read_wake(&mut link);
+    if args.json {
+        println!(
+            "{}",
+            json_query(&path.display().to_string(), &baseline, &wake)
+        );
+        return ExitCode::SUCCESS;
+    }
     match &wake {
         Ok(None) => println!("  wake schedule    none"),
         Ok(Some(t)) => println!("  wake schedule    {}", fmt(*t)),
@@ -139,6 +157,27 @@ struct Outcome {
     confirmed: bool,
     /// The correct time was written afterwards and read back.
     restored: bool,
+}
+
+/// The clock, the wake schedule and the drift record as JSON.
+///
+/// The offsets are given as read, all three of them, rather than averaged: whether they agree
+/// is itself the evidence that the link is sane, and an average would hide a disagreement.
+fn json_query(port: &str, offsets: &[i64], wake: &Result<Option<UpsTime>, String>) -> String {
+    use argon_device::drift;
+    let entries = drift::read(std::path::Path::new(DRIFT_RECORD));
+    let rate = drift::rate(&entries);
+    serde_json::json!({
+        "route": "rtc-serial",
+        "port": port,
+        "offsets_s": offsets,
+        "wake_at": wake.as_ref().ok().and_then(|w| w.map(fmt)),
+        "wake_error": wake.as_ref().err(),
+        "drift_checks_recorded": entries.len(),
+        "drift_s_per_day": rate.as_ref().map(|r| r.s_per_day),
+        "drift_span_days": rate.as_ref().map(argon_device::drift::Rate::span_days),
+    })
+    .to_string()
 }
 
 /// Where the packaged argond keeps its drift record.
@@ -208,17 +247,19 @@ fn port_is_free(path: &std::path::Path) -> Result<(), String> {
 
 /// Reads the clock `n` times, returning each offset from the system clock in seconds (UPS
 /// minus system).
-fn read_offsets(link: &mut SerialLink, n: usize) -> Result<Vec<i64>, String> {
+fn read_offsets(link: &mut SerialLink, n: usize, quiet: bool) -> Result<Vec<i64>, String> {
     let mut out = Vec::with_capacity(n);
     for i in 0..n {
         let ups = read_clock(link)?;
         let sys = now_secs();
         let offset_s = signed_diff(ups.to_unix_seconds().ok_or("implausible clock")?, sys);
-        println!(
-            "  UPS clock        {}   system {}   offset {offset_s:+} s",
-            fmt(ups),
-            UpsTime::from_unix_seconds(sys).map_or_else(|| "?".into(), fmt),
-        );
+        if !quiet {
+            println!(
+                "  UPS clock        {}   system {}   offset {offset_s:+} s",
+                fmt(ups),
+                UpsTime::from_unix_seconds(sys).map_or_else(|| "?".into(), fmt),
+            );
+        }
         out.push(offset_s);
         if i + 1 < n {
             std::thread::sleep(Duration::from_millis(1_100));
@@ -630,6 +671,43 @@ mod tests {
     //! The experiment against a simulated UPS over a real PTY, including one that ignores the
     //! write. An experiment is only worth running on hardware if it has been seen to answer
     //! "no" as well as "yes".
+
+    use super::json_query;
+    use argon_proto::ups::UpsTime;
+
+    #[test]
+    fn every_offset_is_reported_rather_than_averaged() {
+        // Whether the three reads agree is itself the evidence that the link is sane.
+        let out = json_query("/dev/ttyACM0", &[-21, -21, -20], &Ok(None));
+        let v: serde_json::Value = serde_json::from_str(&out).expect("valid JSON");
+        assert_eq!(v["offsets_s"], serde_json::json!([-21, -21, -20]));
+        assert!(v["wake_at"].is_null(), "invented a wake schedule");
+        assert!(v["wake_error"].is_null());
+        assert_eq!(v["route"], "rtc-serial");
+    }
+
+    #[test]
+    fn a_wake_schedule_is_reported_as_the_ups_holds_it() {
+        let wake = UpsTime {
+            year: 2026,
+            month: 9,
+            day: 21,
+            hour: 5,
+            minute: 30,
+            second: None,
+        };
+        let out = json_query("port", &[0], &Ok(Some(wake)));
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(v["wake_at"], "2026-09-21 05:30:00 UTC");
+    }
+
+    #[test]
+    fn an_unreadable_schedule_is_an_error_not_an_absent_one() {
+        let out = json_query("port", &[0], &Err("link timed out".to_owned()));
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert!(v["wake_at"].is_null());
+        assert_eq!(v["wake_error"], "link timed out");
+    }
 
     use super::*;
     use argon_sim::ups::{Faults, UpsSim, UpsState};

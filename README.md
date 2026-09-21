@@ -62,7 +62,7 @@ machine-readable output, a panel icon, and a Debian package.
 - **Desktop notifications** when on battery, low, critical, or a shutdown is scheduled.
 - **OLED status page** on the ONE V5's case display, switched on and off from the panel icon.
 - **`argonctl`** — `doctor`, `ups`, `battery`, `rtc`, `poweroff`, `zigbee`, `oled`, … with
-  manual pages. `argonctl ups` asks the daemon over D-Bus, so reading the battery needs no
+  manual pages, and `--json` on every status command. `argonctl ups` asks the daemon over D-Bus, so reading the battery needs no
   access to the device and no membership of the group that owns it, and `--json` gives the
   same reading to a script -- on every route, with an absent value as `null` rather than a
   zero, and the reading's age included so a monitor can tell fresh from stale.

@@ -26,6 +26,10 @@ pub struct Args {
     /// Seconds between reads.
     #[arg(long, default_value = "2")]
     pub interval: u64,
+
+    /// Machine-readable output: one JSON object per read.
+    #[arg(long)]
+    pub json: bool,
 }
 
 pub fn run(args: &Args) -> ExitCode {
@@ -50,18 +54,34 @@ pub fn run(args: &Args) -> ExitCode {
         }
     };
 
-    println!("CW2217 fuel gauge at {}", gauge.describe());
-    match gauge.health() {
-        Ok(h) => println!("  {} charge cycles, state of health {} %", h.cycles, h.soh),
-        Err(e) => println!("  cycles and health unreadable: {e}"),
+    let health = gauge.health();
+    if !args.json {
+        println!("CW2217 fuel gauge at {}", gauge.describe());
+        match &health {
+            Ok(h) => println!("  {} charge cycles, state of health {} %", h.cycles, h.soh),
+            Err(e) => println!("  cycles and health unreadable: {e}"),
+        }
+        println!();
+        println!("  charge   voltage    current  flow          policy sees");
     }
-    println!();
-    println!("  charge   voltage    current  flow          policy sees");
 
     let count = args.count.max(1);
     for n in 0..count {
         if n > 0 {
             std::thread::sleep(Duration::from_secs(args.interval));
+        }
+        if args.json {
+            use std::io::Write as _;
+            println!(
+                "{}",
+                json_reading(
+                    &gauge.describe(),
+                    health.as_ref().ok(),
+                    gauge.read_now().as_ref()
+                )
+            );
+            let _ = std::io::stdout().flush();
+            continue;
         }
         match gauge.read_now() {
             Ok(r) => println!(
@@ -78,11 +98,42 @@ pub fn run(args: &Args) -> ExitCode {
             Err(e) => println!("  read failed: {e}"),
         }
     }
-    println!(
-        "\nCurrent is the raw register: positive charging, negative discharging. It is not in\n\
-         amperes, because the ONE UP's sense resistor is not known."
-    );
+    if !args.json {
+        println!(
+            "\nCurrent is the raw register: positive charging, negative discharging. It is not \
+             in\n amperes, because the ONE UP's sense resistor is not known."
+        );
+    }
     ExitCode::SUCCESS
+}
+
+/// One gauge reading as JSON.
+///
+/// `current_raw` is named for what it is: the register value, positive charging, negative
+/// discharging, in no unit, because the ONE UP's sense resistor is unknown (`ONEUP-RSENSE`).
+/// A failed read gives `null` readings and an `error`, never the previous numbers again.
+fn json_reading(
+    bus: &str,
+    health: Option<&argon_device::gauge::Health>,
+    reading: Result<&argon_device::gauge::Reading, &argon_hal::Error>,
+) -> String {
+    let r = reading.ok();
+    serde_json::json!({
+        "route": "cw2217",
+        "bus": bus,
+        "cycles": health.map(|h| h.cycles),
+        "state_of_health_percent": health.map(|h| h.soh),
+        "percent": r.map(|r| r.percent),
+        "vcell_uv": r.map(|r| r.vcell_uv),
+        "current_raw": r.map(|r| r.current),
+        "flow": r.map(|r| flow_name(r.flow)),
+        "source": r.map(|r| match r.battery().source {
+            PowerSource::Battery => "battery",
+            PowerSource::Mains => "mains",
+        }),
+        "error": reading.err().map(std::string::ToString::to_string),
+    })
+    .to_string()
 }
 
 const fn flow_name(flow: Flow) -> &'static str {
@@ -90,5 +141,58 @@ const fn flow_name(flow: Flow) -> &'static str {
         Flow::Charging => "charging",
         Flow::Discharging => "discharging",
         Flow::Idle => "idle",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::json_reading;
+    use argon_device::gauge::{Health, Reading};
+    use argon_proto::cw2217::Flow;
+
+    fn reading(percent: u8, current: i16, flow: Flow) -> Reading {
+        Reading {
+            percent,
+            vcell_uv: 3_912_000,
+            current,
+            flow,
+        }
+    }
+
+    #[test]
+    fn a_reading_carries_the_raw_current_and_the_source_the_policy_sees() {
+        let r = reading(64, -2256, Flow::Discharging);
+        let out = json_reading("i2c-1 @ 0x64", Some(&Health { cycles: 7, soh: 98 }), Ok(&r));
+        let v: serde_json::Value = serde_json::from_str(&out).expect("valid JSON");
+        assert_eq!(v["percent"], 64);
+        assert_eq!(
+            v["current_raw"], -2256,
+            "the sign is the direction of charge"
+        );
+        assert_eq!(v["flow"], "discharging");
+        assert_eq!(v["source"], "battery");
+        assert_eq!(v["cycles"], 7);
+        assert_eq!(v["state_of_health_percent"], 98);
+    }
+
+    #[test]
+    fn a_charger_too_weak_for_the_load_still_reads_as_battery() {
+        // The ONE UP finding: "on mains" is not a pin, it is which way charge is moving.
+        let r = reading(100, -50, Flow::Discharging);
+        let out = json_reading("bus", None, Ok(&r));
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(v["source"], "battery");
+        assert_eq!(v["percent"], 100);
+        assert!(v["cycles"].is_null(), "invented health");
+    }
+
+    #[test]
+    fn a_failed_read_reports_the_error_and_no_numbers() {
+        let e = argon_hal::Error::Timeout;
+        let out = json_reading("bus", None, Err(&e));
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert!(v["percent"].is_null(), "{out}");
+        assert!(v["flow"].is_null());
+        assert!(v["error"].is_string());
     }
 }

@@ -1,3 +1,20 @@
+argon-utils (0.1.28) unstable; urgency=medium
+
+  * `--json` on the remaining status commands, finishing what the plan
+    asks for (R7): `battery`, `fan`, `zigbee` and `rtc`. Every one keeps
+    an unknown value as `null`: a fan whose sensor failed reports no
+    temperature beside its fallback duty, a gauge that would not answer
+    reports no charge, a radio that stayed silent reports no version, and
+    a Zigbee port that is merely invisible to an unprivileged scan is not
+    reported as free.
+  * `argonctl fan --json` names the curve's answer `curve_duty_percent`,
+    not the duty that would be written: the controller applies the floor
+    and the hysteresis afterwards, both of which it also reports.
+  * The experiments (`rtc --t15`, `--t17`) have no JSON form on purpose;
+    their whole printed exchange is the evidence.
+
+ -- Simon Keimer <simon.keimer@mailbox.org>  Mon, 21 Sep 2026 12:24:29 +0200
+
 argon-utils (0.1.27) unstable; urgency=medium
 
   * `argonctl ups --json` on every route: the daemon, hidraw and serial,

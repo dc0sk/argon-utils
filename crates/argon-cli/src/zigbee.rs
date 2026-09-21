@@ -41,9 +41,15 @@ pub struct Args {
     /// Serial port. Found by the module's position on the case's internal USB hub if not given.
     #[arg(long, value_name = "PATH")]
     pub port: Option<PathBuf>,
+
+    /// Machine-readable output: one JSON object.
+    #[arg(long)]
+    pub json: bool,
 }
 
 pub fn run(args: &Args) -> ExitCode {
+    let mut bridge = None;
+    let mut usb = None;
     let path = if let Some(p) = &args.port {
         p.clone()
     } else {
@@ -55,13 +61,17 @@ pub fn run(args: &Args) -> ExitCode {
             );
             return ExitCode::FAILURE;
         };
-        println!("Zigbee module on the internal hub, USB {}", z.kernel);
-        println!(
-            "  bridge           {} {} (serial {})",
-            z.manufacturer.as_deref().unwrap_or("?"),
-            z.product.as_deref().unwrap_or("?"),
-            z.serial.as_deref().unwrap_or("none")
-        );
+        usb = Some(z.kernel.clone());
+        bridge = Some((z.manufacturer.clone(), z.product.clone(), z.serial.clone()));
+        if !args.json {
+            println!("Zigbee module on the internal hub, USB {}", z.kernel);
+            println!(
+                "  bridge           {} {} (serial {})",
+                z.manufacturer.as_deref().unwrap_or("?"),
+                z.product.as_deref().unwrap_or("?"),
+                z.serial.as_deref().unwrap_or("none")
+            );
+        }
         let Some(node) = z
             .nodes
             .iter()
@@ -72,18 +82,35 @@ pub fn run(args: &Args) -> ExitCode {
         };
         node.clone()
     };
-    println!("  port             {}", path.display());
-
-    let owners = foreign::port_owners(&path);
-    match owners.first() {
-        Some(o) => println!("  in use by        pid {} ({})", o.pid, o.comm),
-        None if foreign::can_see_all_processes() => println!("  in use by        nothing"),
-        None => {
-            println!("  in use by        nothing visible (run under sudo to see every process)");
-        }
+    if !args.json {
+        println!("  port             {}", path.display());
     }
 
+    let owners = foreign::port_owners(&path);
+    if !args.json {
+        match owners.first() {
+            Some(o) => println!("  in use by        pid {} ({})", o.pid, o.comm),
+            None if foreign::can_see_all_processes() => println!("  in use by        nothing"),
+            None => {
+                println!(
+                    "  in use by        nothing visible (run under sudo to see every process)"
+                );
+            }
+        }
+    }
+    let found = Found {
+        usb,
+        bridge,
+        port: path.display().to_string(),
+        held_by: owners.first().map(|o| (o.pid, o.comm.clone())),
+        all_processes_visible: foreign::can_see_all_processes(),
+    };
+
     if !args.probe {
+        if args.json {
+            println!("{}", json_identity(&found, None));
+            return ExitCode::SUCCESS;
+        }
         println!();
         println!("Nothing was opened. The health probe is task T16:  argonctl zigbee --probe");
         return ExitCode::SUCCESS;
@@ -101,9 +128,13 @@ pub fn run(args: &Args) -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    match probe(&path) {
+    match probe(&path, args.json) {
         Ok(findings) => {
-            report(&findings);
+            if args.json {
+                println!("{}", json_identity(&found, Some(&findings)));
+            } else {
+                report(&findings);
+            }
             if findings.ping.is_some() {
                 ExitCode::SUCCESS
             } else {
@@ -117,6 +148,57 @@ pub fn run(args: &Args) -> ExitCode {
     }
 }
 
+/// What identification found, kept as values so the same facts serve both output forms.
+struct Found {
+    usb: Option<String>,
+    /// Manufacturer, product, serial of the USB-serial bridge, as the descriptors give them.
+    bridge: Option<(Option<String>, Option<String>, Option<String>)>,
+    port: String,
+    /// The process holding the port, if one is visible.
+    held_by: Option<(u32, String)>,
+    all_processes_visible: bool,
+}
+
+/// Identification, and the probe's findings when one ran, as JSON.
+///
+/// `held_by: null` with `all_processes_visible: false` is not "nothing holds it": an
+/// unprivileged scan cannot see another user's file descriptors, and the two fields are
+/// separate so a reader cannot mistake the one for the other.
+fn json_identity(found: &Found, findings: Option<&Findings>) -> String {
+    let (manufacturer, product, serial) = found.bridge.clone().unwrap_or((None, None, None));
+    let probe = findings.map(|f| {
+        serde_json::json!({
+            "restarted_on_open": f.reset_on_open.is_some(),
+            "reset_reason": f.reset_on_open,
+            "heard_anything": f.heard_anything,
+            "ping_answered": f.ping.is_some(),
+            "capabilities": f.ping,
+            "version": f.version.map(|v| serde_json::json!({
+                "product": v.product,
+                "major": v.major,
+                "minor": v.minor,
+                "maint": v.maint,
+                "transport_rev": v.transport_rev,
+                "revision": v.revision,
+            })),
+            "frames_rejected": f.rejected,
+        })
+    });
+    serde_json::json!({
+        "route": "zigbee",
+        "usb": found.usb,
+        "bridge_manufacturer": manufacturer,
+        "bridge_product": product,
+        "bridge_serial": serial,
+        "port": found.port,
+        "held_by_pid": found.held_by.as_ref().map(|(pid, _)| *pid),
+        "held_by": found.held_by.as_ref().map(|(_, comm)| comm.clone()),
+        "all_processes_visible": found.all_processes_visible,
+        "probe": probe,
+    })
+    .to_string()
+}
+
 /// The raw bytes of one probe.
 struct Capture {
     listened: Vec<u8>,
@@ -124,20 +206,35 @@ struct Capture {
     version: Vec<u8>,
 }
 
-fn probe(path: &std::path::Path) -> argon_hal::Result<Findings> {
-    println!();
-    println!("Step 1: open at {BAUD} baud, then lower DTR and RTS, in that order");
+fn probe(path: &std::path::Path, quiet: bool) -> argon_hal::Result<Findings> {
+    let step = |n: u8, what: &str| {
+        if !quiet {
+            if n == 1 {
+                println!();
+            }
+            println!("Step {n}: {what}");
+        }
+    };
+    step(
+        1,
+        &format!("open at {BAUD} baud, then lower DTR and RTS, in that order"),
+    );
     let mut port = RawPort::open(path, BAUD)?;
     port.set_lines(false, false)?;
 
-    println!("Step 2: listen for {} s, sending nothing", LISTEN.as_secs());
+    step(
+        2,
+        &format!("listen for {} s, sending nothing", LISTEN.as_secs()),
+    );
     let listened = port.collect(LISTEN)?;
-    print_bytes("heard", &listened);
+    if !quiet {
+        print_bytes("heard", &listened);
+    }
 
-    println!("Step 3: SYS_PING");
+    step(3, "SYS_PING");
     let ping = exchange(&mut port, SYS_PING)?;
 
-    println!("Step 4: SYS_VERSION");
+    step(4, "SYS_VERSION");
     let version = exchange(&mut port, SYS_VERSION)?;
 
     // Closing drops DTR and RTS, which are already low: no transition, so no second restart.
@@ -265,6 +362,84 @@ fn report(f: &Findings) {
 
 #[cfg(test)]
 mod tests {
+    use super::{Findings, Found, json_identity};
+    use argon_proto::zigbee::Version;
+
+    fn found(held: Option<(u32, String)>, visible: bool) -> Found {
+        Found {
+            usb: Some("1-1.2".into()),
+            bridge: Some((
+                Some("Silicon Labs".into()),
+                Some("CP2102N".into()),
+                Some("serial".into()),
+            )),
+            port: "/dev/ttyUSB0".into(),
+            held_by: held,
+            all_processes_visible: visible,
+        }
+    }
+
+    #[test]
+    fn identification_alone_carries_no_probe() {
+        let out = json_identity(&found(None, true), None);
+        let v: serde_json::Value = serde_json::from_str(&out).expect("valid JSON");
+        assert_eq!(v["usb"], "1-1.2");
+        assert_eq!(v["bridge_product"], "CP2102N");
+        assert!(v["probe"].is_null(), "a probe reported that never ran");
+    }
+
+    #[test]
+    fn an_unprivileged_scan_does_not_report_the_port_as_free() {
+        // "held_by: null" means "nothing visible", which is not "nothing" -- the second field
+        // is what tells them apart, and it must not be dropped.
+        let out = json_identity(&found(None, false), None);
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert!(v["held_by"].is_null());
+        assert_eq!(v["all_processes_visible"], false);
+    }
+
+    #[test]
+    fn a_probe_reports_the_answer_and_the_version() {
+        let findings = Findings {
+            reset_on_open: Some(0x02),
+            heard_anything: true,
+            ping: Some(0x0659),
+            version: Some(Version {
+                product: 1,
+                major: 2,
+                minor: 7,
+                maint: 1,
+                transport_rev: 2,
+                revision: Some(20_230_507),
+            }),
+            rejected: 0,
+        };
+        let out = json_identity(&found(None, true), Some(&findings));
+        let v: serde_json::Value = serde_json::from_str(&out).expect("valid JSON");
+        assert_eq!(v["probe"]["ping_answered"], true);
+        assert_eq!(v["probe"]["capabilities"], 0x0659);
+        assert_eq!(v["probe"]["restarted_on_open"], true);
+        assert_eq!(v["probe"]["reset_reason"], 2);
+        assert_eq!(v["probe"]["version"]["revision"], 20_230_507);
+    }
+
+    #[test]
+    fn a_silent_radio_says_so_without_inventing_a_version() {
+        let findings = Findings {
+            reset_on_open: None,
+            heard_anything: false,
+            ping: None,
+            version: None,
+            rejected: 2,
+        };
+        let out = json_identity(&found(None, true), Some(&findings));
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(v["probe"]["ping_answered"], false);
+        assert!(v["probe"]["capabilities"].is_null());
+        assert!(v["probe"]["version"].is_null());
+        assert_eq!(v["probe"]["frames_rejected"], 2);
+    }
+
     use super::*;
 
     fn frame(cmd: (u8, u8), data: &[u8]) -> Vec<u8> {
