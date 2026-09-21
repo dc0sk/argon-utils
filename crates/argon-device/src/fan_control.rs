@@ -3,7 +3,8 @@
 //!
 //! Two backends, because Argon cases do not agree on how the fan is wired:
 //!
-//! - [`McuFan`] — the documented I2C MCU at `0x1a`. Pi 4-era cases: ONE V2/V3, EON, Fan HAT.
+//! - [`McuFan`] — the documented I2C MCU at `0x1a`: the ONE V2 (Pi 4), the ONE V3 (Pi 5), EON,
+//!   Fan HAT.
 //! - [`KernelFan`] — the Pi 5's own PWM fan header under the kernel thermal governor. This is
 //!   what an Argon ONE V5 on a Pi 5 uses, where there is no MCU on the bus at all.
 //!

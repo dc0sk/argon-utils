@@ -24,7 +24,7 @@ several conclusions in this project came from negative results.
 | | Where | Task | Needs |
 |---|---|---|---|
 | -- | ONE V2 + Pi 4 | T3, T5 — button pulses, MCU dialect | that machine |
-| -- | ONE V2 / V3 + Pi 4 | T6 — IR, which those cases do have | that machine, with the remote |
+| -- | ONE V2 + Pi 4 | T6 — IR, which that case does have | that machine, with the remote |
 
 Done on 2026-09-19: the ONE UP hand-over (T19 step 2), its lid actions (T22), the CPU cap on the
 ONE V5 (T23) and a first install (T25).
@@ -229,7 +229,7 @@ Two ways, in order of preference:
 
 ---
 
-## 🟡 T6 — Is IR actually wired? — **ONE V5: nothing arrives (2026-09-20). Next: V2 / V3 on the Pi 4**
+## 🟡 T6 — Is IR actually wired? — **ONE V5: nothing arrives (2026-09-20). Next: the ONE V2 on the Pi 4**
 
 **Unblocks:** whether to implement IR receive at all, and for which cases.
 
@@ -265,10 +265,12 @@ installer suppressing the IR menu for this model. The one variable not under our
 remote: nothing here proves it emitted. A press seen as a violet flicker through a phone camera
 would close that gap and turn this into a definite "not wired".
 
-**Where this goes next.** The question moves to the **ONE V2 / V3 on the Pi 4**, which do have an
+**Where this goes next.** The question moves to the **ONE V2 on the Pi 4**, which does have an
 IR receiver, once that machine is running (the same visit as T3 and T5). Testing there also
-settles the remote itself: if the remote drives the V2/V3 and the V5 stayed silent under four
-windows, the V5 is simply not wired for IR, and that is the answer for this model. Until then
+settles the remote itself: if the remote drives the V2 and the V5 stayed silent under four
+windows, the V5 is simply not wired for IR, and that is the answer for this model. The **ONE V3
+is the Pi 5 case**, not a Pi 4 one, so whether it has a receiver is its own question -- worth
+asking of that case on a Pi 5, not assumed either way from the V2 or the V5. Until then
 the V5 result stands as "nothing arrives", with the remote unproven.
 
 ---

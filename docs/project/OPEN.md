@@ -63,7 +63,7 @@ RTC, scheduled wake), the **OLED**, and the **Zigbee** module. On 2026-09-17 T2 
 the case button is the Pi's own power button, which the OS already handles, so it joins the
 fan as something to leave alone on this hardware. IR looks like nothing of ours either: four capture windows on 2026-09-20 saw no pulse on
 GPIO23 or on any other free header line, so the V5 board most likely has no receiver populated,
-and the question moves to the V2/V3 on the Pi 4 (T6). That is a coherent product, and arguably a more
+and the question moves to the ONE V2 on the Pi 4 (T6). That is a coherent product, and arguably a more
 useful one than a second fan controller. But it is a different product from the one the plan
 opened with, and that is worth deciding rather than drifting into.
 
@@ -147,7 +147,8 @@ No technical block. The clean-room rules in `CLEANROOM.md` stand on their own; i
 The kernel's `pwm-fan` governor keeps the fan and its 110 °C critical trip; argon-utils shows fan
 and temperature in the tray, OLED and status. Evidence in
 [OBS-2026-09-16-taking-the-pi5-fan](../protocol/captures/OBS-2026-09-16-taking-the-pi5-fan.md).
-Fan *control* remains for cases with an Argon microcontroller (ONE V2/V3 with a Pi 4).
+Fan *control* remains for cases with an Argon microcontroller: the **ONE V2** (a Pi 4 case) and
+the **ONE V3** (a Pi 5 one), neither of them tested here yet.
 
 ### S1 — scope — **DECIDED 2026-09-19: tested hardware only**
 
