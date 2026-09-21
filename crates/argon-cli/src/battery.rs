@@ -100,8 +100,8 @@ pub fn run(args: &Args) -> ExitCode {
     }
     if !args.json {
         println!(
-            "\nCurrent is the raw register: positive charging, negative discharging. It is not \
-             in\n amperes, because the ONE UP's sense resistor is not known."
+            "\nCurrent is the raw register: positive charging, negative discharging. It is not\n\
+             in amperes, because the ONE UP's sense resistor is not known."
         );
     }
     ExitCode::SUCCESS

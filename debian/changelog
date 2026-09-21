@@ -1,3 +1,10 @@
+argon-utils (0.1.29) unstable; urgency=medium
+
+  * `argonctl battery`'s closing note lost a stray line break added when
+    the --json flag went in: it read "It is not in\n amperes".
+
+ -- Simon Keimer <simon.keimer@mailbox.org>  Mon, 21 Sep 2026 18:27:31 +0200
+
 argon-utils (0.1.28) unstable; urgency=medium
 
   * `--json` on the remaining status commands, finishing what the plan
