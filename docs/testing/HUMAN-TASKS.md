@@ -25,6 +25,7 @@ several conclusions in this project came from negative results.
 |---|---|---|---|
 | -- | ONE V2 + Pi 4 | T3, T5 — button pulses, MCU dialect | that machine |
 | -- | ONE V2 / V3 + Pi 4 | T6 — IR, which those cases do have | that machine, with the remote |
+| -- | ONE UP | `argonctl battery --json` -- a one-line check, not a task: the shape is tested, the gauge is not | the ONE UP powered on |
 
 Done on 2026-09-19: the ONE UP hand-over (T19 step 2), its lid actions (T22), the CPU cap on the
 ONE V5 (T23) and a first install (T25).
