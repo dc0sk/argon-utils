@@ -71,6 +71,16 @@ That is the whole list. **Legacy is functionally complete for every deliverable 
 has**, so the safe default costs approximately nothing, while the unsafe default risks
 physically misbehaving on hardware we cannot identify in advance.
 
+## Confirmed on hardware, 2026-09-22
+
+The hazard this ADR is built around is no longer an argument from the protocol: on an Argon ONE
+V1 with a Pi 4, a register **read** of `0x80` set the fan to full and left it there
+(`ONE-V1-MCU-LEGACY`, `OBS-2026-09-22-t5-mcu-dialect`). A read, changing the fan, persistently.
+
+A daemon that probed `0x80` at startup to "detect the generation" would pin that fan at full on
+every boot. The decision below was taken before anyone had seen this happen; it is now the
+observed behaviour of the only ONE-family MCU this project has been able to test.
+
 To resolve the dialect for real, prefer a **logic analyser** on the I2C lines: watching what
 the vendor's daemon transmits promotes the register facts from `inferred` to `observed` by
 observing *the device* rather than by reading the vendor's code — which is also the

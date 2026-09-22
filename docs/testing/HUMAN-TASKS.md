@@ -208,7 +208,7 @@ think it is.
 
 ---
 
-## 🟡 T5 — Settle the MCU dialect, once — **on the Pi 4 / ONE V2**
+## ✅ T5 — Settle the MCU dialect, once — **DONE 2026-09-22 on a ONE V1 + Pi 4: legacy**
 
 > **Changed 2026-09-16.** This task originally targeted the ONE V5. It has moved, because
 > there is **no MCU at `0x1a` on the V5 at all** — its fan is on the Pi 5's own header under
@@ -235,7 +235,23 @@ Two ways, in order of preference:
    legacy-only, the second pins the fan at 100% — unmistakable, harmless, and instantly
    reversible.
 
-**Result:** _(not yet done)_
+**Result 2026-09-22** (`OBS-2026-09-22-t5-mcu-dialect`): **legacy**, decisively. A register
+*read* of `0x80` set the fan to full and it stayed there -- `0x80` taken as a duty of 128 --
+while the read returned `0xc9`, which is not a duty and not the 25 we had just written. Two
+independent signals agreeing. Legacy duty bytes moved the fan in both directions before and
+after.
+
+The test was run as three separate invocations (`argonctl fan --t5 baseline|probe|restore
+--write`), so the operator could hear each step and report before the next one changed it.
+
+**The method changed from what this task first proposed**, and the reason is worth keeping: the
+register *write* is two bytes, so legacy firmware consuming both would end at the same duty the
+register interpretation gives, leaving only a transient to hear. A register read puts one byte
+on the bus, so its legacy reading is unambiguous and sustained -- and it returns a byte, which
+is a second, independent signal.
+
+ADR-0002 now records this as observed: the "safe read-only probe" it argues cannot exist,
+demonstrably does not.
 
 ---
 

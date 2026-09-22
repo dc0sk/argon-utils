@@ -9,7 +9,7 @@ use argon_device::config::Config;
 use argon_device::fan::{FanTask, Step};
 use argon_device::mcu::{Dialect, Mcu};
 use argon_hal::Result;
-use argon_hal::i2c::{DryRun, I2cBus, LinuxI2c, ReadOnly};
+use argon_hal::i2c::{DryRun, I2cBus, LinuxI2c, ReadOnly, RegisterRead};
 use argon_hal::mode::Mode;
 use argon_hal::thermal::{TemperatureSource, ThermalZone};
 use argon_proto::fan::{FanController, FanCurve, FanDuty};
@@ -62,6 +62,20 @@ pub struct Args {
     #[arg(long, conflicts_with = "safe")]
     pub json: bool,
 
+    /// Task T5, one step at a time: `baseline`, `probe` or `restore`. Needs `--write`.
+    ///
+    /// Settles which protocol the MCU speaks, by the only means there is: a deliberate,
+    /// operator-present experiment. `baseline` writes a legacy duty of 25%. `probe` performs
+    /// the hazardous transaction on purpose -- a register read of `0x80`, which legacy
+    /// firmware misreads as a fan duty of 128 and pins the fan at full. `restore` puts the
+    /// fan back to 50%. Read `docs/testing/HUMAN-TASKS.md` first.
+    #[arg(long, value_name = "STEP", conflicts_with_all = ["safe", "watch", "json", "probe"])]
+    pub t5: Option<String>,
+
+    /// Permit the writes of `--t5`. Without it, `--t5` only says what it would send.
+    #[arg(long)]
+    pub write: bool,
+
     /// Ask whether anything answers at the MCU address, and nothing else.
     ///
     /// Sends one `SMBus` quick-write: the address with the write bit and **no data byte**. That
@@ -82,6 +96,9 @@ pub fn run(args: &Args) -> ExitCode {
     }
     if args.probe {
         return probe(&config);
+    }
+    if let Some(step) = &args.t5 {
+        return t5(&config, step, args.write);
     }
 
     if !args.json {
@@ -201,6 +218,106 @@ fn load(args: &Args) -> std::result::Result<(Config, Mode, FanCurve), ExitCode> 
         ExitCode::FAILURE
     })?;
     Ok((config, mode, curve))
+}
+
+/// Task T5: settles the MCU dialect, one operator-paced step at a time.
+///
+/// The steps are separate invocations rather than one timed script, because the evidence is a
+/// sound in the room: the operator has to hear each step and say what happened before the next
+/// one changes it.
+///
+/// `probe` is the transaction ADR-0002 exists to forbid, used deliberately. A register read
+/// puts the register number on the bus as a write before the repeated start, so on legacy
+/// firmware `0x80` lands as a fan duty of 128 and the fan goes to full and **stays** there --
+/// where register firmware would answer with the stored duty and not move the fan at all. The
+/// read is used rather than the register *write* because a write is two bytes: legacy firmware
+/// consuming both would end at the same duty the register interpretation gives, and the
+/// experiment would turn on hearing a transient.
+fn t5(config: &Config, step: &str, write: bool) -> ExitCode {
+    let duty_25 = FanDuty::clamped(25).as_mcu_byte();
+    let duty_50 = FanDuty::clamped(50).as_mcu_byte();
+    let (what, wire) = match step {
+        "baseline" => (
+            "legacy write, fan to 25%",
+            format!("i2c 0x1a <- {duty_25:02x}"),
+        ),
+        "probe" => (
+            "register READ of 0x80 -- the hazardous transaction, on purpose",
+            "i2c S 1a+W 80 Sr 1a+R <one byte> P".to_owned(),
+        ),
+        "restore" => (
+            "legacy write, fan to 50%",
+            format!("i2c 0x1a <- {duty_50:02x}"),
+        ),
+        other => {
+            eprintln!("argonctl: unknown --t5 step {other:?}; expected baseline, probe or restore");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    println!("T5 step `{step}`: {what}");
+    println!("  on the wire: {wire}");
+    if !write {
+        println!("\n  Nothing was sent: --t5 needs --write as well.");
+        return ExitCode::SUCCESS;
+    }
+
+    let bus_path = match resolve_bus(config) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("argonctl: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let mut bus = match LinuxI2c::open(&bus_path, u16::from(argon_device::mcu::ADDR)) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("argonctl: cannot open {bus_path}: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    if step == "probe" {
+        t5_probe(&mut bus)
+    } else {
+        let byte = if step == "baseline" { duty_25 } else { duty_50 };
+        match bus.write(argon_device::mcu::ADDR, &[byte]) {
+            Ok(()) => {
+                println!("\n  sent. LISTEN: the fan should settle at that speed.");
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("\nargonctl: the write failed: {e}");
+                ExitCode::FAILURE
+            }
+        }
+    }
+}
+
+/// The deliberate register read, and how to read what happens next.
+fn t5_probe(bus: &mut LinuxI2c) -> ExitCode {
+    let mut buf = [0u8; 1];
+    match bus.read_registers(0x80, &mut buf) {
+        Ok(()) => {
+            println!("\n  returned: 0x{:02x} ({})", buf[0], buf[0]);
+            println!(
+                "\n  LISTEN NOW.\n  \
+                 Fan pinned at FULL and staying there -> LEGACY firmware: it read 0x80\n  \
+                 as a duty of 128. The returned byte is then meaningless.\n  \
+                 Fan unchanged, and the byte reads like the 25 we just set -> REGISTER\n  \
+                 firmware."
+            );
+        }
+        Err(e) => {
+            println!("\n  the read failed: {e}");
+            println!(
+                "  A refusal is evidence too: a device that NAKs a register read is not\n  \
+                 speaking the register protocol. Listen anyway -- the register number\n  \
+                 reached the bus before any NAK could stop it."
+            );
+        }
+    }
+    ExitCode::SUCCESS
 }
 
 /// Asks whether anything answers at `0x1a`, with the one permitted transaction.
