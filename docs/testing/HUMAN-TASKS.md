@@ -24,7 +24,6 @@ several conclusions in this project came from negative results.
 | | Where | Task | Needs |
 |---|---|---|---|
 | -- | ONE V1 + Pi 4 | T5 — does anything answer at I2C 0x1a, and in which dialect | that machine |
-| -- | ONE V1 + Pi 4 | a keymap: which remote button sends which NEC code (T6 follow-up) | that machine, with the remote |
 
 Done on 2026-09-19: the ONE UP hand-over (T19 step 2), its lid actions (T22), the CPU cap on the
 ONE V5 (T23) and a first install (T25).
@@ -285,11 +284,12 @@ That also settles the V5 half of this task. Same overlay, same tool, same remote
 operator: one case answers, the other never did, so the **V5 is not wired for IR** rather than
 the remote being dead or the method wrong.
 
-**Still open:** which button sends which code -- the operator pressed several without recording
-the order, so the ten codes are unlabelled. A keymap needs one named button at a time, and must
-be built by measurement: the vendor's table is all-rights-reserved and known to be wrong (a
-missing comma concatenates two names, leaving 10 names for 11 codes). The **V2 and V3** are
-different cases and unmeasured. Until then
+**Keymap done the same day** (`OBS-2026-09-22-t6b-one-v1-ir-keymap`, specification in
+[`../protocol/one-ir.md`](../protocol/one-ir.md)): eleven buttons pressed three times each in a
+stated order gave eleven codes at address `0x00` -- power `0x9c`, up `0xca`, down `0xd2`, left
+`0x99`, right `0xc1`, OK `0xce`, menu `0x9d`, back `0x90`, home `0xcb`, vol+ `0x80`, vol-
+`0x81`. The first, unlabelled capture agrees on the set bar `0xce`. Pressing power over IR does
+not power the machine off. The **V2 and V3** are different cases and unmeasured. Until then
 the V5 result stands as "nothing arrives", with the remote unproven.
 
 ---
