@@ -24,7 +24,7 @@ several conclusions in this project came from negative results.
 | | Where | Task | Needs |
 |---|---|---|---|
 | -- | ONE V1 + Pi 4 | T5 — does anything answer at I2C 0x1a, and in which dialect | that machine |
-| -- | ONE V1 + Pi 4 | T6 — IR | that machine, with the remote |
+| -- | ONE V1 + Pi 4 | a keymap: which remote button sends which NEC code (T6 follow-up) | that machine, with the remote |
 
 Done on 2026-09-19: the ONE UP hand-over (T19 step 2), its lid actions (T22), the CPU cap on the
 ONE V5 (T23) and a first install (T25).
@@ -240,7 +240,7 @@ Two ways, in order of preference:
 
 ---
 
-## 🟡 T6 — Is IR actually wired? — **ONE V5: nothing arrives (2026-09-20). Next: the ONE V2 on the Pi 4**
+## ✅ T6 — Is IR actually wired? — **DONE: no on the ONE V5, yes on the ONE V1 (NEC, 2026-09-22)**
 
 **Unblocks:** whether to implement IR receive at all, and for which cases.
 
@@ -276,12 +276,20 @@ installer suppressing the IR menu for this model. The one variable not under our
 remote: nothing here proves it emitted. A press seen as a violet flicker through a phone camera
 would close that gap and turn this into a definite "not wired".
 
-**Where this goes next.** The question moves to the **ONE V2 on the Pi 4**, which does have an
-IR receiver, once that machine is running (the same visit as T3 and T5). Testing there also
-settles the remote itself: if the remote drives the V2 and the V5 stayed silent under four
-windows, the V5 is simply not wired for IR, and that is the answer for this model. The **ONE V3
-is the Pi 5 case**, not a Pi 4 one, so whether it has a receiver is its own question -- worth
-asking of that case on a Pi 5, not assumed either way from the V2 or the V5. Until then
+**Answered 2026-09-22 on the Argon ONE V1 with a Pi 4** (`OBS-2026-09-22-t6-one-v1-ir`): the
+receiver is on **BCM 23** and works with the stock `gpio-ir` overlay. The remote is **NEC,
+address `0x00`**; ten distinct commands were read, each three times, every frame passing both
+inverse checks.
+
+That also settles the V5 half of this task. Same overlay, same tool, same remote, same
+operator: one case answers, the other never did, so the **V5 is not wired for IR** rather than
+the remote being dead or the method wrong.
+
+**Still open:** which button sends which code -- the operator pressed several without recording
+the order, so the ten codes are unlabelled. A keymap needs one named button at a time, and must
+be built by measurement: the vendor's table is all-rights-reserved and known to be wrong (a
+missing comma concatenates two names, leaving 10 names for 11 codes). The **V2 and V3** are
+different cases and unmeasured. Until then
 the V5 result stands as "nothing arrives", with the remote unproven.
 
 ---
