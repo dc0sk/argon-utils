@@ -266,3 +266,62 @@ fn a_long_run_never_produces_an_invalid_duty() {
         assert!(fan(&state) <= 100, "fan duty {} exceeds 100", fan(&state));
     }
 }
+
+/// The bug found on a Pi 4 on 2026-09-22, as a test.
+///
+/// `argond` asserts a safe duty at startup, and the first curve step follows immediately
+/// afterwards -- well inside the 500 ms write interval. The rate limiter used to return
+/// `Ok(())` for that second write, so the task recorded the new duty as written and, writing
+/// only on change, never sent it again. The fan ran at the startup duty for as long as the
+/// curve stayed put: twelve minutes of flat temperature under a log line saying "off".
+#[test]
+fn a_held_back_write_is_retried_rather_than_believed() {
+    use argon_hal::i2c::RateLimited;
+    use std::time::Duration;
+
+    let bus = SimBus::new();
+    let state = Arc::clone(&bus.mcu);
+    let interval = Duration::from_millis(30);
+    let mcu = Arc::new(Mutex::new(Mcu::new(
+        RateLimited::new(bus, interval),
+        Dialect::default(),
+    )));
+
+    // What the daemon does first: assert a known duty. This consumes the write allowance.
+    mcu.lock().unwrap().set_fan(FanDuty::Percent(55)).unwrap();
+
+    let controller = FanController::new(curve(), 3, 10, true);
+    let mut task = FanTask::new(
+        Arc::clone(&mcu),
+        ScriptedTemperature::new(vec![300, 300]),
+        controller,
+        FanDuty::Percent(55),
+    );
+
+    // Immediately after, the curve wants the fan off. The transport holds it back.
+    let step = task
+        .step()
+        .expect("a held write is not an error to the caller");
+    assert!(
+        matches!(step, Step::Applied { wrote: false, .. }),
+        "reported a write that never reached the device: {step:?}"
+    );
+    assert_eq!(
+        state.lock().unwrap().state().fan_percent,
+        55,
+        "the device should still hold the startup duty"
+    );
+
+    // Once the interval has passed, the next poll must try again -- the whole point.
+    std::thread::sleep(interval + Duration::from_millis(10));
+    let step = task.step().expect("second step failed");
+    assert!(
+        matches!(step, Step::Applied { wrote: true, .. }),
+        "the retry never happened: {step:?}"
+    );
+    assert_eq!(
+        state.lock().unwrap().state().fan_percent,
+        0,
+        "the fan was left running while the curve said off"
+    );
+}

@@ -128,8 +128,16 @@ impl<B: I2cBus, T: TemperatureSource> FanTask<B, T> {
             Ok(m) => m,
             Err(poisoned) => poisoned.into_inner(),
         };
-        mcu.set_fan(duty)?;
-        self.last_written = Some(duty);
-        Ok(true)
+        match mcu.set_fan(duty) {
+            Ok(()) => {
+                self.last_written = Some(duty);
+                Ok(true)
+            }
+            // The transport declined for now, so nothing reached the device and nothing is
+            // recorded as written: the next poll tries again. Not an error to the caller --
+            // the loop is doing its job -- but emphatically not a success either.
+            Err(argon_hal::Error::RateLimited { .. }) => Ok(false),
+            Err(e) => Err(e),
+        }
     }
 }

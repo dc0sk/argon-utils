@@ -1,3 +1,26 @@
+argon-utils (0.1.31) unstable; urgency=medium
+
+  * Fix: a rate-limited write was reported as a success, so the fan ran at
+    the wrong duty indefinitely. argond asserts a safe duty at startup and
+    the first curve step follows immediately, inside the 500 ms write
+    interval; the transport dropped that write, returned Ok, and the fan
+    task -- which writes only on change -- never sent it again. Found on a
+    Pi 4 by ear: the fan kept running and the CPU held 43 C flat for
+    twelve minutes while the log said the fan was off.
+  * `argon_hal::Error::RateLimited` now reports a write that did not
+    happen, and the fan task retries on the next poll instead of
+    recording it as done.
+  * New `argonctl fan --set <PERCENT> --write` writes one duty by hand,
+    for testing what hardware does with it. It sends the value asked for
+    rather than raising it to the spinning floor, and says when that is
+    below the floor -- silently rewriting a requested duty is the vendor
+    behaviour this project objects to.
+  * `argonctl fan` now prints the duty that would actually be written
+    beside the curve's own answer: "curve says off, would write 10%
+    (floor 10%, stopping not allowed)".
+
+ -- Simon Keimer <simon.keimer@mailbox.org>  Tue, 22 Sep 2026 20:00:47 +0200
+
 argon-utils (0.1.30) unstable; urgency=medium
 
   * New `argonctl setup`: checks that the machine is configured for the

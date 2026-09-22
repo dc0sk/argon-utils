@@ -37,6 +37,18 @@ pub enum Error {
         /// Why it was refused.
         reason: &'static str,
     },
+    /// A write was **not performed** because it came too soon after the last one.
+    ///
+    /// Distinct from [`Error::WriteBlocked`], which is a policy refusal that will never
+    /// succeed: this one will, after `retry_after`. It exists because the alternative --
+    /// returning `Ok(())` for a write that never reached the device -- let a caller record it
+    /// as done. A fan task that writes only on change then never retried, and the fan sat at
+    /// the previous duty while the daemon reported the new one. Observed on a Pi 4 on
+    /// 2026-09-22: twelve minutes of flat temperature under a log line saying the fan was off.
+    RateLimited {
+        /// How long until a write would be accepted.
+        retry_after: std::time::Duration,
+    },
     /// A sysfs value was present but not in the expected form.
     Parse {
         /// What was being read.
@@ -52,6 +64,11 @@ impl std::fmt::Display for Error {
             Self::Io(e) => write!(f, "{e}"),
             Self::Timeout => f.write_str("timed out"),
             Self::WriteBlocked { what, reason } => write!(f, "refused {what}: {reason}"),
+            Self::RateLimited { retry_after } => write!(
+                f,
+                "not written: another write is allowed in {} ms",
+                retry_after.as_millis()
+            ),
             Self::Parse { what, got } => write!(f, "could not parse {what} from {got:?}"),
         }
     }
@@ -61,7 +78,10 @@ impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Io(e) => Some(e),
-            Self::Timeout | Self::WriteBlocked { .. } | Self::Parse { .. } => None,
+            Self::Timeout
+            | Self::WriteBlocked { .. }
+            | Self::RateLimited { .. }
+            | Self::Parse { .. } => None,
         }
     }
 }

@@ -190,14 +190,19 @@ fn the_bootloader_opcode_is_never_emitted() {
 }
 
 #[test]
-fn rate_limiting_suppresses_a_burst_but_not_the_first_write() {
+fn rate_limiting_holds_back_a_burst_and_says_so_rather_than_claiming_success() {
     let bus = SimBus::new();
     let state = Arc::clone(&bus.mcu);
     let limited = RateLimited::new(bus, Duration::from_secs(60));
     let mut mcu = Mcu::new(limited, Dialect::default());
 
+    let mut held = 0;
     for p in 1..=20u8 {
-        mcu.set_fan(FanDuty::Percent(p)).unwrap();
+        match mcu.set_fan(FanDuty::Percent(p)) {
+            Ok(()) => {}
+            Err(argon_hal::Error::RateLimited { .. }) => held += 1,
+            Err(e) => panic!("unexpected error: {e}"),
+        }
     }
 
     assert_eq!(
@@ -205,6 +210,9 @@ fn rate_limiting_suppresses_a_burst_but_not_the_first_write() {
         1,
         "rate limiter let a burst through"
     );
+    // The point of the change: the 19 that did not happen are reported as not having
+    // happened. Returning Ok for them let a caller record a duty the device never got.
+    assert_eq!(held, 19, "a held write was reported as a success");
     assert_eq!(mcu.bus().suppressed(), 19);
 }
 

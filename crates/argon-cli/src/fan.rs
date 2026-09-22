@@ -62,6 +62,13 @@ pub struct Args {
     #[arg(long, conflicts_with = "safe")]
     pub json: bool,
 
+    /// Write this duty to the fan, 0-100, and stop. Needs `--write`.
+    ///
+    /// For testing what the hardware does with a given duty: `argond` drives the fan from the
+    /// curve, so stop it first or the two will fight over the same device.
+    #[arg(long, value_name = "PERCENT", conflicts_with_all = ["safe", "watch", "json", "probe", "t5"])]
+    pub set: Option<u8>,
+
     /// Task T5, one step at a time: `baseline`, `probe` or `restore`. Needs `--write`.
     ///
     /// Settles which protocol the MCU speaks, by the only means there is: a deliberate,
@@ -100,6 +107,9 @@ pub fn run(args: &Args) -> ExitCode {
     if let Some(step) = &args.t5 {
         return t5(&config, step, args.write);
     }
+    if let Some(percent) = args.set {
+        return set_duty(&config, percent, args.write);
+    }
 
     if !args.json {
         report_curve(&config, mode, &curve);
@@ -133,10 +143,34 @@ pub fn run(args: &Args) -> ExitCode {
         );
         return ExitCode::SUCCESS;
     }
+    // What the curve says, and then what would actually be written: the controller applies
+    // the floor and the no-stopping rule afterwards, so "curve says off" on its own reads as
+    // "the fan would stop", which is the opposite of what happens.
+    let mut fresh = FanController::new(
+        curve.clone(),
+        config.fan.hysteresis_c,
+        config.fan.min_duty,
+        config.fan.allow_stop,
+    );
+    let would_write = fresh.update(current);
     println!(
-        "Now:    {}C -> curve says {}",
+        "Now:    {}C -> curve says {}, would write {}{}",
         fmt_c(current),
-        curve.duty_for(current)
+        curve.duty_for(current),
+        would_write,
+        if would_write == curve.duty_for(current) {
+            String::new()
+        } else {
+            format!(
+                " (floor {}%, stopping {})",
+                config.fan.min_duty,
+                if config.fan.allow_stop {
+                    "allowed"
+                } else {
+                    "not allowed"
+                }
+            )
+        }
     );
 
     if args.watch {
@@ -218,6 +252,67 @@ fn load(args: &Args) -> std::result::Result<(Config, Mode, FanCurve), ExitCode> 
         ExitCode::FAILURE
     })?;
     Ok((config, mode, curve))
+}
+
+/// Writes one duty to the fan, in the legacy dialect, and says what went on the wire.
+fn set_duty(config: &Config, percent: u8, write: bool) -> ExitCode {
+    // Deliberately NOT FanDuty::clamped: that raises anything under the spinning floor, which
+    // is right for a curve point and wrong for a test command. Asking for 1% and being given
+    // 10% without being told is exactly the vendor behaviour this project objects to.
+    let byte = percent.min(100);
+    println!("Fan to {byte}%");
+    println!("  on the wire: i2c 0x1a <- {byte:02x}");
+    if byte > 0 && byte < argon_proto::fan::MIN_SPINNING_DUTY {
+        println!(
+            "  note: below {}%, the duty at which a fan is documented to turn at all. Sent as\n  \
+             asked -- finding out what this firmware does with it is the point.",
+            argon_proto::fan::MIN_SPINNING_DUTY
+        );
+    }
+    if !write {
+        println!("\n  Nothing was sent: --set needs --write as well.");
+        return ExitCode::SUCCESS;
+    }
+    if unit_active("argond.service") {
+        eprintln!(
+            "\nargonctl: argond is running and drives this fan from the curve; it would\n\
+             overwrite this within a poll. Stop it first:\n\n    \
+             sudo systemctl stop argond\n"
+        );
+        return ExitCode::FAILURE;
+    }
+    let bus_path = match resolve_bus(config) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("argonctl: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let mut bus = match LinuxI2c::open(&bus_path, u16::from(argon_device::mcu::ADDR)) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("argonctl: cannot open {bus_path}: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    match bus.write(argon_device::mcu::ADDR, &[byte]) {
+        Ok(()) => {
+            println!("\n  sent.");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("\nargonctl: the write failed: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// Whether a systemd unit is active.
+fn unit_active(unit: &str) -> bool {
+    std::process::Command::new("systemctl")
+        .args(["is-active", "--quiet", unit])
+        .status()
+        .is_ok_and(|s| s.success())
 }
 
 /// Task T5: settles the MCU dialect, one operator-paced step at a time.

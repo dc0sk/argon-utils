@@ -221,9 +221,16 @@ impl<T: I2cBus> RateLimited<T> {
 impl<T: I2cBus> I2cBus for RateLimited<T> {
     fn write(&mut self, addr: u8, data: &[u8]) -> Result<()> {
         if let Some(last) = self.last_write {
-            if last.elapsed() < self.min_interval {
+            let elapsed = last.elapsed();
+            if elapsed < self.min_interval {
                 self.suppressed += 1;
-                return Ok(());
+                // Reported, not swallowed. Returning Ok here would tell the caller the device
+                // now holds this value; a caller that writes only on change would then never
+                // send it again. That is exactly how a fan sat at 55% for twelve minutes
+                // while the daemon logged that it was off.
+                return Err(Error::RateLimited {
+                    retry_after: self.min_interval.saturating_sub(elapsed),
+                });
             }
         }
         self.inner.write(addr, data)?;
