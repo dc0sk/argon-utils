@@ -108,15 +108,14 @@ fn report_gpio(chips: &[discovery::GpioChip], warnings: &mut Vec<String>) {
         );
     }
 
-    // The RP1 carries the 40-pin header on a Pi 5. Resolve it by label: the number is not
-    // stable, and /dev/gpiochip4 is a distro udev symlink, not a kernel name.
-    let Some(header) = chips
-        .iter()
-        .find(|c| c.label.contains("rp1") || c.label.contains("bcm2835"))
-    else {
-        warnings.push("could not identify the header GPIO chip by label".into());
+    // Resolved by the name the kernel gives a header line, not by the chip number -- which is
+    // not stable, and /dev/gpiochip4 is a distro udev symlink rather than a kernel name -- and
+    // not by the label either, which differs per board (rp1, bcm2711, bcm2835).
+    let Some(header) = discovery::header_gpio_chip(crate::button::BUTTON_LINE) else {
+        warnings.push("could not identify the header GPIO chip".into());
         return;
     };
+    let header = &header;
 
     println!("\n  Header lines on `{}`:", header.label);
     let offsets: Vec<u32> = LINES_OF_INTEREST.iter().map(|(o, _)| *o).collect();

@@ -23,8 +23,8 @@ several conclusions in this project came from negative results.
 
 | | Where | Task | Needs |
 |---|---|---|---|
-| -- | ONE V2 + Pi 4 | T3, T5 — button pulses, MCU dialect | that machine |
-| -- | ONE V2 + Pi 4 | T6 — IR, which that case does have | that machine, with the remote |
+| -- | ONE V1 + Pi 4 | T5 — does anything answer at I2C 0x1a, and in which dialect | that machine |
+| -- | ONE V1 + Pi 4 | T6 — IR | that machine, with the remote |
 
 Done on 2026-09-19: the ONE UP hand-over (T19 step 2), its lid actions (T22), the CPU cap on the
 ONE V5 (T23) and a first install (T25).
@@ -117,7 +117,7 @@ hardware regardless of software).
 
 ---
 
-## 🟡 T3 — Measure the real button pulse widths — **on the Pi 4 / ONE V2**
+## ✅ T3 — Measure the real button pulse widths — **DONE 2026-09-22 on a ONE V1 + Pi 4: one fixed width, no action code**
 
 > **Changed 2026-09-17.** The ONE V5 has no MCU pulses to measure, because its button is the
 > Pi's own power button (see T2). Only a Pi 4-era case can answer this.
@@ -147,7 +147,18 @@ interfere — it holds no GPIO line — but stopping it removes all doubt:
 sudo systemctl stop argononed      # optional; `sudo systemctl start argononed` afterwards
 ```
 
-**Result:** _(not yet done — produces `docs/protocol/one-button.md`)_
+**Result 2026-09-22** (`OBS-2026-09-22-t3-button-pulses`, specification in
+[`../protocol/one-button.md`](../protocol/one-button.md)): the case emits **one pulse width,
+20085-20104 us**, across 23 events. A single tap and a double-tap are indistinguishable, presses
+under ~1 s apart merge, and a ~2 s hold produces no edge at all -- holding is the case cutting
+power in hardware.
+
+So the vendor's three windows do not describe this case: their 20-30 ms bracket always matches
+and the other two never do. Their figure looks like this same ~20 ms pulse measured by a
+`sleep(0.01)` loop. We ship no pulse-width thresholds for it, because there is nothing to
+threshold -- and none for the V2 or V3 either, which are different boards and unmeasured.
+
+The machine is an **Argon ONE V1** (micro-HDMI era), not a V2 as this task first assumed.
 
 ---
 

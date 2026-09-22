@@ -16,7 +16,7 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 /// The line the MCU pulses to signal the host.
-const BUTTON_LINE: u32 = 4;
+pub const BUTTON_LINE: u32 = 4;
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -34,12 +34,12 @@ pub struct Args {
 }
 
 pub fn run(args: &Args) -> ExitCode {
-    let chips = discovery::gpio_chips();
-    let Some(chip) = chips
-        .iter()
-        .find(|c| c.label.contains("rp1") || c.label.contains("bcm2835"))
-    else {
-        eprintln!("argonctl: could not identify the header GPIO chip by label");
+    let Some(chip) = discovery::header_gpio_chip(args.line) else {
+        eprintln!(
+            "argonctl: no GPIO chip here names a line GPIO{}, and none looks like a Pi header \
+             controller.",
+            args.line
+        );
         return ExitCode::FAILURE;
     };
 
@@ -84,6 +84,10 @@ pub fn run(args: &Args) -> ExitCode {
 
     let mut widths_us: Vec<u64> = Vec::new();
     let mut rising_at: Option<u64> = None;
+    // The gap before each pulse, so one run can be read back as gestures: a pair of pulses a
+    // fraction of a second apart is one double-tap, two seconds apart is two separate presses.
+    // Without it a mixed run is a bag of widths with no way to tell which press made which.
+    let mut last_pulse_ns: Option<u64> = None;
 
     while widths_us.len() < args.count {
         let event = match watcher.next_edge(Duration::from_secs(args.timeout)) {
@@ -104,8 +108,19 @@ pub fn run(args: &Args) -> ExitCode {
                 if let Some(start) = rising_at.take() {
                     let us = event.timestamp_ns.saturating_sub(start) / 1_000;
                     widths_us.push(us);
+                    let gap = last_pulse_ns.map_or_else(String::new, |prev| {
+                        // Integer milliseconds rather than floating seconds: the timestamps are
+                        // nanoseconds since boot, which is past the range an f64 holds exactly.
+                        let ms = start.saturating_sub(prev) / 1_000_000;
+                        format!(
+                            "   +{}.{:02}s since the last",
+                            ms / 1_000,
+                            (ms % 1_000) / 10
+                        )
+                    });
+                    last_pulse_ns = Some(start);
                     println!(
-                        "  pulse {:>3}: {:>7} us  ({} ms)",
+                        "  pulse {:>3}: {:>7} us  ({} ms){gap}",
                         widths_us.len(),
                         us,
                         fmt_ms(us)

@@ -123,6 +123,35 @@ pub fn gpio_chips() -> Vec<GpioChip> {
     out
 }
 
+/// The chip carrying the 40-pin header, found by the name the kernel gives a header line.
+///
+/// By **line name** first, because the chip's label differs with the board -- `pinctrl-rp1` on
+/// a Pi 5, `pinctrl-bcm2711` on a Pi 4, `pinctrl-bcm2835` on older ones -- and a list of labels
+/// is a list that is wrong on the next board. Every RP1 and BCM chip names its header lines
+/// `GPIO0`..`GPIO27`, so asking for the line we actually want identifies the chip without
+/// knowing which chip it is. The label list stays as a fallback for a kernel naming no lines.
+///
+/// Requests nothing: line info is read, not claimed.
+#[must_use]
+pub fn header_gpio_chip(line: u32) -> Option<GpioChip> {
+    let chips = gpio_chips();
+    let wanted = format!("GPIO{line}");
+    chips
+        .iter()
+        .find(|c| {
+            gpio_lines(&c.path, &[line])
+                .first()
+                .is_some_and(|l| l.name == wanted)
+        })
+        .or_else(|| {
+            chips.iter().find(|c| {
+                let l = &c.label;
+                l.contains("rp1") || l.contains("bcm27") || l.contains("bcm2835")
+            })
+        })
+        .cloned()
+}
+
 /// Reads the state of the given line offsets on a chip, without requesting them.
 #[must_use]
 pub fn gpio_lines(chip: &Path, offsets: &[u32]) -> Vec<GpioLine> {
