@@ -79,6 +79,7 @@ for why this exists.
 | ID | Fact | Status | Source |
 |---|---|---|---|
 | `ARGON-GPIO-BTN` | The case power button is wired to the MCU on BCM 17; the MCU signals the host on BCM 4. **Pi 4-era cases only** | `documented` | [DOC-I2C] |
+| `ONE-V1-MCU-PRESENT` | On an **Argon ONE V1** with a Pi 4, a device at I2C `0x1a` acknowledges an SMBus quick-write (address + write bit, no data byte). Its firmware, dialect and function are **not** established by this: an address ACK is one bit | `observed` | 2026-09-22, `argonctl fan --probe`; negative control on the ONE V5, which does not answer |
 | `ONE-V1-BTN-PULSE` | On an **Argon ONE V1** with a Pi 4, the case signals a button press as one pulse on BCM 4 of **20085-20104 us** (23 events, one outlier at 20236). The width is fixed: a single tap and a double-tap are indistinguishable, and presses under ~1 s apart merge into one pulse | `observed` | OBS-2026-09-22-t3-button-pulses |
 | `ONE-V1-BTN-HOLD-SILENT` | A press held ~2 s produces **no edge at all** on BCM 4: holding is the case cutting power in hardware, not a signal to the host | `observed` | OBS-2026-09-22-t3-button-pulses |
 | `ARGON-BTN-V5-IS-PI` | **On an Argon ONE V5 with a Pi 5 the case button is the Pi's own power button.** It arrives as `KEY_POWER` from `pwr_button`; no MCU is involved | `observed` | OBS-2026-09-17-v5-button-is-the-pi-button |

@@ -33,6 +33,10 @@ impl I2cBus for NullBus {
 }
 
 #[derive(clap::Args)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "command-line flags: clap derives one field per flag"
+)]
 pub struct Args {
     /// Configuration file to read. Defaults are used if it does not exist.
     #[arg(long, value_name = "PATH")]
@@ -57,6 +61,15 @@ pub struct Args {
     /// Machine-readable output: one JSON object, or one per iteration with `--watch`.
     #[arg(long, conflicts_with = "safe")]
     pub json: bool,
+
+    /// Ask whether anything answers at the MCU address, and nothing else.
+    ///
+    /// Sends one `SMBus` quick-write: the address with the write bit and **no data byte**. That
+    /// is the only transaction ADR-0002 permits against an unidentified device at 0x1a --
+    /// a register read would put the register number on the bus first, which legacy firmware
+    /// takes as a fan duty. Nothing is written, and no fan changes.
+    #[arg(long, conflicts_with_all = ["safe", "watch", "json"])]
+    pub probe: bool,
 }
 
 pub fn run(args: &Args) -> ExitCode {
@@ -66,6 +79,9 @@ pub fn run(args: &Args) -> ExitCode {
     };
     if args.safe {
         return set_safe(&config, mode);
+    }
+    if args.probe {
+        return probe(&config);
     }
 
     if !args.json {
@@ -185,6 +201,55 @@ fn load(args: &Args) -> std::result::Result<(Config, Mode, FanCurve), ExitCode> 
         ExitCode::FAILURE
     })?;
     Ok((config, mode, curve))
+}
+
+/// Asks whether anything answers at `0x1a`, with the one permitted transaction.
+///
+/// Through [`ReadOnly`], so the bus handed to the probe has no usable write: the guarantee is
+/// structural, not a promise about this function's body.
+fn probe(config: &Config) -> ExitCode {
+    let bus_path = match resolve_bus(config) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("argonctl: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let addr = argon_device::mcu::ADDR;
+    let bus = match LinuxI2c::open(&bus_path, u16::from(addr)) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("argonctl: cannot open {bus_path}: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let mut bus = ReadOnly(bus);
+
+    println!("Probing {bus_path} at 0x{addr:02x}");
+    println!("  sending: address + write bit, no data byte (SMBus quick-write), then stop");
+    match bus.probe(addr) {
+        Ok(true) => {
+            println!("\n  ANSWERED. Something is at 0x{addr:02x} and acknowledged its address.");
+            println!(
+                "  That is all this says: not which firmware, not which dialect, and not that\n  \
+                 it is a fan controller. Deciding the dialect is task T5, and there is no safe\n  \
+                 probe for it -- see docs/design/adr/0002-legacy-mcu-dialect-by-default.md."
+            );
+            ExitCode::SUCCESS
+        }
+        Ok(false) => {
+            println!("\n  NO ANSWER at 0x{addr:02x}: nothing acknowledged the address.");
+            println!(
+                "  On a Pi 5 in an Argon ONE V5 this is expected -- that case has no such\n  \
+                 device, and the kernel drives the fan (T11)."
+            );
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("\nargonctl: the probe itself failed: {e}");
+            ExitCode::FAILURE
+        }
+    }
 }
 
 /// Writes the configured safe duty to the fan.

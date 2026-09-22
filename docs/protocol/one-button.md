@@ -30,6 +30,13 @@ that never do.
 So `argon-utils` treats a pulse on BCM 4 as a single event on this hardware, and does not
 pretend to distinguish reboot from shutdown from display-switch where the hardware does not.
 
+## What is at I2C 0x1a on the V1
+
+A device there acknowledges an SMBus quick-write (`ONE-V1-MCU-PRESENT`, 2026-09-22), where the
+ONE V5 on a Pi 5 does not answer at all. That is an address acknowledgement and nothing more --
+it does not say the device is a fan controller, nor which protocol it speaks. The dialect has
+no safe probe (ADR-0002) and is task T5.
+
 ## Argon ONE V2, V3 -- **unmeasured**
 
 Different boards and different firmware: the V3 is a Pi 5 case, and carries an RP2040. Whether
