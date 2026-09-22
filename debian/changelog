@@ -1,3 +1,22 @@
+argon-utils (0.1.30) unstable; urgency=medium
+
+  * New `argonctl setup`: checks that the machine is configured for the
+    Argon hardware it has, and prints the exact command for anything that
+    is missing. It knows the difference between a setting that is absent,
+    one that is commented out (the stock config.txt ships
+    `#dtparam=i2c_arm=on`, which a grep would call configured), one that
+    is set but needs a reboot, and one that is bound at runtime and will
+    not survive one.
+  * The checks are per-case, because the right configuration differs: a
+    ONE V5 wants its internal USB hub, a ONE UP its lid overlay, a Pi
+    4-era case the header I2C bus and the gpio-ir overlay. The ONE V5 is
+    told IR does not apply, rather than offered an overlay for a receiver
+    it does not have (T6).
+  * It never advises joining the `argon` group, and says why: that group
+    owns the UPS port so that exactly one process does.
+
+ -- Simon Keimer <simon.keimer@mailbox.org>  Tue, 22 Sep 2026 19:11:55 +0200
+
 argon-utils (0.1.29) unstable; urgency=medium
 
   * `argonctl battery`'s closing note lost a stray line break added when

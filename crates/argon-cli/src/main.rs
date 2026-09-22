@@ -12,6 +12,7 @@ mod notify;
 mod oled;
 mod poweroff;
 mod rtc;
+mod setup;
 mod ups;
 mod zigbee;
 
@@ -85,6 +86,14 @@ enum Command {
     /// Needs root (the control socket is argond's) and mode "full".
     Poweroff(poweroff::Args),
 
+    /// Check that this machine is configured for the Argon hardware it has.
+    ///
+    /// Says what is missing and the exact command that fixes it. Read-only: it reads
+    /// config.txt, asks dpkg and systemd, and probes I2C addresses only with the quick-write
+    /// that carries no data byte. Boot configuration needs root and a reboot, so it prints
+    /// those commands rather than running them.
+    Setup(setup::Args),
+
     /// Identify the Zigbee module. `--probe` runs the read-only health probe (task T16).
     ///
     /// Without --probe nothing is opened. The probe listens first, then sends only `SYS_PING`
@@ -119,6 +128,7 @@ fn main() -> std::process::ExitCode {
     };
     match command {
         Command::Doctor(args) => doctor::run(&args),
+        Command::Setup(args) => setup::run(&args),
         Command::Ups(args) => ups::run(&args),
         Command::Button(args) => button::run(&args),
         Command::Battery(args) => battery::run(&args),

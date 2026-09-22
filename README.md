@@ -61,8 +61,12 @@ machine-readable output, a panel icon, and a Debian package.
   temperature and fan; shows and cancels a scheduled shutdown.
 - **Desktop notifications** when on battery, low, critical, or a shutdown is scheduled.
 - **OLED status page** on the ONE V5's case display, switched on and off from the panel icon.
-- **`argonctl`** — `doctor`, `ups`, `battery`, `rtc`, `poweroff`, `zigbee`, `oled`, … with
-  manual pages, and `--json` on every status command. `argonctl ups` asks the daemon over D-Bus, so reading the battery needs no
+- **`argonctl`** — `doctor`, `setup`, `ups`, `battery`, `rtc`, `poweroff`, `zigbee`, `oled`, …
+  with manual pages, and `--json` on every status command.
+- **`argonctl setup`** — checks that the machine is configured for the Argon hardware it
+  actually has: the header I2C bus, the case's internal USB hub, the IR overlay, the ONE UP's
+  lid overlay, groups, udev rules and competing daemons. Every finding comes with the exact
+  command that fixes it, and it changes nothing itself. `argonctl ups` asks the daemon over D-Bus, so reading the battery needs no
   access to the device and no membership of the group that owns it, and `--json` gives the
   same reading to a script -- on every route, with an absent value as `null` rather than a
   zero, and the reading's age included so a monitor can tell fresh from stale.
@@ -124,6 +128,16 @@ installs and changes):
 dpkg-buildpackage -b -us -uc
 sudo apt install ../argon-utils_*_arm64.deb
 ```
+
+Then check the machine is configured for what it has:
+
+```sh
+argonctl setup
+```
+
+It reads `config.txt`, dpkg and systemd, probes I2C addresses only with the quick-write that
+carries no data byte, and prints what is missing with the command to fix it. Boot configuration
+needs root and a reboot, so it tells you rather than doing it.
 
 It installs in read-only mode. Edit `/etc/argon-utils/config.toml` — `mode`, `[ups] source`
 (`serial` for the PWR UPS, `oneup` for the ONE UP), `[oled]`, `[lid]` — and

@@ -5,6 +5,7 @@
 //! device. That is what lets the safety policy be a property of the transport a driver is
 //! handed rather than a rule each driver must remember.
 
+pub mod boot_config;
 pub mod clock_sync;
 pub mod config;
 pub mod control;
