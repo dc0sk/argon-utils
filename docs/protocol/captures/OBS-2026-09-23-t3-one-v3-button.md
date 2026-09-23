@@ -73,6 +73,34 @@ the V3 nothing on the button, since a short tap does not signal the host. **That
 double-tap does reach GPIO4, which is the line `argononed` held for edges, so the takeover did give
 up its handling of it. The caveat stated before the takeover was the accurate one.
 
+## argond acting on it (0.1.39, same evening)
+
+With `[button] action = "shutdown"`, argond claimed GPIO4 (`consumer="argond-button"`), and a
+watcher on the V3 recorded argond's log and logind's `ScheduledShutdown` separately:
+
+```
+20:51:12  logind  nothing scheduled
+20:52:30  argond  button: pressed; poweroff in 60 s -- press again to cancel
+20:52:30  logind  "poweroff" at 20:53:30
+20:52:32  argond  button: pressed again; poweroff cancelled
+20:52:33  logind  nothing scheduled
+```
+
+A double-tap placed a real poweroff exactly a minute out; a second double-tap two seconds later
+cancelled it; nothing was left pending. Two records kept apart -- the daemon's word and logind's
+actual schedule -- agree.
+
+**It first shipped unable to watch at all.** 0.1.38 logged "no header GPIO chip found" on this
+machine: argond's sandbox admitted i2c, ttyACM and hidraw devices but not the GPIO chip, and the
+device cgroup refuses an open before file permissions are consulted, so the `gpio` group did
+nothing. Fixed in 0.1.39 (`DeviceAllow=char-gpiochip`), with a test tying the unit's allowlist to
+every device class argond opens. Caught from the startup line, before any press.
+
+**The announcement is weaker than intended on a desktop.** The tray shows a pending logind
+shutdown in its menu and tooltip, with a cancel entry, but raises no notification, and
+`shutdown`'s broadcast reaches terminals only. The tray was not running here at all -- the
+session predated the install -- so the operator saw nothing. Recorded as open.
+
 ## Not established
 
 - **Holds.** Not attempted: on this case a hold is the likeliest gesture for the RP2040 to act on
