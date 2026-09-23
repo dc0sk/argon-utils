@@ -16,7 +16,7 @@
 
 use argon_device::config::Config;
 use argon_device::fan::{FanTask, Step};
-use argon_device::mcu::{Dialect, Mcu};
+use argon_device::mcu::Mcu;
 use argon_device::safety::FanSafeGuard;
 use argon_hal::i2c::{DryRun, I2cBus, LinuxI2c, RateLimited, ReadOnly};
 use argon_hal::mode::Mode;
@@ -495,7 +495,9 @@ fn control_loop<B: I2cBus + Send + 'static, T: TemperatureSource>(
     metrics: &Arc<Mutex<exporter::State>>,
 ) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let (curve, source) = fan_stack;
-    let mcu = Arc::new(Mutex::new(Mcu::new(bus, Dialect::default())));
+    // The configured dialect, never a default: a register-protocol MCU given legacy bytes
+    // is unobserved behaviour, and the V3's MCU is register (ONE-V3-MCU-REGISTER).
+    let mcu = Arc::new(Mutex::new(Mcu::new(bus, config.mcu.dialect())));
     let controller = FanController::new(
         curve,
         config.fan.hysteresis_c,

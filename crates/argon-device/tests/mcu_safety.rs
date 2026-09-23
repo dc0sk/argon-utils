@@ -238,3 +238,35 @@ fn a_blocked_write_does_not_update_shadow_state() {
         "shadow state recorded a write that was refused"
     );
 }
+
+#[test]
+fn the_register_dialect_writes_the_duty_into_register_0x80() {
+    // The frame the vendor daemon sent the ONE V3's MCU, and the one this dialect must send:
+    // `[0x80, duty]` (ONE-V3-MCU-REGISTER). Recorded by a dry run, so nothing reaches a device.
+    let mut mcu = Mcu::new(DryRun::new(SimBus::new()), Dialect::Register);
+    mcu.set_fan(FanDuty::Percent(40)).unwrap();
+    mcu.set_fan(FanDuty::Off).unwrap();
+    assert_eq!(
+        mcu.bus().writes(),
+        &[(ADDR, vec![0x80u8, 40]), (ADDR, vec![0x80u8, 0])]
+    );
+}
+
+#[test]
+fn the_default_is_still_legacy_now_that_register_ships() {
+    // Promotion must not move the default. A register read pins a legacy fan at full
+    // (ONE-V1-MCU-LEGACY); a legacy byte to a register MCU is merely unobserved. Of the two,
+    // only legacy cannot damage a case that speaks the other.
+    assert_eq!(Dialect::default(), Dialect::Legacy);
+}
+
+#[test]
+fn only_legacy_and_register_are_dialects_and_auto_is_not() {
+    assert_eq!(Dialect::from_config("legacy"), Some(Dialect::Legacy));
+    assert_eq!(Dialect::from_config("register"), Some(Dialect::Register));
+    // No detection exists to back an "auto": the probe that tells them apart is harmless on
+    // one and pins the other's fan at full.
+    assert_eq!(Dialect::from_config("auto"), None);
+    assert_eq!(Dialect::from_config("Register"), None, "case must be exact");
+    assert_eq!(Dialect::from_config(""), None);
+}

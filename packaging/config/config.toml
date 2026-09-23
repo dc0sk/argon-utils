@@ -72,7 +72,15 @@ min_write_interval_ms = 500
 # firmware that only implements the documented single-byte protocol sets the fan to full. The
 # read is as destructive as the write. See docs/design/adr/0002.
 #
-# "legacy" is the documented protocol and is functionally complete for everything here.
+# Two dialects exist, one per case, and they cannot be told apart safely:
+#
+#   "legacy"    one byte, the duty. The ONE V1 speaks it (observed, T5). The default, because
+#               it is the one that cannot damage a case speaking the other.
+#   "register"  [0x80, duty], and register 0x80 reads back. The ONE V3's RP2040 speaks it
+#               (observed on the bus from the vendor's own daemon).
+#
+# Set "register" only on a case known to speak it. The same register transaction that is
+# harmless on a V3 pins a V1's fan at full.
 dialect = "legacy"
 
 # I2C bus device path, or "auto" to find it by adapter name.

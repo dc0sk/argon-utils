@@ -296,8 +296,15 @@ fn set_duty(config: &Config, percent: u8, write: bool) -> ExitCode {
     // is right for a curve point and wrong for a test command. Asking for 1% and being given
     // 10% without being told is exactly the vendor behaviour this project objects to.
     let byte = percent.min(100);
-    println!("Fan to {byte}%");
-    println!("  on the wire: i2c 0x1a <- {byte:02x}");
+    // In the configured dialect: a legacy byte sent to the V3's register-protocol MCU is
+    // unobserved behaviour, so a test command must not be the thing that tries it.
+    let frame: Vec<u8> = match config.mcu.dialect() {
+        Dialect::Legacy => vec![byte],
+        Dialect::Register => vec![0x80, byte],
+    };
+    let hex: Vec<String> = frame.iter().map(|b| format!("{b:02x}")).collect();
+    println!("Fan to {byte}% ({:?} dialect)", config.mcu.dialect());
+    println!("  on the wire: i2c 0x1a <- {}", hex.join(" "));
     if byte > 0 && byte < argon_proto::fan::MIN_SPINNING_DUTY {
         println!(
             "  note: below {}%, the duty at which a fan is documented to turn at all. Sent as\n  \
@@ -331,7 +338,7 @@ fn set_duty(config: &Config, percent: u8, write: bool) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    match bus.write(argon_device::mcu::ADDR, &[byte]) {
+    match bus.write(argon_device::mcu::ADDR, &frame) {
         Ok(()) => {
             println!("\n  sent.");
             ExitCode::SUCCESS
@@ -532,7 +539,7 @@ fn set_safe(config: &Config, mode: Mode) -> ExitCode {
         }
     };
 
-    let mut mcu = Mcu::new(bus, Dialect::default());
+    let mut mcu = Mcu::new(bus, config.mcu.dialect());
 
     // Probe before writing, exactly as argond does. This runs as the unit's ExecStopPost on
     // every stop, and on a ONE V5 there is no MCU at 0x1a at all: without this it puts an
@@ -599,7 +606,7 @@ fn watch(args: &Args, config: &Config, curve: FanCurve, source: ThermalZone) -> 
     // Always a dry run: this subcommand exists to show intent, and the transport records
     // writes rather than performing them, so it cannot contend with the vendor daemon.
     let bus = DryRun::new(ReadOnly(NullBus));
-    let mcu = Arc::new(Mutex::new(Mcu::new(bus, Dialect::default())));
+    let mcu = Arc::new(Mutex::new(Mcu::new(bus, config.mcu.dialect())));
     let controller = FanController::new(
         curve,
         config.fan.hysteresis_c,

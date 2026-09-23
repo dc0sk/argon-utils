@@ -17,12 +17,30 @@ pub const ADDR: u8 = 0x1a;
 /// ADR-0002.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Dialect {
-    /// The documented single-byte protocol. Works on every ONE-family MCU ever shipped.
+    /// The documented single-byte protocol: one byte, the duty. Observed on the ONE V1's MCU
+    /// (`ONE-V1-MCU-LEGACY`), and the default because it is the one that cannot damage a case
+    /// speaking the other: a register read pins a legacy fan at full.
     #[default]
     Legacy,
-    /// The register protocol. `inferred`, unconfirmed, and behind a Cargo feature.
-    #[cfg(feature = "unverified-register")]
+    /// The register protocol: register `0x80` holds the duty, `[0x80, duty]` sets it.
+    /// Observed on the ONE V3's RP2040 (`ONE-V3-MCU-REGISTER`), from the vendor daemon's own bus
+    /// traffic. Reached **only** by configuration (`[mcu] dialect = "register"`), never by
+    /// detection: telling the two apart takes a transaction that is harmless on one and pins
+    /// the other's fan at full.
     Register,
+}
+
+impl Dialect {
+    /// The dialect a configuration value names, or `None` for anything else -- including
+    /// `"auto"`, which does not exist because there is nothing safe to detect with.
+    #[must_use]
+    pub fn from_config(value: &str) -> Option<Self> {
+        match value {
+            "legacy" => Some(Self::Legacy),
+            "register" => Some(Self::Register),
+            _ => None,
+        }
+    }
 }
 
 /// Power-on behaviour (`ARGON-MCU-L-MODE1`, `ARGON-MCU-L-MODE2`).
@@ -81,7 +99,6 @@ impl<B: I2cBus> Mcu<B> {
     pub fn set_fan(&mut self, duty: FanDuty) -> Result<()> {
         match self.dialect {
             Dialect::Legacy => self.bus.write(ADDR, &[duty.as_mcu_byte()])?,
-            #[cfg(feature = "unverified-register")]
             Dialect::Register => self.bus.write(ADDR, &[0x80, duty.as_mcu_byte()])?,
         }
         self.shadow_duty = Some(duty);

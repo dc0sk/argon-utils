@@ -12,10 +12,6 @@ authors.workspace      = true
 
 [features]
 default = []
-# The register protocol is `inferred`, never confirmed on hardware, and addressing legacy
-# firmware with it sets the fan to full. Off in shipped builds: a stock install cannot emit
-# a register transaction even if configured to. See ADR-0002.
-unverified-register = []
 
 [dependencies]
 serde       = { version = "1", features = ["derive"] }

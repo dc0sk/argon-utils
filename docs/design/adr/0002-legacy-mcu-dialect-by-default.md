@@ -71,6 +71,18 @@ That is the whole list. **Legacy is functionally complete for every deliverable 
 has**, so the safe default costs approximately nothing, while the unsafe default risks
 physically misbehaving on hardware we cannot identify in advance.
 
+## The register dialect ships, by configuration only, 2026-09-23
+
+It was compiled out behind the `unverified-register` feature while it was `inferred`. Observed on
+the ONE V3, it now ships -- and is reached **only** through `[mcu] dialect = "register"`. There is
+still no `"auto"` and no probe; nothing about how a dialect is chosen has changed, only that a
+second, observed one is available to choose.
+
+Promoting it exposed a bug the gate had been hiding: the daemon and the CLI built every MCU with
+`Dialect::default()`, ignoring the configured value entirely. While only legacy existed that was
+harmless. With register available it would have meant a V3 configured correctly still being sent
+legacy bytes. Every construction now takes the configured dialect, and a test asserts it.
+
 ## Both dialects observed, 2026-09-23
 
 The register protocol this ADR held as `inferred` is real. On an Argon ONE V3 with a Pi 5, the

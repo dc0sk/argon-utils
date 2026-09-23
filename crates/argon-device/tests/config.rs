@@ -79,8 +79,18 @@ fn auto_dialect_is_rejected_with_the_reason() {
 }
 
 #[test]
-fn the_register_dialect_is_refused_in_a_default_build() {
-    let err = Config::from_toml("[mcu]\ndialect = \"register\"\n").unwrap_err();
+fn the_register_dialect_is_accepted_and_actually_used() {
+    // Changed on purpose: register was refused while it was only `inferred`, and ships now it
+    // is observed on the ONE V3 (ONE-V3-MCU-REGISTER). The second assertion is the one that
+    // matters -- before this change every MCU was built with the default dialect, so a
+    // configured "register" would have been silently ignored.
+    let c = Config::from_toml("[mcu]\ndialect = \"register\"\n").expect("register refused");
+    assert_eq!(c.mcu.dialect(), argon_device::mcu::Dialect::Register);
+}
+
+#[test]
+fn an_unknown_dialect_is_still_refused() {
+    let err = Config::from_toml("[mcu]\ndialect = \"fancy\"\n").unwrap_err();
     assert!(
         matches!(
             err,
@@ -90,6 +100,14 @@ fn the_register_dialect_is_refused_in_a_default_build() {
             }
         ),
         "got {err:?}"
+    );
+}
+
+#[test]
+fn the_default_dialect_is_legacy() {
+    assert_eq!(
+        Config::default().mcu.dialect(),
+        argon_device::mcu::Dialect::Legacy
     );
 }
 

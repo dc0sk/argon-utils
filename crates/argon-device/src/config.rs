@@ -235,6 +235,17 @@ pub struct McuConfig {
     pub bus: String,
 }
 
+impl McuConfig {
+    /// The configured dialect.
+    ///
+    /// Validated when the configuration is loaded, so anything unrecognised has already been
+    /// refused; the fallback is legacy only so this cannot fail, and legacy is the safe one.
+    #[must_use]
+    pub fn dialect(&self) -> crate::mcu::Dialect {
+        crate::mcu::Dialect::from_config(&self.dialect).unwrap_or_default()
+    }
+}
+
 impl Default for McuConfig {
     fn default() -> Self {
         Self {
@@ -417,13 +428,13 @@ impl Config {
             });
         }
 
-        if self.mcu.dialect != "legacy" {
+        if crate::mcu::Dialect::from_config(&self.mcu.dialect).is_none() {
             // "auto" is rejected explicitly rather than falling into the generic message,
             // because an operator writing it has a specific wrong idea worth correcting.
             let expected = if self.mcu.dialect == "auto" {
-                "legacy (there is no auto: detection is unsafe, see ADR-0002)"
+                "legacy or register (there is no auto: detection is unsafe, see ADR-0002)"
             } else {
-                "legacy (register support requires a build with the unverified-register feature)"
+                "legacy (the ONE V1 and the default) or register (the ONE V3)"
             };
             return Err(ConfigError::BadValue {
                 key: "mcu.dialect",
