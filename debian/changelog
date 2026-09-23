@@ -1,3 +1,18 @@
+argon-utils (0.1.34) unstable; urgency=medium
+
+  * The panel icon gains an "About" submenu: the version each of our own
+    components reports, a link to the project page, and the donate link.
+  * The versions are asked of the components themselves rather than
+    assumed from the tray's own. argond is a separate process that an
+    upgrade leaves on the old version until it restarts, and argonctl may
+    not be installed at all; three copies of the tray's version would
+    look like agreement without being evidence of any. A daemon that does
+    not answer is reported as not answering, not as "unknown".
+  * Third-party versions are deliberately not listed: apt and cargo know
+    them, and a panel menu is not where a dependency audit belongs.
+
+ -- Simon Keimer <simon.keimer@mailbox.org>  Wed, 23 Sep 2026 10:28:30 +0200
+
 argon-utils (0.1.33) unstable; urgency=medium
 
   * The panel icon no longer accuses a healthy daemon of being stopped.

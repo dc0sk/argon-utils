@@ -244,6 +244,9 @@ impl ksni::Tray for ArgonTray {
         }
 
         items.push(MenuItem::Separator);
+        items.push(about_menu());
+
+        items.push(MenuItem::Separator);
         items.push(
             StandardItem {
                 label: "Quit the tray icon".into(),
@@ -255,6 +258,54 @@ impl ksni::Tray for ArgonTray {
         );
         items
     }
+}
+
+/// The "About" submenu: which of our components are running, and where the project lives.
+fn about_menu<T: ksni::Tray>() -> ksni::MenuItem<T> {
+    use ksni::menu::{MenuItem, StandardItem, SubMenu};
+    let label = |text: &str| -> MenuItem<T> {
+        StandardItem {
+            label: text.to_owned(),
+            enabled: false,
+            ..Default::default()
+        }
+        .into()
+    };
+    // Asked when the menu is built, not cached at startup: a daemon restarted or upgraded
+    // since the tray started reports its own version, which is the discrepancy worth showing.
+    let mut about: Vec<MenuItem<T>> =
+        crate::about::components(crate::about::daemon_version(), crate::about::cli_version())
+            .iter()
+            .map(|c| label(&crate::about::line(c)))
+            .collect();
+    about.push(MenuItem::Separator);
+    about.push(
+        StandardItem {
+            label: "Project page on GitHub".into(),
+            icon_name: "text-html-symbolic".into(),
+            activate: Box::new(|_| crate::about::open(crate::about::REPO_URL)),
+            ..Default::default()
+        }
+        .into(),
+    );
+    about.push(
+        StandardItem {
+            label: "Donate via PayPal".into(),
+            icon_name: "emblem-favorite-symbolic".into(),
+            activate: Box::new(|_| crate::about::open(crate::about::DONATE_URL)),
+            ..Default::default()
+        }
+        .into(),
+    );
+    about.push(MenuItem::Separator);
+    about.push(label("GPL-3.0-or-later"));
+    SubMenu {
+        label: "About".into(),
+        icon_name: "help-about-symbolic".into(),
+        submenu: about,
+        ..Default::default()
+    }
+    .into()
 }
 
 fn hhmm(unix: u64) -> String {
