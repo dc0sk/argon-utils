@@ -80,11 +80,34 @@ clock NTP-synchronised):
   state proves the device takes the write; the read-back of the distinctive time would prove
   the sequence. Recorded at the tier the evidence supports.
 
+## Setting a wake schedule on firmware 17 (T17, same day)
+
+T17 writes two different far-future wake times and reads each back, then leaves the second in
+place: no command to clear a schedule is known, and none is guessed at.
+
+```
+13:59:43  argond      no wake schedule set
+14:20:09  sudo argonctl rtc --t17 --write
+14:20:16  argond      wake schedule 2097-03-21 17:42 UTC, far enough away to leave
+```
+
+- **`ARGON-UPS-CMD6-FW17`: firmware 17 accepts the wake-schedule write.** The schedule went from
+  none to exactly T17's second target, and the reading is argond's -- a separate process with
+  its own read of the device, not T17 checking its own work.
+- **Not independently seen:** whether the *first* write (2098-07-13 06:29) took. The end state
+  equals the second write, which is also what it would read if the first had been ignored.
+  T17's printed read-backs would settle it.
+- argond's safety net read the leftover schedule and judged it far enough away to leave, as
+  designed.
+- **The schedule stays at 2097-03-21 17:42.** That is 71 years out and will not fire. It does
+  mean T15 and T17 refuse to run again on this unit -- both decline while a schedule is set --
+  until a real wake clears it or `argonctl poweroff --wake-at` overwrites it.
+
 ## What this does *not* establish
 
-**Wake scheduling on firmware 17.** T17 (setting a wake schedule) was run on firmware 113 only.
-Setting the clock has now been seen to work on both firmwares; that is evidence about `CMD3`,
-not about `CMD6`, and it is not stretched to cover it.
+**That a wake fires on firmware 17.** Setting a schedule and the UPS acting on it are different
+facts; the second is T18, observed so far on firmware 113 only. So is the self-clearing of the
+schedule after a wake.
 
 Whether its HID interface is dormant as firmware 113's is (`OBS-2026-09-15-ups-hid-is-dormant`).
 Not attempted: the node is root-only until the package's udev rule is installed.
