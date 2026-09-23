@@ -1,3 +1,32 @@
+argon-utils (0.1.36) unstable; urgency=medium
+
+  * Fix, safety-relevant: with no 40-pin header I2C bus present, bus
+    discovery fell back to "the first I2C adapter" -- which on a Pi 5 is
+    an HDMI DDC bus. On an Argon NEO 5 with dtparam=i2c_arm=on unset,
+    something on that bus acknowledged address 0x1a and argond reported
+    "Argon MCU at 0x1a" on a case that has none. In read-only mode that
+    was a wrong log line; in full mode it would have written fan duties
+    to an unidentified device on the display bus, which is the hazard
+    ADR-0002 exists to prevent, reached by misidentification rather than
+    by probing.
+  * There is no fallback now: the header bus is the DesignWare controller
+    (Pi 5) or bcm2835 (earlier boards), and "no header bus" is the
+    truthful answer when neither is there.
+
+ -- Simon Keimer <simon.keimer@mailbox.org>  Wed, 23 Sep 2026 11:45:52 +0200
+
+argon-utils (0.1.35) unstable; urgency=medium
+
+  * `argonctl setup` no longer tells a Pi 5 case that "the ONE V5 has no
+    IR receiver" as though T6 had settled every Pi 5 enclosure. It
+    measured one case; other Pi 5 cases are reported as unmeasured, with
+    the V5's result cited rather than inherited.
+  * Documents a second UPS -- an Industria 5000 on firmware 17, where the
+    tested unit reports 113 -- and records that how UPS firmware is
+    updated is unknown and will not be implemented.
+
+ -- Simon Keimer <simon.keimer@mailbox.org>  Wed, 23 Sep 2026 11:33:53 +0200
+
 argon-utils (0.1.34) unstable; urgency=medium
 
   * The panel icon gains an "About" submenu: the version each of our own

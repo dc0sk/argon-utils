@@ -348,11 +348,27 @@ pub fn pi_power_button() -> Option<PathBuf> {
 #[must_use]
 pub fn header_i2c_bus() -> Option<PathBuf> {
     let buses = i2c_buses().ok()?;
+    pick_header_bus(&buses).map(|b| b.dev.clone())
+}
+
+/// Picks the 40-pin header's bus out of the adapters present, or `None` if it is not there.
+///
+/// **No fallback to "the first bus".** A Pi always has other I2C adapters -- the Pi 5's
+/// `107d508…` pair carries HDMI DDC -- and returning one of those when the header bus is
+/// absent is not a guess, it is a wrong answer that later code acts on. On a NEO 5 with
+/// `dtparam=i2c_arm=on` unset, the old fallback returned an HDMI bus, something there
+/// acknowledged address `0x1a`, and argond reported "Argon MCU at 0x1a" on a case that has
+/// none. In full mode it would then have written fan duties to an unidentified device on the
+/// display bus -- the exact hazard ADR-0002 exists to prevent, reached by misidentification
+/// rather than by probing.
+///
+/// The header adapter is the Synopsys `DesignWare` controller on a Pi 5, and `bcm2835` on
+/// earlier boards. Anything else is some other bus, and "no header bus" is the truthful answer.
+#[must_use]
+pub fn pick_header_bus(buses: &[I2cBus]) -> Option<&I2cBus> {
     buses
         .iter()
         .find(|b| b.name.contains("DesignWare") || b.name.contains("bcm2835"))
-        .or_else(|| buses.first())
-        .map(|b| b.dev.clone())
 }
 
 /// The Argon UPS serial port, by a name that survives re-enumeration.
@@ -385,4 +401,58 @@ pub fn argon_ups_serial_path() -> Option<PathBuf> {
                 .is_some_and(|f| f.to_string_lossy().starts_with("ttyACM"))
         })
         .cloned()
+}
+
+#[cfg(test)]
+mod header_bus_tests {
+    use super::{I2cBus, pick_header_bus};
+    use std::path::PathBuf;
+
+    fn bus(dev: &str, name: &str) -> I2cBus {
+        I2cBus {
+            number: 0,
+            dev: PathBuf::from(dev),
+            name: name.to_owned(),
+            bound: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_pi5_header_bus_is_the_designware_controller() {
+        let buses = [
+            bus("/dev/i2c-1", "Synopsys DesignWare I2C adapter"),
+            bus("/dev/i2c-13", "107d508200.i2c"),
+        ];
+        assert_eq!(
+            pick_header_bus(&buses).map(|b| b.dev.clone()),
+            Some(PathBuf::from("/dev/i2c-1"))
+        );
+    }
+
+    #[test]
+    fn an_earlier_board_names_its_header_bus_bcm2835() {
+        let buses = [bus("/dev/i2c-1", "bcm2835 (i2c@7e804000)")];
+        assert!(pick_header_bus(&buses).is_some());
+    }
+
+    #[test]
+    fn with_no_header_bus_the_answer_is_none_not_the_display_bus() {
+        // The NEO 5 with dtparam=i2c_arm=on unset: only the Pi 5's HDMI DDC adapters exist.
+        // The old code fell back to the first of these; something there acknowledged 0x1a,
+        // and argond announced an Argon MCU on a case that has none. In full mode it would
+        // have written fan duties to an unidentified device on the display bus.
+        let buses = [
+            bus("/dev/i2c-13", "107d508200.i2c"),
+            bus("/dev/i2c-14", "107d508280.i2c"),
+        ];
+        assert!(
+            pick_header_bus(&buses).is_none(),
+            "picked a bus that is not the header"
+        );
+    }
+
+    #[test]
+    fn no_buses_at_all_is_also_none() {
+        assert!(pick_header_bus(&[]).is_none());
+    }
 }
