@@ -67,6 +67,12 @@ and the question moves to the ONE V2 on the Pi 4 (T6). That is a coherent produc
 useful one than a second fan controller. But it is a different product from the one the plan
 opened with, and that is worth deciding rather than drifting into.
 
+## Open questions
+
+| | Question | Status |
+|---|---|---|
+| **Q1** | How is UPS firmware updated? | **Unknown, and deliberately not probed for.** Two units run firmware 17 and 113; neither exposes USB DFU, and no serial command does it. Answering it means capturing the vendor updater's USB traffic -- observation of the device, which is clean-room legitimate. No update mechanism will be built either way: the failure mode is the machine's power supply, with no known recovery. [`../protocol/ups-firmware.md`](../protocol/ups-firmware.md) |
+
 ## Decisions
 
 | | Decision | Blocks | Reversible? |

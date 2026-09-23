@@ -79,6 +79,7 @@ for why this exists.
 | ID | Fact | Status | Source |
 |---|---|---|---|
 | `ARGON-GPIO-BTN` | The case power button is wired to the MCU on BCM 17; the MCU signals the host on BCM 4. **Pi 4-era cases only** | `documented` | [DOC-I2C] |
+| `ARGON-UPS-NO-DFU` | Neither UPS exposes a USB DFU interface (`fe/01`) in normal operation, and no serial command updates firmware. How the firmware *is* updated is **unknown**; see [`ups-firmware.md`](ups-firmware.md). Not probed for, and no update mechanism will be built | `observed` (absence), `unknown` (the mechanism) | OBS-2026-09-23-neo5-industria-ups-5000 |
 | `ARGON-UPS-FW-17` | An **Industria UPS 5000** answers the same serial protocol as the PWR UPS 10000 -- battery, firmware, clock, wake schedule -- and reports **firmware 17** where the tested 10000 unit reports 113. Reads only; nothing about writes on this firmware is established | `observed` | OBS-2026-09-23-neo5-industria-ups-5000 |
 | `ARGON-UPS-INTERNAL-HEADER-DWC2` | The case's internal USB header needs `dtoverlay=dwc2,dr_mode=host` **in force for the running board**. On a Pi 5 a `[cm5]`-filtered line does not apply, the controller stays down, and the UPS never enumerates | `observed` | OBS-2026-09-23-neo5-industria-ups-5000 |
 | `ONE-V1-IR-BCM23` | On an **Argon ONE V1** with a Pi 4, an IR receiver is wired to BCM 23 and works with the stock `gpio-ir` overlay -- no vendor software involved | `observed` | OBS-2026-09-22-t6-one-v1-ir |
