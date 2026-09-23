@@ -7,6 +7,13 @@ remove)
     # A ONE UP taken over with oneup-takeover is handed back before the package goes, while
     # oneup-restore still exists: otherwise removal would leave argononeupd disabled and
     # nothing at all watching the battery. Not on upgrade -- the takeover carries over.
+    # Likewise a case MCU taken over with mcu-takeover: without this, removal would leave
+    # argononed disabled and nothing driving the fan.
+    if [ -f /var/lib/argon-utils/mcu-takeover ] && [ -x /usr/libexec/argon-utils/mcu-restore ]; then
+        echo "argon-utils: handing the case fan back to argononed (mcu-restore)." >&2
+        /usr/libexec/argon-utils/mcu-restore >&2 ||
+            echo "argon-utils: WARNING: mcu-restore failed; argononed may still be disabled." >&2
+    fi
     if [ -f /var/lib/argon-utils/oneup-takeover ] && [ -x /usr/libexec/argon-utils/oneup-restore ]; then
         echo "argon-utils: handing the ONE UP back to argononeupd (oneup-restore); reboot afterwards." >&2
         /usr/libexec/argon-utils/oneup-restore >&2 ||

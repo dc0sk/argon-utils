@@ -121,6 +121,42 @@ sudo /usr/libexec/argon-utils/oneup-restore
 sudo reboot
 ```
 
+### A case fan driven by the vendor's `argononed`
+
+On a case with a fan MCU -- the ONE V1 on a Pi 4, the ONE V3 on a Pi 5 -- the vendor's
+`argononed` drives the fan, and argond will not share the MCU with it. Handing the fan over is
+opt-in, because retiring `argononed` on every install would leave a read-only machine with
+nobody driving its fan. One script does it and records what it changed:
+
+```sh
+sudo /usr/libexec/argon-utils/mcu-takeover --dialect register   # the ONE V3
+sudo /usr/libexec/argon-utils/mcu-takeover --dialect legacy     # the ONE V1
+```
+
+**`--dialect` is required and has no default.** The two dialects cannot be told apart safely --
+the transaction that would do it is harmless on a V3 and pins a V1's fan at full (ADR-0002) --
+so the script will not guess and neither should you. If you do not know which your case speaks,
+stop here.
+
+It disables `argononed`, sets `[mcu] dialect`, sets argond's mode to `full` (argond only drives
+the fan in full mode), and restarts argond. Then it checks that argond **has actually taken the
+fan**. If it has not within ten seconds, it puts everything back and exits with an error: a fan
+with nobody driving it stays at whatever duty was last set, which may be off.
+
+**What you lose.** argond drives the fan from its curve. As far as is known it does *not* do two
+things `argononed` may do: act on the case button's pulses, and tell the MCU anything at
+shutdown. So after the takeover the case button may do nothing short of a long press (which the
+MCU handles itself), and whether the case cuts power after `poweroff` is unobserved.
+
+To undo exactly -- removing the package does this too, before it goes:
+
+```sh
+sudo /usr/libexec/argon-utils/mcu-restore
+```
+
+It stops argond before starting `argononed` and starts argond after, so the two never drive the
+MCU at once, and argond then declines the fan because `argononed` holds it.
+
 
 ## Building and installing the Debian package
 

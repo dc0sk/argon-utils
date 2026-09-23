@@ -54,6 +54,12 @@ override_dh_auto_install:
 		debian/argon-utils/usr/libexec/argon-utils/oneup-takeover
 	install -D -m 0755 packaging/oneup/restore.sh \
 		debian/argon-utils/usr/libexec/argon-utils/oneup-restore
+	# The case MCU's hand-over from argononed: opt-in, like the ONE UP's, because retiring the
+	# vendor daemon on every install would leave read-only machines with nobody driving the fan.
+	install -D -m 0755 packaging/mcu/takeover.sh \
+		debian/argon-utils/usr/libexec/argon-utils/mcu-takeover
+	install -D -m 0755 packaging/mcu/restore.sh \
+		debian/argon-utils/usr/libexec/argon-utils/mcu-restore
 
 	install -D -m 0644 packaging/systemd/argond.service \
 		debian/argon-utils/usr/lib/systemd/system/argond.service

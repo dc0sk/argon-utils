@@ -1,3 +1,21 @@
+argon-utils (0.1.37) unstable; urgency=medium
+
+  * The register dialect ships. It was compiled out while inferred; it is
+    observed now on the ONE V3's RP2040, from the vendor daemon's own bus
+    traffic, and is reached only through [mcu] dialect = "register". There
+    is still no "auto" and no probe, and legacy stays the default.
+  * Fix: the configured dialect was ignored. The daemon and the CLI built
+    every MCU with the default dialect whatever config.toml said, so a
+    correctly configured V3 would have been sent legacy bytes.
+  * New /usr/libexec/argon-utils/mcu-takeover --dialect legacy|register
+    and mcu-restore, to hand a case fan from the vendor's argononed to
+    argond and back, recorded, and undone by package removal. --dialect is
+    required with no default. The takeover confirms argond has taken the
+    fan and puts everything back if it has not, so the fan is never left
+    with nobody driving it.
+
+ -- Simon Keimer <simon.keimer@mailbox.org>  Wed, 23 Sep 2026 16:09:09 +0200
+
 argon-utils (0.1.36) unstable; urgency=medium
 
   * Fix, safety-relevant: with no 40-pin header I2C bus present, bus
