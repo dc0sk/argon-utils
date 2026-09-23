@@ -103,11 +103,72 @@ place: no command to clear a schedule is known, and none is guessed at.
   mean T15 and T17 refuse to run again on this unit -- both decline while a schedule is set --
   until a real wake clears it or `argonctl poweroff --wake-at` overwrites it.
 
+## A wake firing on firmware 17 (T18, same day)
+
+### First, removing a confound
+
+The V5's T18 ran on a Pi 5 whose EEPROM had `POWER_OFF_ON_HALT=1` and `WAKE_ON_GPIO=0`. This Pi 5
+had `POWER_OFF_ON_HALT=0`: halted, it stays in a low-power state with the PMIC on, waiting for its
+button. A wake that failed there could not have been told apart from a Pi that never fully
+powered down. So the EEPROM was matched to the V5 first, leaving the UPS firmware as the one
+variable:
+
+```
+- POWER_OFF_ON_HALT=0
++ POWER_OFF_ON_HALT=1
++ WAKE_ON_GPIO=0
+```
+
+On this Pi 5, `rpi-eeprom-config --apply` writes to the flash's spare A/B slot and commits it
+(`rpi-eeprom` 28.31, `AB_EEPROM`), so **nothing is staged in `/boot/firmware`** and the change
+takes effect at the next boot. An empty boot directory is what success looks like; it is not a
+sign the apply failed. (Two earlier reboots changed nothing because the original config had been
+applied by mistake; the file names differed only after `eeprom-`.)
+
+### The run
+
+`sudo argonctl poweroff --wake-at "now + 20 minutes"` in full mode, on mains. A first attempt
+with 10 minutes was refused by argonctl -- a wake must be at least 15 minutes out, so the machine
+is certainly off before it comes due. A watcher off the machine recorded reachability:
+
+| | |
+|---|---|
+| Went down | 14:51:19 |
+| **Back up** | **15:11:15** (from `/proc/uptime`), reachable at 15:11:26 |
+| argond's first wake check | **no wake schedule set** |
+
+- **`ARGON-UPS-WAKE-FW17`: the wake fires on firmware 17.** The UPS powered the Pi on at the
+  minute it was given, twenty minutes after the request, with the Pi's EEPROM matched to the V5.
+- **`ARGON-UPS-WAKE-CLEAR-FW17`: the schedule clears itself after firing**, as on firmware 113.
+  It also took the leftover T17 schedule with it, since T18 overwrote that first, so T15 and T17
+  will run on this unit again.
+
+### Why the boot time read 14:52, and the clock guard that caught it
+
+`uptime -s` and the journal said the machine booted at **14:52:10**. That is the system clock at
+boot, which resumes from roughly where it shut down and had not yet reached NTP -- not when the
+machine came on. argond saw the discrepancy immediately:
+
+```
+clock offset +1146 s; not correcting it, because the system clock is not NTP-synchronised
+```
+
+The UPS clock had kept true time while the Pi was off, so it read 1146 s ahead. **14:52:10 +
+1146 s = 15:11:16**, within a second of the real boot time from `/proc/uptime`: two independent
+clocks agreeing on when the wake happened.
+
+It is also the guard doing its job in the field. Copying that unsynchronised clock into the UPS
+would have set it **19 minutes slow**, and every later wake would have come 19 minutes late. argond
+refused, and once NTP had synchronised it looked again: `clock offset +1 s, within tolerance`.
+
 ## What this does *not* establish
 
-**That a wake fires on firmware 17.** Setting a schedule and the UPS acting on it are different
-facts; the second is T18, observed so far on firmware 113 only. So is the self-clearing of the
-schedule after a wake.
+What the UPS does if a wake comes due while the machine is running -- argond parks any schedule
+that would, so it stays deliberately unobserved, as on firmware 113.
+
+The EEPROM change remains in place on this Pi (`POWER_OFF_ON_HALT=1`, `WAKE_ON_GPIO=0`). Whether a
+wake also works with the original `POWER_OFF_ON_HALT=0` is untested; the original config is kept
+on the machine as `BACKUP-original-eeprom.conf`.
 
 Whether its HID interface is dormant as firmware 113's is (`OBS-2026-09-15-ups-hid-is-dormant`).
 Not attempted: the node is root-only until the package's udev rule is installed.
