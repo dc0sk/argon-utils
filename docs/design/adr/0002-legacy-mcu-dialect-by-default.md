@@ -71,6 +71,19 @@ That is the whole list. **Legacy is functionally complete for every deliverable 
 has**, so the safe default costs approximately nothing, while the unsafe default risks
 physically misbehaving on hardware we cannot identify in advance.
 
+## Both dialects observed, 2026-09-23
+
+The register protocol this ADR held as `inferred` is real. On an Argon ONE V3 with a Pi 5, the
+vendor's own daemon was watched on the bus through the kernel's I2C tracepoints -- the
+clean-room route recommended below, without the logic analyser -- and its MCU returned from
+register `0x80` exactly the duty it had just been given (`ONE-V3-MCU-REGISTER`).
+
+So there are two dialects in the field, one per case: the ONE V1 is legacy, the ONE V3 is
+register. The same register read that answers harmlessly on the V3 pinned the V1's fan at full.
+That is this ADR's argument made concrete from both sides: there is no probe that is safe on both,
+so the dialect stays configuration, never detection, and legacy stays the default because it is
+the one that cannot damage either.
+
 ## Confirmed on hardware, 2026-09-22
 
 The hazard this ADR is built around is no longer an argument from the protocol: on an Argon ONE

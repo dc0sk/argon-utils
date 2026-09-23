@@ -253,6 +253,13 @@ is a second, independent signal.
 ADR-0002 now records this as observed: the "safe read-only probe" it argues cannot exist,
 demonstrably does not.
 
+**And the ONE V3, 2026-09-23** (`OBS-2026-09-23-t5-one-v3-register-dialect`): **register.** The
+vendor's `argononed` was running there, so its bus traffic was captured with the kernel's I2C
+tracepoints while it restarted -- ADR-0002's preferred route, which reads nothing of the vendor's
+and sends nothing of ours to the MCU. It read register `0x80` (duty 0), wrote 1, and read back
+**1**. Two cases, two dialects, and the read that is harmless on one pins the other's fan at
+full.
+
 ---
 
 ## ✅ T6 — Is IR actually wired? — **DONE: no on the ONE V5, yes on the ONE V1 (NEC, 2026-09-22)**
