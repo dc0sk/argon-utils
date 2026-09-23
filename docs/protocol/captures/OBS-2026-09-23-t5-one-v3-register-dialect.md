@@ -56,6 +56,38 @@ dialects: the ONE V1 is legacy, the ONE V3 is register. A read that is harmless 
 V1's fan at full, so probing to tell them apart remains unsafe -- which is ADR-0002's whole
 argument, now shown from both sides. The dialect stays configuration, never detection.
 
+## argon-utils driving the same MCU (same day)
+
+The register dialect was then promoted to ship (by configuration only), the fan handed from
+`argononed` to argond with `mcu-takeover --dialect register`, and **argond's own traffic** traced
+the same way while it restarted. Full output:
+[`t5-2026-09-23-one-v3-argond-trace.log`](t5-2026-09-23-one-v3-argond-trace.log).
+
+| t (s) | Process | On the wire | Path |
+|---|---|---|---|
+| 15409.069 | old argond, signal thread | `80 37` | the stop signal restores safe duty, 55 % |
+| 15412.954 | old argond, main | `80 37` | the fan guard's restore as it exits |
+| 15412.999 | argonctl | *(no data)* | the stop hook's presence probe |
+| 15412.999 | argonctl | `80 37` | the stop hook, `fan --safe` |
+| 15413.111 | new argond | *(no data)* | the new daemon's presence probe |
+| 15413.194 | new argond | `80 37` | safe duty asserted at startup |
+| 15418.195 | new argond | `80 0a` | the curve's 10 %, one poll later |
+
+- **`ONE-V3-ARGOND-REGISTER`: every write argon-utils makes to this MCU is a register frame.**
+  Four separate write paths -- the signal handler, the exit guard, the stop hook and the control
+  loop -- and not one single-byte write. Before the promotion fixed it, all four would have sent
+  legacy bytes, whatever the configuration said.
+- **`ARGON-QUICKWRITE-NO-DATA`: the presence probe carries no data byte**, recorded by the kernel
+  as a zero-length write (`l=0 []`). ADR-0002's premise that this is the one transaction legacy
+  firmware has nothing to misread is now observed on the wire, not argued from the protocol.
+- **The rate-limiter fix, on new hardware.** The curve's write came right after the startup
+  write, inside the 500 ms interval, so it was held back -- and sent on the very next poll, 5.000 s
+  later. Before that fix (`605cb97`) it was dropped for good and the fan stayed at the startup
+  duty indefinitely.
+- Three safe-duty writes at shutdown is deliberate, not redundant chatter: the signal handler,
+  the drop guard and the stop hook each cover a way the process can end that the others do not
+  (a `SIGKILL` leaves only the stop hook).
+
 ## Not established
 
 - **Whether the V3 also accepts legacy single-byte writes.** The vendor daemon sent none, and

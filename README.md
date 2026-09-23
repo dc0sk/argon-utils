@@ -106,7 +106,7 @@ machine-readable output, a panel icon, and a Debian package.
 | | Keyboard illumination | — the key arrives as `KEY_F16`, but the keyboard drives its own light (T24) |
 | **Argon ONE V1** with Raspberry Pi 4 | Button pulses, IR receive and the remote's full keymap measured (T3, T6); its MCU speaks the legacy protocol, confirmed on hardware (T5) | 🧪 measured, control not yet built |
 | **Argon ONE V2** with Raspberry Pi 4 | Fan control and power button through the case's microcontroller | 🗓 |
-| **Argon ONE V3** with Raspberry Pi 5 | Its microcontroller answers and speaks the register protocol (observed from the vendor daemon's bus traffic); the fan is the case's, not the Pi's | 🧪 measured, control not yet built |
+| **Argon ONE V3** with Raspberry Pi 5 | Fan control through its RP2040 in the register protocol, handed over from the vendor's daemon (`mcu-takeover`); argond's writes traced on the wire | ✅ fan; case button not handled |
 | **Argon EON** Pi NAS | Fan, real-time clock, OLED | 🗓 no hardware to test |
 | **Argon Fan HAT** | Fan control through its microcontroller | 🗓 no hardware to test |
 | **Argon NEO 5**, **ONE V5 NVMe / Dual / Quad** boards | NVMe is standard PCIe on the Pi 5 | ➖ |
