@@ -261,12 +261,13 @@ fn missing_sections_are_named_so_an_old_config_is_visible() {
     // A config kept from an older version through an upgrade: its features run on defaults
     // silently, which is how a disabled OLED looked like a broken tray switch.
     let old = "mode = \"full\"\n[fan]\nenabled = false\n[mcu]\n[ups]\n[telemetry]\n";
-    assert_eq!(Config::missing_sections(old), vec!["oled", "lid"]);
-    let current = "[fan]\n[mcu]\n[ups]\n[oled]\n[telemetry]\n[lid]\n";
+    assert_eq!(Config::missing_sections(old), vec!["oled", "lid", "button"]);
+    let current = "[fan]\n[mcu]\n[ups]\n[oled]\n[telemetry]\n[lid]\n[button]\n";
     assert!(Config::missing_sections(current).is_empty());
     // An indented header still counts; a key whose value looks like one does not.
     assert!(
-        Config::missing_sections("  [fan]\n[mcu]\n[ups]\n[oled]\n[telemetry]\n[lid]\n").is_empty()
+        Config::missing_sections("  [fan]\n[mcu]\n[ups]\n[oled]\n[telemetry]\n[lid]\n[button]\n")
+            .is_empty()
     );
     assert!(Config::missing_sections("x = \"[oled]\"\n").contains(&"oled"));
     // The packaged config must have every section this version knows.
@@ -274,5 +275,31 @@ fn missing_sections_are_named_so_an_old_config_is_visible() {
     assert!(
         Config::missing_sections(packaged).is_empty(),
         "packaged config is missing sections"
+    );
+}
+
+#[test]
+fn the_button_is_left_alone_unless_configured() {
+    // A fresh install must not act on a button that, on a V1, pulses at any brush.
+    let c = Config::default();
+    assert_eq!(c.button.action, "none");
+    assert!(!c.button.armed());
+    let c = Config::from_toml("[button]\naction = \"shutdown\"\n").expect("shutdown refused");
+    assert!(c.button.armed());
+}
+
+#[test]
+fn an_unknown_button_action_is_refused() {
+    // "reboot" is not offered: one event, one action, and it was decided as shutdown.
+    let err = Config::from_toml("[button]\naction = \"reboot\"\n").unwrap_err();
+    assert!(
+        matches!(
+            err,
+            ConfigError::BadValue {
+                key: "button.action",
+                ..
+            }
+        ),
+        "got {err:?}"
     );
 }

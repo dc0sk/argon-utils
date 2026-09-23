@@ -207,3 +207,20 @@ shutdown_delay_s = 1
 
 # The keyboard's illumination is not controlled. Fn+Space reaches the host as KEY_F16, but the
 # keyboard switches its own light and exposes no LED device, so nothing here can set it (T24).
+
+[button]
+# What a press of the case button does. argond watches GPIO4, where the case MCU sends one pulse
+# of about 20 ms per press: on the ONE V1 for any tap, on the ONE V3 only for a double-tap. There
+# is no gesture in it, so there is one action.
+#
+#   "none"      argond leaves the button alone -- it does not even claim the line.
+#   "shutdown"  a press schedules a clean poweroff a minute out, announced in the tray and on the
+#               terminals; a second press cancels it. Acts only in mode "full".
+#
+# A press only ever cancels a shutdown the button itself placed: never a low-battery poweroff, and
+# never one an operator scheduled. On a ONE V1 a single brush of the button sends a pulse, which
+# is why this is off until you set it.
+#
+# The vendor's argononed holds GPIO4 while it runs; hand the case over with
+# /usr/libexec/argon-utils/mcu-takeover first.
+action = "none"

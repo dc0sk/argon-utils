@@ -123,16 +123,36 @@ fn the_kernel_backend_refuses_to_write_and_says_why() {
 }
 
 #[test]
-fn the_kernel_backend_reports_a_running_fan_as_running() {
-    let Some(fan) = KernelFan::find() else {
+fn a_driven_pwm_never_reads_as_a_stopped_fan() {
+    // The property the old live test was after, tested exactly: truncating a small pwm would
+    // report a driven fan as stopped. It used to compare `current()` with `rpm()` on the live
+    // machine -- two reads at two moments, and a tachometer that trails the pwm -- so it failed
+    // whenever the kernel set pwm 0 while the rotor was still coasting. Nothing was wrong then.
+    use argon_device::fan_control::duty_from_pwm;
+    use argon_proto::fan::FanDuty;
+    assert_eq!(duty_from_pwm(0), FanDuty::Off);
+    for pwm in 2..=u8::MAX {
+        assert_ne!(duty_from_pwm(pwm), FanDuty::Off, "pwm {pwm} read as off");
+    }
+    assert_eq!(duty_from_pwm(u8::MAX).percent(), 100);
+    assert_eq!(duty_from_pwm(128).percent(), 50);
+}
+
+#[test]
+fn the_live_kernel_fan_reads_consistently() {
+    // A smoke test on real hardware, from ONE reading, so it cannot race the rotor.
+    let Some(fan) = argon_hal::fan_hwmon::PwmFan::find() else {
         eprintln!("SKIPPED: no kernel PWM fan on this machine");
         return;
     };
-    // A pwm of 1..=2 scales to under half a percent. Truncating would report a physically
-    // spinning fan as stopped, which is the wrong error to make in a thermal control loop.
-    if let Some(duty) = fan.current() {
-        if fan.rpm().is_some_and(|r| r > 0) {
-            assert!(duty.percent() > 0, "a spinning fan reported as {duty}");
+    if let Some(r) = fan.read() {
+        if r.pwm >= 2 {
+            assert_ne!(
+                argon_device::fan_control::duty_from_pwm(r.pwm),
+                argon_proto::fan::FanDuty::Off,
+                "pwm {} read as off",
+                r.pwm
+            );
         }
     }
 }

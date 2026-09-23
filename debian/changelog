@@ -1,3 +1,22 @@
+argon-utils (0.1.38) unstable; urgency=medium
+
+  * argond acts on the case button. New [button] action: "none" (the
+    default -- argond does not even claim GPIO4) or "shutdown": a press
+    schedules a clean poweroff a minute out, announced in the tray and on
+    the terminals, and a second press cancels it. Acts only in mode full.
+  * A press only ever cancels a poweroff the button placed: never a
+    low-battery poweroff, never one an operator scheduled. If logind
+    cannot be read, a press does nothing rather than act blind. A
+    restarted argond recognises its own countdown by its message, so an
+    upgrade mid-countdown does not strand it.
+  * The press is the ~20 ms pulse both measured cases send on GPIO4: any
+    tap on the ONE V1, a double-tap on the ONE V3.
+  * Test fix: the live kernel-fan test compared two reads at two moments
+    and failed whenever the fan spun down during a run. The property it
+    guarded -- a driven pwm never reads as off -- is now tested exactly.
+
+ -- Simon Keimer <simon.keimer@mailbox.org>  Wed, 23 Sep 2026 20:04:10 +0200
+
 argon-utils (0.1.37) unstable; urgency=medium
 
   * The register dialect ships. It was compiled out while inferred; it is

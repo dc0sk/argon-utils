@@ -39,6 +39,8 @@ pub struct Config {
     pub oled: OledConfig,
     /// What closing a laptop lid does (the Argon ONE UP).
     pub lid: LidConfig,
+    /// What a press of the case button does.
+    pub button: ButtonConfig,
 }
 
 impl Default for Config {
@@ -51,7 +53,37 @@ impl Default for Config {
             telemetry: TelemetryConfig::default(),
             oled: OledConfig::default(),
             lid: LidConfig::default(),
+            button: ButtonConfig::default(),
         }
+    }
+}
+
+/// What a press of the case button does. Acted on by argond, which watches GPIO4.
+///
+/// Off by default: a fresh install acts on nothing, and on a ONE V1 any brush of the button sends
+/// a pulse (`ONE-V1-BTN-PULSE`). argond does not even claim the line unless this is set, so the
+/// button stays free for `argonctl button` and for anything else that wants it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct ButtonConfig {
+    /// `none`: argond leaves the button alone. `shutdown`: a press schedules an announced
+    /// poweroff a minute out, and a second press cancels it. Acts only in mode `full`.
+    pub action: String,
+}
+
+impl Default for ButtonConfig {
+    fn default() -> Self {
+        Self {
+            action: "none".to_owned(),
+        }
+    }
+}
+
+impl ButtonConfig {
+    /// Whether argond should act on presses at all.
+    #[must_use]
+    pub fn armed(&self) -> bool {
+        self.action == "shutdown"
     }
 }
 
@@ -350,7 +382,7 @@ impl Config {
     /// and the display then stays off with nothing said about why.
     #[must_use]
     pub fn missing_sections(text: &str) -> Vec<&'static str> {
-        const SECTIONS: [&str; 6] = ["fan", "mcu", "ups", "oled", "telemetry", "lid"];
+        const SECTIONS: [&str; 7] = ["fan", "mcu", "ups", "oled", "telemetry", "lid", "button"];
         let present: Vec<&str> = text
             .lines()
             .map(str::trim)
@@ -419,6 +451,14 @@ impl Config {
         self.mode()?;
         self.fan_curve()?;
         self.lid.validate()?;
+
+        if !matches!(self.button.action.as_str(), "none" | "shutdown") {
+            return Err(ConfigError::BadValue {
+                key: "button.action",
+                got: self.button.action.clone(),
+                expected: "none or shutdown",
+            });
+        }
 
         if self.oled.refresh_s == 0 {
             return Err(ConfigError::BadValue {

@@ -31,6 +31,7 @@ use std::sync::{Mutex, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, SystemTime};
 
+mod button;
 mod control;
 mod cpu_cap;
 mod dbus;
@@ -269,7 +270,17 @@ fn start_workers(
             Arc::clone(&oled_control),
         )
     };
-    let others = [oled_thread, control_thread]
+    // The case button, if configured. It claims GPIO4 only then, and acts only in full mode.
+    let button_thread = if cli.once {
+        None
+    } else {
+        button::spawn(
+            config,
+            config.mode().unwrap_or_default() == Mode::Full,
+            Arc::clone(stopping),
+        )
+    };
+    let others = [oled_thread, control_thread, button_thread]
         .into_iter()
         .flatten()
         .collect();

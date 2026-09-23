@@ -6,6 +6,7 @@
 //! handed rather than a rule each driver must remember.
 
 pub mod boot_config;
+pub mod button;
 pub mod clock_sync;
 pub mod config;
 pub mod control;

@@ -78,6 +78,17 @@ pub struct KernelFan {
     fan: fan_hwmon::PwmFan,
 }
 
+/// The duty a kernel PWM value means, scaled from the kernel's 0-255 to a percentage.
+///
+/// Rounded rather than truncated: a pwm of 2 is 1 %, not 0 %, and reporting a driven fan as
+/// stopped would be the wrong error to make in a thermal control loop. Only a pwm of 0 or 1 --
+/// under half a percent -- reads as off.
+#[must_use]
+pub fn duty_from_pwm(pwm: u8) -> FanDuty {
+    let percent = (u32::from(pwm) * 100 + 127) / 255;
+    FanDuty::clamped(u8::try_from(percent).unwrap_or(100))
+}
+
 impl KernelFan {
     /// Finds the kernel PWM fan, if this machine has one.
     #[must_use]
@@ -106,12 +117,8 @@ impl FanControl for KernelFan {
     }
 
     fn current(&self) -> Option<FanDuty> {
-        // Report what the governor has set, scaled from the kernel's 0-255 to a percentage.
-        // Rounded rather than truncated: a pwm of 3 is 1%, not 0%, and reporting a running
-        // fan as stopped would be the wrong error to make.
-        let reading = self.fan.read()?;
-        let percent = (u32::from(reading.pwm) * 100 + 127) / 255;
-        Some(FanDuty::clamped(u8::try_from(percent).unwrap_or(100)))
+        // Report what the governor has set, from one reading.
+        Some(duty_from_pwm(self.fan.read()?.pwm))
     }
 
     fn rpm(&self) -> Option<u32> {
