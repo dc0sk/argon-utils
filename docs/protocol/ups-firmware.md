@@ -66,5 +66,6 @@ host running the updater would record the whole exchange.
 
 Until someone does that, the facts stay as they are: firmware versions are **read and
 reported**, and version-specific observations stay tied to the version they were made on. T15
-(setting the clock) and T17 (setting a wake schedule) were observed on firmware 113 and are
-**not** claimed for firmware 17.
+(setting the clock) and T17 (setting a wake schedule) were first observed on firmware 113.
+T15 has since been run on firmware 17 too (`ARGON-UPS-CMD3-FW17`): the clock write works there.
+T17 has not, so wake scheduling is still **not** claimed for firmware 17.

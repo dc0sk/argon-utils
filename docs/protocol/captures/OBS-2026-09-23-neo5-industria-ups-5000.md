@@ -51,13 +51,40 @@ battery        59%, on mains
   behaviour for a clock reset by a deep discharge.
 - 59% on mains at the time of reading.
 
+## Setting the clock on firmware 17 (T15, same day)
+
+T15 was run against this unit to learn whether firmware 17 accepts the clock write that
+firmware 113 does, rather than assuming it.
+
+**First attempt, refused as designed.** In `mode = "read-only"` T15 read its baseline, found
+the mode, and stopped without writing -- setting the clock is a full-mode operation, and the
+experiment honours that like the daemon does. `argond`, restarted two seconds later, still read
+an offset of **-580294198 s**.
+
+**Second attempt, in full mode**, with every other precondition met (no wake schedule, system
+clock NTP-synchronised):
+
+```
+13:51:58  read-only   clock offset -580294198 s     (18.4 years slow)
+13:59:33  sudo argonctl rtc --t15 --write
+13:59:43  full        clock offset +1 s, within tolerance
+```
+
+- **`ARGON-UPS-CMD3-FW17`: firmware 17 accepts the clock write.** The clock moved eighteen years
+  to within a second of the system clock, which nothing but a `CMD3` write can do.
+- **argond did not do it.** Its first reading after the restart says "within tolerance", not
+  "set from the system clock"; the only thing between the two readings was T15, and it ran for
+  the ~10 s the full experiment takes.
+- **Not independently seen:** T15's printed exchange, including its negative control -- the
+  deliberately wrong time (1 h 17 m 29 s behind) being read back before the restore. The end
+  state proves the device takes the write; the read-back of the distinctive time would prove
+  the sequence. Recorded at the tier the evidence supports.
+
 ## What this does *not* establish
 
-**Nothing about writes on firmware 17.** T15 (setting the clock) and T17 (setting a wake
-schedule) were run on firmware 113. Those facts stay tied to the firmware they were observed
-on: a device that answers the same queries need not accept the same writes, and assuming it
-does is how an `inferred` fact gets promoted without evidence. Running T15 and T17 against this
-unit is what would settle it.
+**Wake scheduling on firmware 17.** T17 (setting a wake schedule) was run on firmware 113 only.
+Setting the clock has now been seen to work on both firmwares; that is evidence about `CMD3`,
+not about `CMD6`, and it is not stretched to cover it.
 
 Whether its HID interface is dormant as firmware 113's is (`OBS-2026-09-15-ups-hid-is-dormant`).
 Not attempted: the node is root-only until the package's udev rule is installed.

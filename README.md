@@ -98,7 +98,7 @@ machine-readable output, a panel icon, and a Debian package.
 | **Argon PWR UPS** (27 W, 5000 / 10000 mAh) | Battery and mains monitoring, low-battery shutdown, UPS clock and drift record | ✅ two units: 10000 (firmware 113), Industria 5000 (firmware 17) |
 | | Power off and wake at a set time | ✅ the UPS woke the machine at the set minute (T18) |
 | **Argon ONE V5** with Raspberry Pi 5 | OLED status page; fan reported (the Pi's kernel drives it) | ✅ |
-| **Argon NEO 5** with Raspberry Pi 5 | UPS monitoring over the internal USB header; fan and button are the Pi's own | ✅ read; writes untested on its firmware |
+| **Argon NEO 5** with Raspberry Pi 5 | UPS monitoring over the internal USB header, UPS clock set (T15); fan and button are the Pi's own | ✅ wake scheduling untested on its firmware |
 | | IR receive | ➖ no pulse reached GPIO23 or any free line in four windows, so the board looks unpopulated (T6) |
 | **Argon ONE V5 OLED module** | Status page: charge, state, CPU temperature, fan | ✅ |
 | **Argon Industria Zigbee module** | Detection and a non-disruptive firmware-version probe | ✅ |
