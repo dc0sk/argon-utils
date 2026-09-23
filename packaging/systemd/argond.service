@@ -83,6 +83,10 @@ PrivateDevices=no
 DeviceAllow=char-i2c rw
 DeviceAllow=char-ttyACM rw
 DeviceAllow=char-hidraw rw
+# The case button, on GPIO4, when [button] action is set. Without this the device cgroup refuses
+# the open before file permissions are consulted, and the `gpio` group above does nothing -- which
+# is how the button first shipped: "no header GPIO chip found" on a machine that has one.
+DeviceAllow=char-gpiochip rw
 
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 

@@ -1,3 +1,16 @@
+argon-utils (0.1.39) unstable; urgency=medium
+
+  * Fix: the case button could never be watched. argond's sandbox admitted
+    i2c, ttyACM and hidraw devices but not the GPIO chip, and the device
+    cgroup refuses an open before file permissions are consulted -- so the
+    argon user's gpio group did nothing, and argond reported "no header
+    GPIO chip found" on a machine that has one. DeviceAllow=char-gpiochip.
+  * A test now ties the unit's DeviceAllow= list to every device class
+    argond opens, since the tests run unsandboxed and nothing else would
+    notice a missing one.
+
+ -- Simon Keimer <simon.keimer@mailbox.org>  Wed, 23 Sep 2026 20:43:34 +0200
+
 argon-utils (0.1.38) unstable; urgency=medium
 
   * argond acts on the case button. New [button] action: "none" (the
