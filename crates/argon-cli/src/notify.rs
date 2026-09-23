@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! `argonctl notify-agent` — desktop notifications for UPS events.
+//! `argonctl notify-agent` — desktop notifications for UPS events and scheduled poweroffs.
 //!
 //! Runs inside a desktop session, because a system daemon cannot reach a session's bus. Reads
-//! the status file the daemon publishes and turns changes into notifications.
+//! the status file the daemon publishes, and logind's schedule, and turns changes into
+//! notifications -- the second because `shutdown` announces itself on terminals only, so a
+//! poweroff a minute away could otherwise be invisible on a desktop.
 
+use argon_device::power::{Logind, PowerControl};
+use argon_device::shutdown_notice::{Seen, ShutdownWatcher};
 use argon_device::status::{self, Notice, UpsStatus, Urgency, Watcher};
 use std::path::PathBuf;
 use std::process::{Command, ExitCode};
@@ -43,18 +47,42 @@ pub fn run(args: &Args) -> ExitCode {
     }
 
     let mut watcher = Watcher::new();
+    let mut shutdowns = ShutdownWatcher::new();
+    let mut logind = Logind;
     let interval = Duration::from_secs(args.interval.max(1));
     loop {
         let current = std::fs::read_to_string(&args.state)
             .ok()
             .and_then(|t| UpsStatus::parse(&t).ok());
+        let ups_shutdown_at = current.as_ref().and_then(|s| s.shutdown_at);
         if let Some(n) = watcher.observe(current, SystemTime::now(), &status::local_hhmm) {
-            if let Err(e) = deliver(&n) {
-                // Keep going: a missed notification is bad, a dead agent is worse.
-                eprintln!("argonctl: could not deliver {:?}: {e}", n.text);
-            }
+            send("Battery", &n);
+        }
+
+        let seen = match logind.pending() {
+            Ok(None) => Seen::Nothing,
+            Ok(Some(at)) => Seen::Poweroff {
+                at,
+                message: logind.wall_message().ok().flatten(),
+            },
+            Err(_) => Seen::CannotTell,
+        };
+        if let Some(n) = shutdowns.observe(
+            &seen,
+            ups_shutdown_at,
+            &status::local_hhmm,
+            argon_device::button::MESSAGE,
+        ) {
+            send("Power", &n);
         }
         std::thread::sleep(interval);
+    }
+}
+
+/// Delivers, and keeps going if it cannot: a missed notification is bad, a dead agent is worse.
+fn send(title: &str, n: &Notice) {
+    if let Err(e) = deliver_titled(title, n) {
+        eprintln!("argonctl: could not deliver {:?}: {e}", n.text);
     }
 }
 

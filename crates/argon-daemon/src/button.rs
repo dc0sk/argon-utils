@@ -5,7 +5,7 @@
 //! `argon_device::button`. This thread only turns edges into presses and presses into logind
 //! calls, and says what it did every time, so a press that "did nothing" is explained in the log.
 
-use argon_device::button::{Action, Button, DELAY, Pending, Why, is_press};
+use argon_device::button::{Action, Button, DELAY, MESSAGE, Pending, Why, is_press};
 use argon_device::config::Config;
 use argon_device::power::{Logind, PowerControl};
 use argon_hal::{discovery, gpio};
@@ -16,10 +16,6 @@ use std::time::Duration;
 
 /// The line the case MCU pulses (`ARGON-GPIO-BTN`, and observed on the ONE V1 and V3).
 const LINE: u32 = 4;
-
-/// What logind broadcasts to the terminals, and what the tray shows.
-const MESSAGE: &str = "The Argon case button was pressed: powering off in one minute. \
-                       Press it again to cancel.";
 
 /// Starts watching the button, if `[button] action` asks for it.
 ///

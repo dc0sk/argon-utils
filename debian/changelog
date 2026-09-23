@@ -1,3 +1,16 @@
+argon-utils (0.1.40) unstable; urgency=medium
+
+  * The notification agent now announces a scheduled poweroff on the
+    desktop, from logind's schedule, and its cancellation. shutdown's own
+    broadcast reaches terminals only, so a poweroff a minute away could
+    be invisible on a desktop -- which is how the case button's countdown
+    first went unseen on the ONE V3.
+  * The button's countdown is named as such, with how to cancel it; any
+    other poweroff gets the general `shutdown -c`. A low-battery poweroff
+    is not announced twice: the UPS notices already cover it.
+
+ -- Simon Keimer <simon.keimer@mailbox.org>  Wed, 23 Sep 2026 20:57:18 +0200
+
 argon-utils (0.1.39) unstable; urgency=medium
 
   * Fix: the case button could never be watched. argond's sandbox admitted

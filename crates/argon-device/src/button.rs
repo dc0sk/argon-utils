@@ -41,6 +41,14 @@ pub const MIN_GAP: Duration = Duration::from_secs(1);
 /// low-battery shutdown -- and a minute is enough to see the notice and press again.
 pub const DELAY: Duration = Duration::from_secs(60);
 
+/// What the button's poweroff is placed with: broadcast by logind to the terminals, and how its
+/// countdown is recognised -- by argond after a restart, and by the notification agent.
+///
+/// One copy, here, because both need it byte for byte: a second copy that drifted would make the
+/// daemon unable to cancel its own countdown, or the desktop announce it as a stranger's.
+pub const MESSAGE: &str = "The Argon case button was pressed: powering off in one minute. \
+                           Press it again to cancel.";
+
 /// Whether a pulse this wide is a button press.
 #[must_use]
 pub fn is_press(width: Duration) -> bool {

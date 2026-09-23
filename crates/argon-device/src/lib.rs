@@ -20,6 +20,7 @@ pub mod oled;
 pub mod oled_page;
 pub mod power;
 pub mod safety;
+pub mod shutdown_notice;
 pub mod status;
 pub mod ups;
 pub mod ups_service;
