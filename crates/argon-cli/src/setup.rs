@@ -285,11 +285,18 @@ fn ir_check(f: &Facts, text: &str, sections: &[&str]) -> Check {
             f.config_path
         ))
     } else if f.is_pi5() {
+        // Careful with the claim: T6 measured the ONE V5, not every Pi 5 enclosure. Other
+        // Pi 5 cases are unmeasured, and saying "the V5 has none" as though it settled them
+        // would be inheriting an answer rather than having one.
         Check::new(
             "IR receiver",
-            State::NotApplicable,
-            "the ONE V5 has no receiver wired (T6)",
+            State::Optional,
+            "not configured. The ONE V5 has no receiver wired (T6); other Pi 5 cases are              unmeasured, so this is worth trying only if your case has an IR window",
         )
+        .with_fix(format!(
+            "echo 'dtoverlay=gpio-ir,gpio_pin=23' | sudo tee -a {} && sudo reboot",
+            f.config_path
+        ))
     } else {
         Check::new(
             "IR receiver",
@@ -660,7 +667,9 @@ mod tests {
     }
 
     #[test]
-    fn ir_is_not_offered_on_the_board_that_has_no_receiver() {
+    fn ir_on_a_pi5_cites_the_v5_without_claiming_every_case() {
+        // T6 measured the ONE V5. A NEO 5 is a different enclosure, and inheriting the V5's
+        // answer for it would be a guess wearing a measurement's clothes.
         let f = Facts {
             model: "Raspberry Pi 5 Model B Rev 1.1".into(),
             config_txt: Some("[all]\n".into()),
@@ -669,11 +678,9 @@ mod tests {
         };
         let r = review(&f);
         let c = check(&r, "IR receiver");
-        assert_eq!(
-            c.state,
-            State::NotApplicable,
-            "offered IR on a V5 (T6 says no)"
-        );
+        assert_eq!(c.state, State::Optional);
+        assert!(c.detail.contains("ONE V5"), "{}", c.detail);
+        assert!(c.detail.contains("unmeasured"), "{}", c.detail);
     }
 
     #[test]
