@@ -21,6 +21,24 @@ pub struct Snapshot {
     pub fan: Option<FanReading>,
     /// Which icon set to name.
     pub icons: Icons,
+    /// What the daemon says about battery monitoring, when there is no published status.
+    pub monitoring: Monitoring,
+}
+
+/// What argond is monitoring, asked over D-Bus when no status file is being published.
+///
+/// Without this the tray cannot tell a stopped daemon from a healthy one with nothing to
+/// report, and it accused the first of the second: "argond is not publishing status. Is it
+/// running?" on a machine where argond was running exactly as configured.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum Monitoring {
+    /// The daemon could not be reached, so it may genuinely be stopped.
+    #[default]
+    Unknown,
+    /// The daemon answered: it is monitoring nothing, by configuration.
+    Off,
+    /// The daemon answered: it monitors this source, but has published nothing yet.
+    Source(String),
 }
 
 /// Which battery icons to use.
@@ -85,12 +103,27 @@ fn render_ups(s: &Snapshot, hhmm: &dyn Fn(SystemTime) -> String) -> View {
         shutdown_pending: false,
     };
     match interpret(s.ups.as_ref(), s.now) {
-        Reading::NoData => plain(
-            missing(s.icons),
-            Urgency::Normal,
-            "Battery: no data".to_owned(),
-            "argond is not publishing status. Is it running?",
-        ),
+        Reading::NoData => match &s.monitoring {
+            // Healthy, and said so: a machine with no battery has nothing to publish.
+            Monitoring::Off => plain(
+                missing(s.icons),
+                Urgency::Normal,
+                "No battery monitored".to_owned(),
+                "argond is running; this machine has no battery configured.",
+            ),
+            Monitoring::Source(src) => plain(
+                missing(s.icons),
+                Urgency::Normal,
+                "Battery: no reading yet".to_owned(),
+                &format!("argond is running and monitoring {src}, but has published nothing yet."),
+            ),
+            Monitoring::Unknown => plain(
+                missing(s.icons),
+                Urgency::Normal,
+                "Battery: no data".to_owned(),
+                "argond is not publishing status, and did not answer on the bus. Is it running?",
+            ),
+        },
         Reading::Stale { age } => plain(
             missing(s.icons),
             Urgency::Attention,
@@ -277,7 +310,59 @@ mod tests {
             cpu_decicelsius: None,
             fan: None,
             icons: Icons::Symbolic,
+            monitoring: Monitoring::Unknown,
         }
+    }
+
+    fn nothing_published(monitoring: Monitoring) -> Snapshot {
+        Snapshot {
+            ups: None,
+            now: at(1_005),
+            cpu_decicelsius: Some(535),
+            fan: None,
+            icons: Icons::Symbolic,
+            monitoring,
+        }
+    }
+
+    #[test]
+    fn a_machine_with_no_battery_is_not_accused_of_a_stopped_daemon() {
+        // What the Pi 4's panel said while argond was running perfectly: "argond is not
+        // publishing status. Is it running?" -- because [ups] source = "none" means there is
+        // nothing to publish.
+        let v = render(&nothing_published(Monitoring::Off), &fixed);
+        assert_eq!(v.headline, "No battery monitored");
+        assert!(
+            v.details[0].contains("argond is running"),
+            "{:?}",
+            v.details
+        );
+        assert!(!v.details[0].contains("Is it running?"));
+        assert_eq!(v.urgency, Urgency::Normal);
+        // The rest of the panel still works: this machine has a CPU reading to show.
+        assert!(
+            v.details.iter().any(|d| d.contains("CPU")),
+            "{:?}",
+            v.details
+        );
+    }
+
+    #[test]
+    fn a_daemon_that_does_not_answer_is_still_reported_as_possibly_stopped() {
+        // The accusation is right when the bus says nothing: do not soften this one.
+        let v = render(&nothing_published(Monitoring::Unknown), &fixed);
+        assert_eq!(v.headline, "Battery: no data");
+        assert!(v.details[0].contains("Is it running?"), "{:?}", v.details);
+    }
+
+    #[test]
+    fn a_configured_source_with_nothing_published_yet_names_it() {
+        let v = render(
+            &nothing_published(Monitoring::Source("serial".into())),
+            &fixed,
+        );
+        assert!(v.details[0].contains("serial"), "{:?}", v.details);
+        assert!(!v.details[0].contains("Is it running?"));
     }
 
     #[test]

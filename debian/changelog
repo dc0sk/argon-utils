@@ -1,3 +1,18 @@
+argon-utils (0.1.33) unstable; urgency=medium
+
+  * The panel icon no longer accuses a healthy daemon of being stopped.
+    On a machine with no battery configured, argond publishes no status
+    file -- correctly -- and the tray read that absence as "argond is not
+    publishing status. Is it running?". It now asks the daemon over the
+    bus when nothing is published: "No battery monitored" when monitoring
+    is off by configuration, the source named when one is configured but
+    quiet, and the original question only when the bus does not answer
+    either -- where it is the right question.
+  * The bus round trip happens only when there is nothing published, so a
+    reporting daemon is never interrogated.
+
+ -- Simon Keimer <simon.keimer@mailbox.org>  Wed, 23 Sep 2026 10:10:25 +0200
+
 argon-utils (0.1.32) unstable; urgency=medium
 
   * `argonctl ups` says *why* there is no reading. With `[ups] source =

@@ -23,6 +23,32 @@ fn parse(answer: &str) -> Option<bool> {
     }
 }
 
+/// What argond says it is monitoring, asked over the bus.
+///
+/// [`Monitoring::Unknown`] for every failure -- no bus, no service, an older daemon without
+/// the method -- because none of those can be told apart from a stopped daemon, and claiming
+/// otherwise is the mistake this exists to fix.
+#[must_use]
+pub fn monitoring() -> crate::view::Monitoring {
+    use crate::view::Monitoring;
+    let Ok(conn) = zbus::blocking::Connection::system() else {
+        return Monitoring::Unknown;
+    };
+    let Ok(proxy) = zbus::blocking::Proxy::new(&conn, BUS_NAME, OBJECT_PATH, INTERFACE) else {
+        return Monitoring::Unknown;
+    };
+    let Ok(fields) =
+        proxy.call::<_, _, std::collections::HashMap<String, String>>("UpsStatus", &())
+    else {
+        return Monitoring::Unknown;
+    };
+    match fields.get("source_config").map(String::as_str) {
+        Some("none") => Monitoring::Off,
+        Some(src) if !src.is_empty() => Monitoring::Source(src.to_owned()),
+        _ => Monitoring::Unknown,
+    }
+}
+
 /// Switches the case display on or off.
 ///
 /// # Errors

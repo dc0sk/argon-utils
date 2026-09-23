@@ -102,8 +102,16 @@ struct Sources {
 
 impl Sources {
     fn read(&mut self) -> view::Snapshot {
+        let ups = read_status(&self.state);
         view::Snapshot {
-            ups: read_status(&self.state),
+            // Only asked when there is nothing published: a daemon that is reporting needs no
+            // interrogation, and the bus round trip should not happen on every healthy tick.
+            monitoring: if ups.is_none() {
+                crate::display::monitoring()
+            } else {
+                view::Monitoring::Unknown
+            },
+            ups,
             now: SystemTime::now(),
             cpu_decicelsius: self.sensor.as_mut().and_then(|s| s.read_decicelsius().ok()),
             fan: self.fan.as_ref().and_then(PwmFan::read),
