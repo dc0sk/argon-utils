@@ -37,13 +37,24 @@ ONE V5 on a Pi 5 does not answer at all. That is an address acknowledgement and 
 it does not say the device is a fan controller, nor which protocol it speaks. The dialect has
 no safe probe (ADR-0002) and is task T5.
 
-## Argon ONE V2, V3 -- **unmeasured**
+## Argon ONE V3 with a Raspberry Pi 5 -- `observed`
 
-Different boards and different firmware: the V3 is a Pi 5 case, and carries an RP2040. Whether
-either emits more than one pulse width is unknown here, and inheriting the V1's answer would be
-a guess. The vendor's windows may well describe them.
+The V3's RP2040 signals on the same line, **GPIO4**, with the same ~20 ms width -- but only for a
+**double-tap** (`ONE-V3-BTN-DOUBLE-TAP`, T3):
 
-Until one is measured, no pulse-width thresholds ship for these cases.
+| Gesture | What the host sees |
+|---|---|
+| Single tap | **nothing** (`ONE-V3-BTN-SINGLE-SILENT`) |
+| Double-tap | one pulse, **20.00 ms** |
+| Hold | untested -- likely the RP2040 cutting power itself |
+
+So "a pulse on GPIO4 is one button event" holds on both cases measured. What differs is which
+gesture produces it: on the V1 any tap does, on the V3 only a double-tap. Nothing here can tell a
+single from a double tap on either case, and nothing needs to.
+
+## Argon ONE V2 -- **unmeasured**
+
+Not measured; no pulse-width thresholds ship for it.
 
 ## Argon ONE V5 with a Pi 5 -- `observed`, and not ours
 
