@@ -112,6 +112,9 @@ pub fn run(args: &Args) -> ExitCode {
     }
 
     if !args.json {
+        if let Some(line) = daemon_fan_state() {
+            println!("{line}\n");
+        }
         report_curve(&config, mode, &curve);
     }
 
@@ -252,6 +255,39 @@ fn load(args: &Args) -> std::result::Result<(Config, Mode, FanCurve), ExitCode> 
         ExitCode::FAILURE
     })?;
     Ok((config, mode, curve))
+}
+
+/// What argond currently has the fan doing, or `None` when it is not on the bus.
+///
+/// Without this, `argonctl fan` describes what the curve *would* choose while a daemon is
+/// already driving the fan -- an answer that is true about the configuration and says nothing
+/// about the machine. A daemon in charge is exactly when someone asks.
+fn daemon_fan_state() -> Option<String> {
+    use argon_device::control::{BUS_NAME, INTERFACE, OBJECT_PATH};
+    let conn = zbus::blocking::Connection::system().ok()?;
+    let proxy = zbus::blocking::Proxy::new(&conn, BUS_NAME, OBJECT_PATH, INTERFACE).ok()?;
+    let f: std::collections::HashMap<String, String> = proxy.call("FanState", &()).ok()?;
+    let get = |k: &str| f.get(k).map_or("", String::as_str);
+    if get("available") != "yes" {
+        return Some("argond is running, but has not completed a control iteration yet.".into());
+    }
+    let age = get("age_s");
+    let temp = match get("temperature_c") {
+        "" => String::new(),
+        t => format!(" at {t}C"),
+    };
+    Some(if get("driving") == "yes" {
+        let duty = match get("duty_percent") {
+            "" | "0" => "off".to_owned(),
+            d => format!("{d}%"),
+        };
+        format!("argond has the fan {duty}{temp}, decided {age}s ago.")
+    } else {
+        format!(
+            "argond is running{temp} but not driving the fan: it reports the fan rather than\n\
+             setting it, which is what read-only mode does, and what any mode does with no MCU."
+        )
+    })
 }
 
 /// Writes one duty to the fan, in the legacy dialect, and says what went on the wire.

@@ -19,15 +19,37 @@ pub struct State {
     pub cpu_decicelsius: Option<i32>,
     /// Consecutive failed sensor reads.
     pub sensor_failures: u32,
+    /// What the fan was last set to, as a percentage; `None` before the first iteration.
+    ///
+    /// Shared with the D-Bus service so `argonctl fan` can report what the daemon *has* the
+    /// fan doing, rather than only what a dry run would choose. The two differ whenever the
+    /// daemon is in charge, which is exactly when a person is most likely to ask.
+    pub fan_duty_percent: Option<u8>,
+    /// Whether this daemon drives the fan at all: false in read-only mode, or with no MCU.
+    pub fan_driving: bool,
+    /// When the above were last updated, unix seconds.
+    pub updated_unix: Option<u64>,
 }
 
 /// Records one control iteration.
-pub fn record(state: &Arc<Mutex<State>>, cpu_decicelsius: Option<i32>, failures: u32) {
+pub fn record(
+    state: &Arc<Mutex<State>>,
+    cpu_decicelsius: Option<i32>,
+    failures: u32,
+    fan_duty_percent: Option<u8>,
+    fan_driving: bool,
+) {
     let mut s = state.lock().unwrap_or_else(PoisonError::into_inner);
     if cpu_decicelsius.is_some() {
         s.cpu_decicelsius = cpu_decicelsius;
     }
     s.sensor_failures = failures;
+    s.fan_duty_percent = fan_duty_percent;
+    s.fan_driving = fan_driving;
+    s.updated_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .map(|d| d.as_secs());
 }
 
 /// Starts the exporter on a background thread, returning the address it bound.

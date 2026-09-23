@@ -126,7 +126,10 @@ fn run(cli: &Cli) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let decision = announce_mode(&config, fan);
 
     let stopping = Arc::new(AtomicBool::new(false));
-    let watch = start_workers(cli, &config, &stopping);
+    // Created here rather than in the control loop: the D-Bus service starts first and needs
+    // to read the same state, so `argonctl fan` can report what the daemon has the fan doing.
+    let metrics = Arc::new(Mutex::new(exporter::State::default()));
+    let watch = start_workers(cli, &config, &stopping, Arc::clone(&metrics));
 
     let (curve, source) = match prepare_fan(&config) {
         Ok(pair) => pair,
@@ -153,6 +156,7 @@ fn run(cli: &Cli) -> Result<ExitCode, Box<dyn std::error::Error>> {
                     true,
                     &stopping,
                     watch,
+                    &metrics,
                 )
             }
             Err(e) => {
@@ -174,6 +178,7 @@ fn run(cli: &Cli) -> Result<ExitCode, Box<dyn std::error::Error>> {
             false,
             &stopping,
             watch,
+            &metrics,
         )
     }
 }
@@ -184,7 +189,12 @@ fn run(cli: &Cli) -> Result<ExitCode, Box<dyn std::error::Error>> {
 /// UPS does not care about -- a renamed thermal zone, one transient sensor read error, an
 /// unopenable bus -- and each of those used to be a `?` that exited the process, taking battery
 /// protection with it and leaving Restart=always to loop on it.
-fn start_workers(cli: &Cli, config: &Config, stopping: &Arc<AtomicBool>) -> Workers {
+fn start_workers(
+    cli: &Cli,
+    config: &Config,
+    stopping: &Arc<AtomicBool>,
+    metrics: Arc<Mutex<exporter::State>>,
+) -> Workers {
     let heartbeat = Arc::new(AtomicU64::new(unix_now()));
     // Requests from `argonctl` reach the UPS thread over this channel: that thread owns the UPS
     // port, so it is the only one that can act on them.
@@ -233,6 +243,8 @@ fn start_workers(cli: &Cli, config: &Config, stopping: &Arc<AtomicBool>) -> Work
             !oneup,
             Arc::clone(&oled_control),
             latest,
+            metrics,
+            config.ups.source.clone(),
         )
     };
     let control_thread = if cli.once {
@@ -480,6 +492,7 @@ fn control_loop<B: I2cBus + Send + 'static, T: TemperatureSource>(
     drive_fan: bool,
     stopping: &Arc<AtomicBool>,
     watch: Workers,
+    metrics: &Arc<Mutex<exporter::State>>,
 ) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let (curve, source) = fan_stack;
     let mcu = Arc::new(Mutex::new(Mcu::new(bus, Dialect::default())));
@@ -518,9 +531,8 @@ fn control_loop<B: I2cBus + Send + 'static, T: TemperatureSource>(
 
     // Shared state the exporter reads. Updated by the control loop; never written by the
     // exporter, so a scrape cannot perturb what it measures.
-    let metrics = Arc::new(Mutex::new(exporter::State::default()));
     if config.telemetry.enabled {
-        match exporter::spawn(&config.telemetry.listen, mode, Arc::clone(&metrics)) {
+        match exporter::spawn(&config.telemetry.listen, mode, Arc::clone(metrics)) {
             Ok(addr) => eprintln!("argond: metrics on http://{addr}/metrics"),
             Err(e) => eprintln!("argond: metrics disabled: {e}"),
         }
@@ -540,7 +552,13 @@ fn control_loop<B: I2cBus + Send + 'static, T: TemperatureSource>(
                 if wrote && drive_fan {
                     eprintln!("argond: {}C -> {duty}", decicelsius / 10);
                 }
-                exporter::record(&metrics, Some(decicelsius), 0);
+                exporter::record(
+                    metrics,
+                    Some(decicelsius),
+                    0,
+                    Some(duty.percent()),
+                    drive_fan,
+                );
             }
             Ok(Step::SensorFailed {
                 fallback,
@@ -549,7 +567,13 @@ fn control_loop<B: I2cBus + Send + 'static, T: TemperatureSource>(
                 eprintln!(
                     "argond: temperature read failed ({consecutive} in a row), forcing {fallback}"
                 );
-                exporter::record(&metrics, None, consecutive);
+                exporter::record(
+                    metrics,
+                    None,
+                    consecutive,
+                    Some(fallback.percent()),
+                    drive_fan,
+                );
             }
             Err(e) => {
                 // A failed write means we are no longer in control. Report and keep trying:

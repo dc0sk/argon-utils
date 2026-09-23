@@ -1,3 +1,21 @@
+argon-utils (0.1.32) unstable; urgency=medium
+
+  * `argonctl ups` says *why* there is no reading. With `[ups] source =
+    "none"` -- the right configuration on a machine with no UPS -- it now
+    reports that monitoring is off by configuration and that nothing is
+    wrong, instead of an absence that reads like a broken daemon. With a
+    source configured, it names it and points at the journal.
+  * `argonctl fan` reports what argond currently has the fan doing, from
+    a new reports-only `FanState` on the bus, above the dry run. Without
+    it the command described what the curve would choose while a daemon
+    was already driving the fan -- true about the configuration, silent
+    about the machine.
+  * `FanState` distinguishes "not driving" (read-only mode, or no MCU)
+    from "nothing to report", so a caller can tell "this daemon is not
+    the thing in control" from "nothing is in control".
+
+ -- Simon Keimer <simon.keimer@mailbox.org>  Wed, 23 Sep 2026 09:39:08 +0200
+
 argon-utils (0.1.31) unstable; urgency=medium
 
   * Fix: a rate-limited write was reported as a success, so the fan ran at

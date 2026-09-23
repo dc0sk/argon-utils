@@ -200,11 +200,27 @@ fn render(fields: &std::collections::HashMap<String, String>, now_unix: u64) -> 
     let mut out = String::new();
     let _ = writeln!(out, "From argond\n-----------");
     if get("available") != "yes" {
-        let _ = writeln!(
-            out,
-            "  argond is running but has no reading: it is not monitoring a battery, or has \n  \
-             not completed its first poll."
-        );
+        // "Not monitoring" and "no reading yet" look identical from here unless the daemon
+        // says which. The first is a configuration choice and perfectly healthy; reporting it
+        // as an absence reads like a broken daemon, which is how this line was first written.
+        let _ = match get("source_config") {
+            "none" => writeln!(
+                out,
+                "  argond is running, and UPS monitoring is off by configuration\n  \
+                 ([ups] source = \"none\" in /etc/argon-utils/config.toml). Nothing is wrong."
+            ),
+            "" => writeln!(
+                out,
+                "  argond is running but has no reading yet: it has not completed its first\n  \
+                 poll, or the battery is unreachable."
+            ),
+            source => writeln!(
+                out,
+                "  argond is running and configured to monitor {source:?}, but has no reading\n  \
+                 yet: either its first poll has not finished, or that source is unreachable.\n  \
+                 `journalctl -u argond -n 20` says which."
+            ),
+        };
         return out;
     }
     let percent = match get("percent") {
@@ -897,6 +913,29 @@ mod tests {
         let out = render(&fields(&[("available", "no")]), 1_000);
         assert!(out.contains("no reading"), "{out}");
         assert!(!out.contains("charge"), "{out}");
+    }
+
+    #[test]
+    fn monitoring_switched_off_reads_as_a_choice_not_a_fault() {
+        // On a machine with no UPS, [ups] source = "none" is the correct configuration. The
+        // first version of this line reported it as an absence, and it read like a broken
+        // daemon -- which is exactly how it was read on a Pi 4.
+        let out = render(
+            &fields(&[("available", "no"), ("source_config", "none")]),
+            1_000,
+        );
+        assert!(out.contains("off by configuration"), "{out}");
+        assert!(out.contains("Nothing is wrong"), "{out}");
+    }
+
+    #[test]
+    fn a_configured_source_with_no_reading_names_the_source_and_where_to_look() {
+        let out = render(
+            &fields(&[("available", "no"), ("source_config", "serial")]),
+            1_000,
+        );
+        assert!(out.contains("serial"), "{out}");
+        assert!(out.contains("journalctl"), "{out}");
     }
 
     #[test]

@@ -101,6 +101,10 @@ pub struct Daemon1 {
     oled: Arc<OledControl>,
     /// The last reading the monitoring thread published.
     latest: Latest,
+    /// What the control loop last did with the fan.
+    fan: Arc<Mutex<crate::exporter::State>>,
+    /// The configured UPS source, so a caller with no reading can be told *why*.
+    ups_source: String,
 }
 
 // The interface macro fixes these signatures: a method takes `&self` whether it needs it or
@@ -146,7 +150,24 @@ impl Daemon1 {
             .latest
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        status_fields(latest.as_ref(), SystemTime::now())
+        let mut f = status_fields(latest.as_ref(), SystemTime::now());
+        // So a caller with no reading can say *why*: "monitoring is off" and "no reading yet"
+        // look identical otherwise, and the first is a configuration choice, not a fault.
+        f.insert("source_config".to_owned(), self.ups_source.clone());
+        f
+    }
+
+    /// What argond has the fan doing, as `key=value` pairs. Reports only.
+    ///
+    /// The point is the difference between intent and fact: `argonctl fan` alone can only say
+    /// what the curve *would* choose, which is not what the fan is doing when a daemon is in
+    /// charge of it. Keys: `driving`, `duty_percent`, `temperature_c`, `age_s`.
+    fn fan_state(&self) -> HashMap<String, String> {
+        let state = self
+            .fan
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        fan_fields(&state, SystemTime::now())
     }
 
     /// The case display: "on", "off", or "na" when argond is not driving one. Changes nothing.
@@ -234,6 +255,43 @@ fn set_cpu_cap(
         }
     );
     Ok(())
+}
+
+/// What the control loop last did with the fan, as flat pairs.
+///
+/// `driving: no` is not a failure: in read-only mode, or with no MCU, the daemon deliberately
+/// reports the fan without touching it. Saying so is the difference between a caller
+/// concluding "nothing is in control" and "this daemon is not the thing in control".
+fn fan_fields(state: &crate::exporter::State, now: SystemTime) -> HashMap<String, String> {
+    let mut f = HashMap::new();
+    let Some(updated) = state.updated_unix else {
+        f.insert("available".to_owned(), "no".to_owned());
+        return f;
+    };
+    f.insert("available".to_owned(), "yes".to_owned());
+    f.insert(
+        "driving".to_owned(),
+        if state.fan_driving { "yes" } else { "no" }.to_owned(),
+    );
+    f.insert(
+        "duty_percent".to_owned(),
+        state
+            .fan_duty_percent
+            .map_or_else(String::new, |d| d.to_string()),
+    );
+    f.insert(
+        "temperature_c".to_owned(),
+        state
+            .cpu_decicelsius
+            .map_or_else(String::new, |d| format!("{}.{}", d / 10, (d % 10).abs())),
+    );
+    f.insert(
+        "sensor_failures".to_owned(),
+        state.sensor_failures.to_string(),
+    );
+    let age = unix(now).saturating_sub(updated);
+    f.insert("age_s".to_owned(), age.to_string());
+    f
 }
 
 /// The status as flat pairs for the bus.
@@ -332,6 +390,8 @@ pub fn serve(
     wake_supported: bool,
     oled: Arc<OledControl>,
     latest: Latest,
+    fan: Arc<Mutex<crate::exporter::State>>,
+    ups_source: String,
 ) -> Option<zbus::blocking::Connection> {
     let object = Daemon1 {
         to_ups,
@@ -341,6 +401,8 @@ pub fn serve(
         cpu: Mutex::new(Box::new(CpuCap::default())),
         oled,
         latest,
+        fan,
+        ups_source,
     };
     let built = zbus::blocking::connection::Builder::system()
         .and_then(|b| b.name(BUS_NAME))
@@ -394,6 +456,42 @@ mod tests {
             percent,
             shutdown_at: shutdown_at.map(at),
         }
+    }
+
+    fn fan_state(duty: Option<u8>, driving: bool, updated: Option<u64>) -> crate::exporter::State {
+        crate::exporter::State {
+            cpu_decicelsius: Some(535),
+            sensor_failures: 0,
+            fan_duty_percent: duty,
+            fan_driving: driving,
+            updated_unix: updated,
+        }
+    }
+
+    #[test]
+    fn the_fan_state_says_what_the_daemon_has_it_doing() {
+        let f = fan_fields(&fan_state(Some(0), true, Some(1_000)), at(1_003));
+        assert_eq!(f["available"], "yes");
+        assert_eq!(f["driving"], "yes");
+        assert_eq!(f["duty_percent"], "0");
+        assert_eq!(f["temperature_c"], "53.5");
+        assert_eq!(f["age_s"], "3");
+    }
+
+    #[test]
+    fn not_driving_is_reported_as_such_rather_than_as_no_information() {
+        // Read-only mode, or no MCU: the daemon reports the fan without setting it. A caller
+        // must be able to tell that apart from "nothing is in control".
+        let f = fan_fields(&fan_state(Some(30), false, Some(1_000)), at(1_000));
+        assert_eq!(f["available"], "yes");
+        assert_eq!(f["driving"], "no");
+    }
+
+    #[test]
+    fn before_the_first_iteration_there_is_nothing_to_report() {
+        let f = fan_fields(&fan_state(None, true, None), at(1_000));
+        assert_eq!(f["available"], "no");
+        assert!(!f.contains_key("duty_percent"), "invented a duty");
     }
 
     #[test]
