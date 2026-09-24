@@ -99,7 +99,13 @@ every device class argond opens. Caught from the startup line, before any press.
 **The announcement is weaker than intended on a desktop.** The tray shows a pending logind
 shutdown in its menu and tooltip, with a cancel entry, but raises no notification, and
 `shutdown`'s broadcast reaches terminals only. The tray was not running here at all -- the
-session predated the install -- so the operator saw nothing. Recorded as open.
+session predated the install -- so the operator saw nothing.
+
+**Resolved in 0.1.40.** The notification agent now also reads logind's pending shutdown and its
+wall message. With the agent and tray started in the running desktop session, a double-tap raised
+"Powering off at HH:MM: the case button was pressed. Press it again to cancel." and a second
+double-tap raised "The scheduled poweroff was cancelled." Both were seen on screen by the operator
+(2026-09-24), not only sent.
 
 ## Not established
 
