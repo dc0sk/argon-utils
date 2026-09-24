@@ -24,6 +24,7 @@ fn main() -> std::io::Result<()> {
         level: level.to_owned(),
         percent: Some(percent),
         shutdown_at: shutdown.map(|s| now + Duration::from_secs(s)),
+        missing: None,
     };
     let states = [
         ("oled-mains", reading("on-mains", 92, None)),

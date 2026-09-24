@@ -23,5 +23,6 @@ pub mod safety;
 pub mod shutdown_notice;
 pub mod status;
 pub mod ups;
+pub mod ups_seen;
 pub mod ups_service;
 pub mod wake;

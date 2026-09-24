@@ -99,6 +99,14 @@ bus = "auto"
 # "serial" is the Argon-proprietary protocol and is currently the only channel observed to
 # return live data. The HID interface publishes a complete USB HID Power Device descriptor but
 # serves no data on firmware 113 -- see docs/protocol/captures/OBS-2026-09-15-ups-hid-is-dormant.md.
+#
+# With "serial", whether a UPS is attached is found at runtime, so this default suits every
+# case: argond looks for an Argon UPS on each poll and picks one up when it is plugged in. With
+# none attached it reports "no UPS connected", which is healthy. It remembers the last UPS it
+# read (/var/lib/argon-utils/ups.seen); if that one cannot be found later -- after a reboot or
+# mid-run -- it warns in the journal, the tray and a desktop notification, because battery
+# protection has been lost without anyone deciding so. A UPS removed on purpose is forgotten
+# with `sudo argonctl ups --forget`. "none" turns all of this off.
 source = "serial"
 
 # Port path, or "auto". Prefer a stable name: device numbering is not stable, and a single USB

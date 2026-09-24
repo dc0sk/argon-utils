@@ -69,6 +69,7 @@ pub fn step<M: Monitor, P: PowerControl>(
         level: level_name(poll.decision.level).to_owned(),
         percent: poll.battery.map(|b| b.percent),
         shutdown_at: coordinator.scheduled_at(),
+        missing: None,
     };
     Cycle {
         poll,

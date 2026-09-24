@@ -324,6 +324,14 @@ fn status_fields(latest: Option<&UpsStatus>, now: SystemTime) -> HashMap<String,
         s.shutdown_at
             .map_or_else(String::new, |t| unix(t).to_string()),
     );
+    if let Some(m) = &s.missing {
+        f.insert("missing_name".to_owned(), m.name.clone());
+        f.insert(
+            "last_seen_unix".to_owned(),
+            m.last_seen
+                .map_or_else(String::new, |t| unix(t).to_string()),
+        );
+    }
     f
 }
 
@@ -455,6 +463,7 @@ mod tests {
             level: level.to_owned(),
             percent,
             shutdown_at: shutdown_at.map(at),
+            missing: None,
         }
     }
 

@@ -29,17 +29,39 @@ pub fn source_of(level: &str) -> &'static str {
     }
 }
 
+/// The level published when no UPS is connected and none was seen before.
+///
+/// Healthy: any Argon case may run without a UPS, and argond keeps looking for one.
+pub const ABSENT: &str = "absent";
+
+/// The level published when the UPS seen before is not connected.
+///
+/// Not healthy: a machine that had battery protection has lost it.
+pub const MISSING: &str = "missing";
+
+/// A UPS that was connected before and cannot be found now.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MissingUps {
+    /// What it called itself, e.g. its USB product string.
+    pub name: String,
+    /// When it was last read successfully, if known.
+    pub last_seen: Option<SystemTime>,
+}
+
 /// A snapshot of UPS state as published by the daemon.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UpsStatus {
     /// When this was written.
     pub updated: SystemTime,
-    /// The policy's level: `on-mains`, `on-battery`, `low`, `critical` or `unknown`.
+    /// The policy's level: `on-mains`, `on-battery`, `low`, `critical` or `unknown` -- or
+    /// [`ABSENT`] or [`MISSING`] when there is no UPS to read.
     pub level: String,
     /// Charge percentage, if the last read succeeded.
     pub percent: Option<u8>,
     /// When our scheduled poweroff will happen, if one is pending.
     pub shutdown_at: Option<SystemTime>,
+    /// With [`MISSING`], the UPS that is missing.
+    pub missing: Option<MissingUps>,
 }
 
 impl UpsStatus {
@@ -61,6 +83,17 @@ impl UpsStatus {
             self.shutdown_at
                 .map_or_else(String::new, |t| secs(t).to_string())
         );
+        // Only written when there is something to say: an older agent ignores unknown keys, and
+        // every other status stays byte-for-byte what it was.
+        if let Some(m) = &self.missing {
+            let _ = writeln!(s, "missing={}", one_line(&m.name));
+            let _ = writeln!(
+                s,
+                "last_seen={}",
+                m.last_seen
+                    .map_or_else(String::new, |t| secs(t).to_string())
+            );
+        }
         s
     }
 
@@ -76,6 +109,8 @@ impl UpsStatus {
         let mut level = None;
         let mut percent = None;
         let mut shutdown_at = None;
+        let mut missing_name = None;
+        let mut last_seen = None;
 
         for line in text.lines() {
             let Some((k, v)) = line.split_once('=') else {
@@ -96,6 +131,8 @@ impl UpsStatus {
                             .map_err(|_| format!("bad shutdown_at {v:?}"))?,
                     );
                 }
+                "missing" => missing_name = Some(v.to_owned()),
+                "last_seen" => last_seen = v.parse::<u64>().ok().map(from_secs),
                 _ => {}
             }
         }
@@ -110,6 +147,7 @@ impl UpsStatus {
             level: level.ok_or("missing level")?,
             percent,
             shutdown_at,
+            missing: missing_name.map(|name| MissingUps { name, last_seen }),
         })
     }
 
@@ -175,6 +213,15 @@ pub enum Reading<'a> {
         /// When the machine goes off.
         at: SystemTime,
     },
+    /// No UPS is connected, and none was seen before. Healthy: nothing to watch.
+    NoUps,
+    /// The UPS seen before is not connected, so no battery is being watched.
+    UpsMissing {
+        /// What it called itself.
+        name: &'a str,
+        /// When it was last read, if known.
+        last_seen: Option<SystemTime>,
+    },
     /// A current reading.
     Current {
         /// Charge, percent.
@@ -201,8 +248,8 @@ pub enum LevelName<'a> {
 
 /// Interprets a status file at `now`.
 ///
-/// Order matters and is the point of this function: absent, then stale, then failed, then a
-/// pending poweroff, then the level. A stale file's poweroff time cannot be vouched for either,
+/// Order matters and is the point of this function: absent, then stale, then no UPS, then
+/// failed, then a pending poweroff, then the level. A stale file's poweroff time cannot be vouched for either,
 /// so staleness is checked before anything it says is believed.
 #[must_use]
 pub fn interpret(status: Option<&UpsStatus>, now: SystemTime) -> Reading<'_> {
@@ -213,6 +260,16 @@ pub fn interpret(status: Option<&UpsStatus>, now: SystemTime) -> Reading<'_> {
     let age = now.duration_since(s.updated).unwrap_or_default();
     if age > STALE_AFTER {
         return Reading::Stale { age };
+    }
+    match s.level.as_str() {
+        ABSENT => return Reading::NoUps,
+        MISSING => {
+            return Reading::UpsMissing {
+                name: s.missing.as_ref().map_or("the UPS", |m| m.name.as_str()),
+                last_seen: s.missing.as_ref().and_then(|m| m.last_seen),
+            };
+        }
+        _ => {}
     }
     // argond keeps publishing the last percentage next to `level=unknown`; the level is the
     // authority on whether that number is current.
@@ -327,6 +384,7 @@ pub fn notice(
     let Some(prev) = previous else {
         // First sight of the status, e.g. at login. Only speak if something needs attention.
         return match current.level.as_str() {
+            MISSING => Some(missing_notice(current)),
             "low" => Some(Notice {
                 urgency: Urgency::Normal,
                 text: format!("Battery low{pct}."),
@@ -343,6 +401,11 @@ pub fn notice(
         return None;
     }
     let text = match (prev.level.as_str(), current.level.as_str()) {
+        (_, MISSING) => return Some(missing_notice(current)),
+        (_, ABSENT) => return None,
+        // Before the level arms below: a UPS coming back on mains is not mains returning.
+        (MISSING, _) => format!("The UPS is connected again{pct}."),
+        (ABSENT, _) => format!("UPS connected{pct}."),
         (_, "on-battery") if prev.level == "on-mains" => format!("Running on battery{pct}."),
         (_, "low") => format!("Battery low{pct}."),
         (_, "critical") => format!("Battery critical{pct}."),
@@ -356,6 +419,27 @@ pub fn notice(
         Urgency::Normal
     };
     Some(Notice { urgency, text })
+}
+
+/// What to say when the UPS seen before is gone.
+fn missing_notice(current: &UpsStatus) -> Notice {
+    let name = current
+        .missing
+        .as_ref()
+        .map_or("the UPS", |m| m.name.as_str());
+    Notice {
+        urgency: Urgency::Normal,
+        text: format!(
+            "The UPS connected before ({name}) cannot be found: no battery is being watched."
+        ),
+    }
+}
+
+/// A value safe for one `key=value` line: a newline would end it and start a forged key.
+fn one_line(s: &str) -> String {
+    s.chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect()
 }
 
 /// Local time as HH:MM, via `date`, to avoid a date library for one field.

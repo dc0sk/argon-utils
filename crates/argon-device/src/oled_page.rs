@@ -83,6 +83,26 @@ pub fn page(input: &PageInput<'_>, hhmm: &dyn Fn(SystemTime) -> String) -> Page 
                 "Battery NOT watched".into(),
             ],
         },
+        Reading::NoUps => Page {
+            title: "BAT".into(),
+            state: "NO UPS".into(),
+            bar: None,
+            lines: vec!["No UPS connected".into()],
+        },
+        Reading::UpsMissing { last_seen, .. } => Page {
+            title: "BAT".into(),
+            state: "MISSING".into(),
+            bar: None,
+            lines: vec![
+                "UPS not found".into(),
+                last_seen
+                    .and_then(|t| input.now.duration_since(t).ok())
+                    .map_or_else(
+                        || "Battery NOT watched".into(),
+                        |age| format!("Seen {} ago", short_age(age)),
+                    ),
+            ],
+        },
         Reading::Failed => Page {
             title: "BAT".into(),
             state: "READ FAIL".into(),
@@ -223,6 +243,7 @@ mod tests {
             level: level.to_owned(),
             percent,
             shutdown_at: shutdown_at.map(at),
+            missing: None,
         }
     }
 

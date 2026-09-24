@@ -13,7 +13,9 @@
 
 use argon_device::config::Config;
 use argon_device::control::{BUS_NAME, INTERFACE, OBJECT_PATH};
+use argon_device::status;
 use argon_device::ups::{QueryOnly, Ups, UpsMonitor};
+use argon_device::ups_seen::{self, SeenUps};
 use argon_hal::{discovery, foreign, hidraw, platform, serial};
 use argon_proto::hid::{ItemKind, ReportDescriptor, usage};
 use argon_proto::ups::PowerSource;
@@ -70,6 +72,14 @@ pub struct Args {
     /// another process owns it.
     #[arg(long, value_name = "PATH_OR_AUTO")]
     pub serial: Option<String>,
+
+    /// Forget the UPS argond saw before, so its absence stops being reported.
+    ///
+    /// For a UPS removed on purpose. argond remembers the last UPS it read so that one coming
+    /// unplugged is noticed; this deletes that record. Needs root, since the record belongs to
+    /// argond.
+    #[arg(long, conflicts_with_all = ["serial", "device", "watch"])]
+    pub forget: bool,
 }
 
 /// A decoded telemetry value.
@@ -79,6 +89,9 @@ struct Reading {
 }
 
 pub fn run(args: &Args) -> ExitCode {
+    if args.forget {
+        return forget(std::path::Path::new(ups_seen::DEFAULT_PATH));
+    }
     if let Some(port) = &args.serial {
         return run_serial(port, args);
     }
@@ -178,6 +191,35 @@ pub fn run(args: &Args) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// Deletes argond's record of the UPS it saw last.
+fn forget(path: &std::path::Path) -> ExitCode {
+    let name = SeenUps::load(path).map(|u| u.name);
+    match std::fs::remove_file(path) {
+        Ok(()) => {
+            println!(
+                "Forgot {}. argond reports no UPS now, and records the next one it reads.",
+                name.as_deref().unwrap_or("the UPS")
+            );
+            ExitCode::SUCCESS
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            println!("No UPS is remembered; nothing to forget.");
+            ExitCode::SUCCESS
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+            eprintln!(
+                "argonctl: {} belongs to argond; run this with sudo.",
+                path.display()
+            );
+            ExitCode::FAILURE
+        }
+        Err(e) => {
+            eprintln!("argonctl: cannot remove {}: {e}", path.display());
+            ExitCode::FAILURE
+        }
+    }
+}
+
 /// Asks argond what it last read, or `None` when it is not on the bus.
 ///
 /// Anything short of an answer is a `None`: no system bus, no service, an older argond without
@@ -222,6 +264,32 @@ fn render(fields: &std::collections::HashMap<String, String>, now_unix: u64) -> 
             ),
         };
         return out;
+    }
+    match get("level") {
+        status::ABSENT => {
+            let _ = writeln!(
+                out,
+                "  No UPS connected. argond keeps looking and picks one up when it is plugged in."
+            );
+            return out;
+        }
+        status::MISSING => {
+            let seen = get("last_seen_unix")
+                .parse::<u64>()
+                .ok()
+                .map_or_else(String::new, |t| {
+                    format!(", last read {} min ago", now_unix.saturating_sub(t) / 60)
+                });
+            let _ = writeln!(
+                out,
+                "  The UPS connected before ({}{seen}) cannot be found.\n  \
+                 No battery is being watched. If it was removed on purpose:\n  \
+                 sudo argonctl ups --forget",
+                dash(get("missing_name"))
+            );
+            return out;
+        }
+        _ => {}
     }
     let percent = match get("percent") {
         "" => "unknown".to_owned(),
@@ -268,6 +336,8 @@ fn json_from_daemon(fields: &std::collections::HashMap<String, String>, now_unix
         "stale": age.is_some_and(|a| a >= STALE_AFTER_S),
         "shutdown_at_unix": at,
         "shutdown_in_s": at.map(|t| t.saturating_sub(now_unix)),
+        "missing_name": opt(get("missing_name")),
+        "last_seen_unix": num("last_seen_unix"),
     });
     value.to_string()
 }

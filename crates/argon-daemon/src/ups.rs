@@ -7,8 +7,9 @@ use argon_device::control::{Request, Response};
 use argon_device::drift;
 use argon_device::power::PowerControl;
 use argon_device::power::{Action, Logind, ShutdownCoordinator};
-use argon_device::status::UpsStatus;
+use argon_device::status::{self, MissingUps, UpsStatus};
 use argon_device::ups::{Gate, Ups, UpsMonitor, Writes};
+use argon_device::ups_seen::{self, Recorder, SeenUps};
 use argon_device::ups_service::{contention, step};
 use argon_device::wake::{self, Assessment};
 use argon_hal::mode::Mode;
@@ -181,8 +182,13 @@ fn run(
     latest: &Latest,
 ) {
     let clock_writes = writes.clock;
-    let drift_record = drift_record_path();
+    let drift_record = state_path("clock.log");
     let drift_record = drift_record.as_deref();
+    let seen_record = state_path(ups_seen::FILE_NAME);
+    let mut recorder = Recorder::new();
+    // The unit behind the open link, identified when it was opened.
+    let mut connected: Option<SeenUps> = None;
+    let mut missing_logged = false;
     let mut coordinator = ShutdownCoordinator::new(Logind, delay, dry_run);
     let mut monitor: Option<UpsMonitor<Gate<SerialLink>>> = None;
     // Due immediately: the first check runs right after the first successful poll, so a
@@ -203,16 +209,27 @@ fn run(
 
         if monitor.is_none() {
             match open_link(port, &mut open_error_logged) {
-                Ok(Some(link)) => {
+                Open::Opened(link, path) => {
                     // A fresh policy on reconnect: readings after a gap must confirm critical
                     // again, which is the conservative direction.
-                    let gate = Gate::with_writes(link, writes);
+                    let gate = Gate::with_writes(*link, writes);
                     monitor = Some(UpsMonitor::new(Ups::new(gate), policy.clone()));
+                    connected = Some(identify(&path));
                     open_error_logged = false;
+                    missing_logged = false;
                 }
-                Ok(None) => {}
+                // Nothing there. Every case may run without a UPS; whether that is news depends
+                // on whether one was here before.
+                Open::NotFound => {
+                    let remembered = seen_record.as_deref().and_then(SeenUps::load);
+                    let status = absence(remembered.as_ref(), SystemTime::now());
+                    log_absence(remembered.as_ref(), &mut missing_logged);
+                    publish(&status, state_file, latest, &mut state_error_logged);
+                }
+                // There but unusable: said once by open_link, and not a verdict on presence.
+                Open::Failed => {}
                 // Held by someone else: wait rather than fighting over the port.
-                Err(()) => {
+                Open::Held => {
                     sleep_unless_stopping(interval, stopping);
                     continue;
                 }
@@ -227,6 +244,9 @@ fn run(
                 eprintln!("argond: ups: reopening the port");
                 monitor = None;
             } else if cycle.poll.error.is_none() {
+                if let (Some(ups), Some(path)) = (connected.as_mut(), seen_record.as_deref()) {
+                    remember(ups, path, &mut recorder);
+                }
                 // Only on a healthy link, after the poll: housekeeping must never delay or
                 // displace a battery reading.
                 if Instant::now() >= next_clock_check {
@@ -347,29 +367,47 @@ fn log_action(action: &Action) {
     }
 }
 
+/// What looking for the UPS port found.
+enum Open {
+    /// Opened, at this path.
+    Opened(Box<SerialLink>, PathBuf),
+    /// No UPS port exists.
+    NotFound,
+    /// A port exists but could not be opened.
+    Failed,
+    /// Another process holds the port; the caller waits.
+    Held,
+}
+
 /// Finds and opens the UPS port.
 ///
-/// `Err(())` means another process holds it, which the caller answers by waiting.
-/// `Ok(None)` means there was nothing to open, or opening failed; either way the reason is
-/// logged once rather than on every poll, because on an Argon case with no PWR UPS that
+/// A failure is logged once rather than on every poll: on an Argon case with no UPS the
 /// message would otherwise be thousands of journal lines a day.
-fn open_link(
-    port: Option<&std::path::Path>,
-    error_logged: &mut bool,
-) -> Result<Option<SerialLink>, ()> {
+fn open_link(port: Option<&std::path::Path>, error_logged: &mut bool) -> Open {
     let Some(path) = port
         .map(std::path::Path::to_path_buf)
         .or_else(discovery::argon_ups_serial_path)
     else {
         if !*error_logged {
             eprintln!(
-                "argond: ups: no UPS serial port found; will keep looking once per poll \
-                 without repeating this"
+                "argond: ups: no UPS found; will keep looking once per poll without repeating \
+                 this"
             );
             *error_logged = true;
         }
-        return Ok(None);
+        return Open::NotFound;
     };
+    // A configured port that does not exist is a UPS that is not there, not a broken one.
+    if !path.exists() {
+        if !*error_logged {
+            eprintln!(
+                "argond: ups: {} does not exist; will keep looking once per poll",
+                path.display()
+            );
+            *error_logged = true;
+        }
+        return Open::NotFound;
+    }
 
     // serial.rs promises an ownership check before every open, and the daemon was not keeping
     // it: the vendor-unit check happens once at spawn, from a snapshot, and says nothing
@@ -383,21 +421,95 @@ fn open_link(
             o.pid,
             o.comm
         );
-        return Err(());
+        return Open::Held;
     }
 
     match SerialLink::open(&path) {
         Ok(link) => {
             eprintln!("argond: ups: reading {}", path.display());
-            Ok(Some(link))
+            Open::Opened(Box::new(link), path)
         }
         Err(e) => {
             if !*error_logged {
                 eprintln!("argond: ups: cannot open {}: {e}", path.display());
                 *error_logged = true;
             }
-            Ok(None)
+            Open::Failed
         }
+    }
+}
+
+/// Names the unit behind `path`: its USB product string and serial number when discovery can
+/// see them, otherwise the port itself.
+fn identify(path: &std::path::Path) -> SeenUps {
+    let usb = discovery::usb_devices();
+    let dev = discovery::find_argon_ups(&usb);
+    SeenUps {
+        name: dev
+            .and_then(|d| d.product.clone().or_else(|| d.manufacturer.clone()))
+            .unwrap_or_else(|| path.display().to_string()),
+        serial: dev.and_then(|d| d.serial.clone()),
+        last_seen: SystemTime::now(),
+    }
+}
+
+/// Records a successful read of `ups`, when the record is due for it.
+fn remember(ups: &mut SeenUps, path: &std::path::Path, recorder: &mut Recorder) {
+    let now = SystemTime::now();
+    ups.last_seen = now;
+    if !recorder.due(ups, now) {
+        return;
+    }
+    match ups.save(path) {
+        Ok(()) => recorder.wrote(ups.clone(), now),
+        // Logged, then retried an hour on: the record is a convenience, the reading is not.
+        Err(e) => {
+            eprintln!(
+                "argond: ups: cannot record the UPS in {}: {e}",
+                path.display()
+            );
+            recorder.wrote(ups.clone(), now);
+        }
+    }
+}
+
+/// The status to publish when no UPS can be found.
+fn absence(remembered: Option<&SeenUps>, now: SystemTime) -> UpsStatus {
+    UpsStatus {
+        updated: now,
+        level: if remembered.is_some() {
+            status::MISSING
+        } else {
+            status::ABSENT
+        }
+        .to_owned(),
+        percent: None,
+        shutdown_at: None,
+        missing: remembered.map(|r| MissingUps {
+            name: r.name.clone(),
+            last_seen: Some(r.last_seen),
+        }),
+    }
+}
+
+/// Says once per episode that the UPS seen before is gone.
+fn log_absence(remembered: Option<&SeenUps>, logged: &mut bool) {
+    match remembered {
+        Some(r) if !*logged => {
+            let ago = SystemTime::now()
+                .duration_since(r.last_seen)
+                .map_or(0, |d| d.as_secs() / 60);
+            eprintln!(
+                "argond: ups: WARNING: the UPS seen before ({}, last read {ago} min ago) is not \
+                 connected; no battery is being watched. If it was removed on purpose: \
+                 argonctl ups --forget",
+                r.name
+            );
+            *logged = true;
+        }
+        Some(_) => {}
+        // Forgotten while missing: a later loss must be reported again.
+        None => *logged = false,
     }
 }
 
@@ -424,15 +536,16 @@ fn check_and_record_clock(
     clock_sync::next_check_after(synced)
 }
 
-/// Where the drift record lives: `clock.log` in the state directory systemd gives the unit.
+/// A file in the state directory systemd gives the unit: the drift record (`clock.log`) and
+/// the UPS last seen (`ups.seen`).
 ///
-/// `None` outside systemd -- a hand-started argond keeps no record, rather than writing one into
-/// whatever directory it was started from.
-fn drift_record_path() -> Option<PathBuf> {
+/// `None` outside systemd -- a hand-started argond keeps no records, rather than writing them
+/// into whatever directory it was started from.
+fn state_path(name: &str) -> Option<PathBuf> {
     let dirs = std::env::var_os("STATE_DIRECTORY")?;
     // systemd separates several state directories with colons; this unit declares one.
     let first = dirs.to_string_lossy().split(':').next()?.to_owned();
-    (!first.is_empty()).then(|| PathBuf::from(first).join("clock.log"))
+    (!first.is_empty()).then(|| PathBuf::from(first).join(name))
 }
 
 /// Writes the status file and keeps the same snapshot for the D-Bus service, logging a failure
@@ -1025,5 +1138,63 @@ mod tests {
             after <= -19,
             "copied an unsynchronised clock: now {after:+} s"
         );
+    }
+
+    #[test]
+    fn no_ups_and_no_record_is_absent_and_a_record_makes_it_missing() {
+        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(2_000_000_000);
+        let s = absence(None, now);
+        assert_eq!((s.level.as_str(), s.missing), (status::ABSENT, None));
+
+        let seen = SeenUps {
+            name: "Argon USB".into(),
+            serial: Some("S1".into()),
+            last_seen: now - Duration::from_secs(600),
+        };
+        let s = absence(Some(&seen), now);
+        assert_eq!(s.level, status::MISSING);
+        let m = s.missing.expect("the missing unit must be named");
+        assert_eq!(m.name, "Argon USB");
+        assert_eq!(m.last_seen, Some(seen.last_seen));
+        assert_eq!(s.percent, None, "a missing UPS has no charge to show");
+    }
+
+    #[test]
+    fn a_forgotten_ups_rearms_the_warning() {
+        let seen = SeenUps {
+            name: "Argon USB".into(),
+            serial: None,
+            last_seen: SystemTime::now(),
+        };
+        let mut logged = false;
+        log_absence(Some(&seen), &mut logged);
+        assert!(logged);
+        log_absence(None, &mut logged);
+        assert!(
+            !logged,
+            "after --forget, the next loss must be logged again"
+        );
+    }
+
+    #[test]
+    fn a_read_is_recorded_once_then_hourly() {
+        let dir = std::env::temp_dir().join(format!("argond-seen-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(ups_seen::FILE_NAME);
+        let mut ups = SeenUps {
+            name: "Argon USB".into(),
+            serial: None,
+            last_seen: SystemTime::UNIX_EPOCH,
+        };
+        let mut recorder = Recorder::new();
+        remember(&mut ups, &path, &mut recorder);
+        assert_eq!(
+            SeenUps::load(&path).map(|u| u.name),
+            Some("Argon USB".into())
+        );
+        std::fs::remove_file(&path).unwrap();
+        remember(&mut ups, &path, &mut recorder);
+        assert!(!path.exists(), "not rewritten on every poll");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

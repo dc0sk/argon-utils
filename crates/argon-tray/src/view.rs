@@ -130,6 +130,13 @@ fn render_ups(s: &Snapshot, hhmm: &dyn Fn(SystemTime) -> String) -> View {
             format!("Battery: no update for {} s", age.as_secs()),
             "argond has stopped reporting: the battery is not being watched.",
         ),
+        Reading::NoUps => plain(
+            missing(s.icons),
+            Urgency::Normal,
+            "No UPS connected".to_owned(),
+            "argond looks for an Argon UPS and picks one up when it is plugged in.",
+        ),
+        Reading::UpsMissing { name, last_seen } => missing_ups(s, name, last_seen),
         Reading::Failed => plain(
             missing(s.icons),
             Urgency::Normal,
@@ -175,6 +182,34 @@ fn render_ups(s: &Snapshot, hhmm: &dyn Fn(SystemTime) -> String) -> View {
                 shutdown_pending: false,
             }
         }
+    }
+}
+
+/// The UPS seen before is gone: battery protection was lost without anyone deciding so.
+fn missing_ups(s: &Snapshot, name: &str, last_seen: Option<SystemTime>) -> View {
+    let seen = last_seen
+        .and_then(|t| s.now.duration_since(t).ok())
+        .map_or_else(String::new, |age| format!(", last seen {} ago", ago(age)));
+    View {
+        icon: caution(s.icons),
+        urgency: Urgency::Attention,
+        headline: "UPS not connected".to_owned(),
+        details: vec![
+            format!("{name} was connected before{seen}."),
+            "No battery is being watched until it is back.".to_owned(),
+            "Removed on purpose? sudo argonctl ups --forget".to_owned(),
+        ],
+        shutdown_pending: false,
+    }
+}
+
+/// A duration in the largest whole unit: `45 s`, `12 min`, `5 h`, `3 days`.
+fn ago(d: std::time::Duration) -> String {
+    match d.as_secs() {
+        s @ 0..=119 => format!("{s} s"),
+        s @ 120..=7_199 => format!("{} min", s / 60),
+        s @ 7_200..=172_799 => format!("{} h", s / 3_600),
+        s => format!("{} days", s / 86_400),
     }
 }
 
@@ -305,6 +340,7 @@ mod tests {
                 level: level.to_owned(),
                 percent,
                 shutdown_at: shutdown_at.map(at),
+                missing: None,
             }),
             now: at(1_005),
             cpu_decicelsius: None,
@@ -345,6 +381,36 @@ mod tests {
             "{:?}",
             v.details
         );
+    }
+
+    #[test]
+    fn a_case_without_a_ups_is_calm_about_it() {
+        // Any Argon case may run without one: the V3 showed "no reading yet ... monitoring
+        // serial", which read like a fault on a machine that had nothing to monitor.
+        let v = render(&snap("absent", None, None), &fixed);
+        assert_eq!(v.headline, "No UPS connected");
+        assert_eq!(v.urgency, Urgency::Normal);
+    }
+
+    #[test]
+    fn a_ups_that_was_there_before_and_is_gone_asks_for_attention() {
+        let mut s = snap("missing", None, None);
+        if let Some(u) = s.ups.as_mut() {
+            u.missing = Some(argon_device::status::MissingUps {
+                name: "Argon USB".into(),
+                last_seen: Some(at(20_000 - 3 * 3_600)),
+            });
+        }
+        s.now = at(20_000);
+        if let Some(u) = s.ups.as_mut() {
+            u.updated = at(19_995);
+        }
+        let v = render(&s, &fixed);
+        assert_eq!(v.headline, "UPS not connected");
+        assert_eq!(v.urgency, Urgency::Attention);
+        assert!(v.details[0].contains("Argon USB"), "{:?}", v.details);
+        assert!(v.details[0].contains("3 h ago"), "{:?}", v.details);
+        assert!(v.details.iter().any(|d| d.contains("--forget")));
     }
 
     #[test]

@@ -293,6 +293,9 @@ impl Default for McuConfig {
 pub struct UpsConfig {
     /// Where telemetry comes from: `serial` (the PWR UPS), `oneup` (the ONE UP's CW2217 fuel
     /// gauge, on the I2C bus named in `[mcu] bus`), `hid`, or `none`.
+    ///
+    /// With `serial` the UPS is looked for at runtime, so a case without one is fine; a UPS
+    /// seen before and gone since is reported as missing (see `ups_seen`).
     pub source: String,
     /// Port path, or `auto`.
     pub port: String,
