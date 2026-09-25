@@ -166,11 +166,12 @@ mod tests {
         (path, stopping, server, ups)
     }
 
-    fn rand_suffix() -> u128 {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+    /// Unique within this test process. It was the clock in nanoseconds, and two tests running
+    /// in parallel read the same value: one bind then failed with "address already in use",
+    /// which stopped a package build.
+    fn rand_suffix() -> u64 {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        NEXT.fetch_add(1, Ordering::Relaxed)
     }
 
     fn ask(path: &Path, bytes: &[u8]) -> String {
